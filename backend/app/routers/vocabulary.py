@@ -524,6 +524,10 @@ async def update_word(
         values['ua'] = req.translation
     else:
         values['en'] = req.translation
+    if req.word is not None:
+        trimmed_word = req.word.strip()
+        if trimmed_word:
+            values['display'] = trimmed_word
         
     await db.execute(
         update(Vocabulary)
@@ -562,7 +566,8 @@ async def update_word(
     return {
         "ok": True,
         "audio_trans_urls": all_audio_urls,  # All audio URLs (old + new) for frontend
-        "translation": req.translation
+        "translation": req.translation,
+        "word": req.word.strip() if req.word else None,
     }
 
 @router.post("/toggle_fav")
@@ -733,7 +738,7 @@ async def add_custom_word(
             ctx=translation_data.get("context", ""),  # Example sentence in German
             ctx_ua=translation_data.get("ua_context", ""),  # Ukrainian translation of context
             ctx_en=translation_data.get("en_context", ""),  # English translation of context
-            text_id=None,  # No linked lesson
+            text_id=request.text_id or None,  # Optional: link to a text
             is_favorite=1  # Custom words are added to favorites by default
         )
         

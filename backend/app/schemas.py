@@ -125,10 +125,12 @@ class ExplainWordRequest(BaseModel):
 
 class AddCustomWordRequest(BaseModel):
     text: str
+    text_id: str | None = None  # Optional: link to a text
 
 class VocabUpdateRequest(BaseModel):
     id: str
     translation: str
+    word: str | None = None  # Optional German original to update
 
 class VocabRemoveRequest(BaseModel):
     id: str
