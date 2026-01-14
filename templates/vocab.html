@@ -5,19 +5,21 @@
     {% for w in words %}
     <div style="border-bottom: 1px solid var(--border);">
         <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px 24px;">
-            <div style="flex:1;">
-                <div style="display: flex; align-items: center; gap: 10px;">
+            <div style="flex:1; display: flex; align-items: center; gap: 12px;">
+                <button class="btn-text" onclick="playAudio('{{w.display}}')" style="padding:0; min-width:unset; color:var(--primary); opacity:0.6;">
+                    <span class="material-symbols-outlined" style="font-size:18px;">volume_up</span>
+                </button>
+                <div>
                     <span style="font-weight: 500; color: var(--primary); font-size: 1.1rem; cursor: pointer; text-decoration: underline; text-decoration-style: dotted;" 
                           onclick="toggleCtx('{{w.id}}')">
                         {{ w.display }}
                     </span>
-                    <span class="material-symbols-outlined" style="font-size: 18px; cursor: pointer; opacity: 0.5;" onclick="playAudio('{{w.display}}')">volume_up</span>
+                    <div style="font-size: 0.9rem; opacity: 0.8;" id="trans-{{w.id}}">{{ w.display_trans }}</div>
                 </div>
-                <div style="font-size: 0.9rem; opacity: 0.8;">{{ w.display_trans }}</div>
             </div>
             <div style="display: flex; gap: 8px;">
-                <button class="btn-text" onclick="toggleFav('{{w.id}}', this)" style="color: #FFC107">
-                    <span class="material-symbols-outlined filled">star</span>
+                <button class="btn-text" onclick="editWord('{{w.id}}', this)" style="color: var(--primary)">
+                    <span class="material-symbols-outlined">edit</span>
                 </button>
                 <button class="btn-text" style="color: #D32F2F" onclick="rmWord('{{w.id}}')">
                     <span class="material-symbols-outlined">delete</span>
@@ -54,13 +56,6 @@ async function playAudio(text) {
     currentAudio.play();
 }
 
-async function toggleFav(id, btn) {
-    // Тут логіка така: якщо ми знімаємо лайк у списку "Вибране", 
-    // слово має зникнути зі списку. Тому простіше перезавантажити сторінку або видалити елемент.
-    await fetch('/api/toggle_fav', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id})});
-    location.reload(); 
-}
-
 async function rmWord(id) {
     if(!confirm('{{ ui.confirm_remove_from_fav }}')) return;
     
@@ -71,6 +66,83 @@ async function rmWord(id) {
         body: JSON.stringify({id: id, from_vocab: true})
     });
     location.reload();
+}
+
+async function editWord(id, btn) {
+    const container = document.getElementById('trans-' + id);
+    // Перевірка, чи ми вже не в режимі редагування
+    if (container.querySelector('input')) return;
+
+    const currentText = container.innerText;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = currentText;
+    input.maxLength = 100;
+    
+    // Стилі для "безшовного" редагування
+    input.style.width = '100%';
+    input.style.border = 'none';
+    input.style.borderBottom = '2px solid var(--primary)'; // Індикатор редагування
+    input.style.background = 'transparent';
+    input.style.color = 'inherit';
+    input.style.font = 'inherit';
+    input.style.outline = 'none';
+    input.style.padding = '0';
+
+    // --- UI: Зміна іконки на збереження ---
+    let iconSpan = null;
+    let originalOnClick = null;
+    
+    if (btn) {
+        iconSpan = btn.querySelector('.material-symbols-outlined');
+        if (iconSpan) iconSpan.innerText = 'check'; // Іконка галочки
+        
+        originalOnClick = btn.onclick;
+        // Запобігаємо втраті фокусу при кліку на кнопку, щоб обробити клік вручну
+        btn.onmousedown = (e) => e.preventDefault();
+        btn.onclick = () => finish(true);
+    }
+
+    container.innerHTML = '';
+    container.appendChild(input);
+    input.focus();
+
+    let isFinished = false;
+
+    const finish = async (shouldSave) => {
+        if (isFinished) return;
+        isFinished = true;
+
+        // Відновлення UI
+        if (btn) {
+            if (iconSpan) iconSpan.innerText = 'edit';
+            btn.onmousedown = null;
+            btn.onclick = originalOnClick;
+        }
+
+        const newText = input.value.trim();
+        
+        if (!shouldSave || !newText || newText === currentText) {
+            container.innerText = currentText;
+            return;
+        }
+        
+        container.innerText = newText;
+        try {
+            await fetch('/api/update_word', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id: id, translation: newText})});
+        } catch (e) {
+            container.innerText = currentText;
+            alert('{{ ui.error_alert }}');
+        }
+    };
+
+    input.onkeydown = (e) => {
+        if (e.key === 'Enter') input.blur(); // Викличе finish(true) через onblur
+        if (e.key === 'Escape') {
+            finish(false);
+        }
+    };
+    input.onblur = () => finish(true);
 }
 
 function toggleCtx(id) {

@@ -22,6 +22,12 @@
         border-left: 4px solid var(--primary);
         display: none; /* Приховано за замовчуванням */
     }
+    .vocab-item {
+        transition: background-color 0.2s;
+    }
+    .vocab-item:hover {
+        background-color: rgba(0,0,0,0.03);
+    }
 </style>
 
 <div class="card">
@@ -67,7 +73,7 @@
     <div style="padding:20px; text-align:center; opacity:0.6;">{{ ui.empty_vocab_prompt }}</div>
     {% endif %}
     {% for v in vocab %}
-    <div class="vocab-item" style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid var(--border);">
+    <div class="vocab-item" onclick="handleRowClick(event, '{{v.id}}')" style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid var(--border); cursor: pointer;">
         <div style="display:flex; align-items:center; gap:12px;">
             <button class="btn-text" onclick="playAudio('{{v.display}}')" style="padding:0; min-width:unset; color:var(--primary); opacity:0.6;">
                 <span class="material-symbols-outlined" style="font-size:18px;">volume_up</span>
@@ -81,7 +87,7 @@
             </div>
         </div>
         <div style="display:flex; gap:8px;">
-            <button class="btn-text" onclick="toggleFav('{{v.id}}', this)" style="color: {% if v.is_favorite %}#FFC107{% else %}inherit{% endif %}; padding: 0; min-width: 32px;">
+            <button id="fav-btn-{{v.id}}" class="btn-text" onclick="toggleFav('{{v.id}}', this)" style="color: {% if v.is_favorite %}#FFC107{% else %}inherit{% endif %}; padding: 0; min-width: 32px;">
                 <span class="material-symbols-outlined {% if v.is_favorite %}filled{% endif %}">star</span>
             </button>
             <button class="btn-text" onclick="rmWord('{{v.id}}')" style="color:red; padding: 0; min-width: 32px;"><span class="material-symbols-outlined">delete</span></button>
@@ -305,6 +311,15 @@ async function toggleFav(id, btn) {
         if (icon.classList.contains('filled')) btn.style.color = "#FFC107";
         else btn.style.color = "inherit";
     }
+}
+
+function handleRowClick(e, id) {
+    // Ігноруємо кліки по інтерактивних елементах (кнопки, посилання)
+    if (e.target.closest('button') || (e.target.closest('span') && e.target.closest('span').hasAttribute('onclick'))) return;
+    
+    // Знаходимо кнопку зірочки і викликаємо toggleFav
+    const btn = document.getElementById('fav-btn-' + id);
+    if (btn) toggleFav(id, btn);
 }
 
 async function rmWord(id) {

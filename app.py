@@ -64,6 +64,7 @@ UI_STRINGS = {
         'my_texts': 'Мої тексти',
         'read': 'Читати',
         'main': 'Головна',
+        'edit_translation': 'Редагувати переклад',
     },
     'eng': {
         'settings': 'Settings',
@@ -103,6 +104,7 @@ UI_STRINGS = {
         'my_texts': 'My Texts',
         'read': 'Read',
         'main': 'Home',
+        'edit_translation': 'Edit translation',
     }
 }
 
@@ -437,6 +439,27 @@ def quick_translate():
                      (wid, current_user.id, req.get('tid'), word, 
                       word_data['display'], word_data['ua'], word_data['en'], req['ctx'],
                       sentence_index, start_index, end_index))
+        conn.commit()
+    return jsonify({"ok": True})
+
+@app.route('/api/update_word', methods=['POST'])
+@login_required
+def update_word():
+    req = request.json
+    wid = req.get('id')
+    new_trans = req.get('translation')
+    
+    if not wid or new_trans is None:
+        return jsonify({"error": "Invalid data"}), 400
+    if len(new_trans) > 100:
+        return jsonify({"error": "Too long"}), 400
+
+    lang = current_user.interface_language
+    col = 'ua' if lang == 'ukr' else 'en'
+    
+    with get_db() as conn:
+        # Оновлюємо тільки ту колонку, яка відповідає поточній мові інтерфейсу
+        conn.execute(f'UPDATE vocabulary SET {col} = ? WHERE id = ? AND user_id = ?', (new_trans, wid, current_user.id))
         conn.commit()
     return jsonify({"ok": True})
 
