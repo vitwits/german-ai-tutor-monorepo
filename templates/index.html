@@ -2,16 +2,68 @@
 {% block content %}
 <style>
     .form-container { max-width: 500px; margin: 40px auto; padding: 40px; text-align: center; }
-    .form-group { margin-bottom: 20px; text-align: left; }
+    .form-group { margin-bottom: 25px; text-align: left; }
     .form-label { font-size: 0.85rem; font-weight: 500; margin-bottom: 8px; display: block; opacity: 0.8; }
+    
+    /* Уніфікована висота для всіх елементів керування */
+    .control-height {
+        height: 45px; 
+        box-sizing: border-box;
+    }
+
     .form-control {
-        width: 100%; padding: 12px; border: 1px solid var(--border);
+        width: 100%; padding: 0 12px; border: 1px solid var(--border);
         border-radius: var(--radius); background: var(--bg); color: var(--on-surface);
-        font-size: 16px; box-sizing: border-box; transition: all 0.2s;
+        font-size: 16px; transition: all 0.2s;
     }
     .form-control:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.1); }
+    
+    /* Контейнер для вибору розміру */
+    .size-selector { 
+        display: flex; 
+        gap: 8px; /* Відступ між кнопками */
+    }
+
+    .size-btn {
+        width: 45px; /* Робимо кнопку квадратною (такою ж як висота) */
+        height: 45px;
+        padding: 0;
+        border: 1px solid var(--border); 
+        border-radius: var(--radius);
+        background: var(--bg); 
+        color: var(--on-surface); 
+        cursor: pointer;
+        font-weight: 500; 
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+        flex-shrink: 0; /* Забороняємо кнопкам стискатися */
+    }
+
+    .size-btn.active {
+        background: var(--primary); 
+        color: white; 
+        border-color: var(--primary);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .size-btn:hover:not(.active) { border-color: var(--primary); }
+
+    /* Контейнер для рядка з Рівнем та Розміром */
+    .controls-row {
+        display: flex;
+        align-items: flex-end;
+        gap: 40px; /* Великий простір посередині між двома блоками */
+        justify-content: flex-start;
+    }
+
     .header-section { margin-bottom: 30px; }
     .header-icon { font-size: 48px; color: var(--primary); margin-bottom: 10px; }
+    
+    /* Анімація для іконки завантаження */
+    @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .rotating { animation: rotate 1.5s linear infinite; display: inline-block; vertical-align: middle; }
 </style>
 
 <div class="card form-container">
@@ -22,41 +74,90 @@
 
     <div class="form-group">
         <label class="form-label">{{ ui.topic }}</label>
-        <input type="text" id="topic" class="form-control" placeholder="{{ ui.topic_placeholder }}" autofocus>
+        <input type="text" id="topic" class="form-control control-height" placeholder="{{ ui.topic_placeholder }}" autofocus>
     </div>
 
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
-        <div class="form-group">
-            <label class="form-label">{{ ui.level }}</label>
-            <select id="lvl" class="form-control">{% for l in ['A1','A2','B1','B2','C1'] %}<option value="{{l}}">{{l}}</option>{% endfor %}</select>
+    <div class="controls-row">
+        <div class="form-group" style="flex: 0 1 120px;"> <label class="form-label">{{ ui.level }}</label>
+            <select id="lvl" class="form-control control-height">
+                {% for l in ['A1','A2','B1','B2','C1','C2'] %}
+                <option value="{{l}}" {% if l == 'B1' %}selected{% endif %}>{{l}}</option>
+                {% endfor %}
+            </select>
         </div>
+
         <div class="form-group">
             <label class="form-label">{{ ui.count }}</label>
-            <select id="count" class="form-control">{% for i in range(10, 31, 5) %}<option value="{{i}}">{{i}}</option>{% endfor %}</select>
+            <div class="size-selector">
+                <button type="button" class="size-btn" data-size="S">S</button>
+                <button type="button" class="size-btn active" data-size="M">M</button>
+                <button type="button" class="size-btn" data-size="L">L</button>
+            </div>
         </div>
     </div>
 
-    <button class="btn-contained" onclick="generate()" id="gen-btn" style="width: 100%; height: 48px; justify-content: center; font-size: 1rem; margin-top: 10px;">
-            <span class="material-symbols-outlined">auto_awesome</span> {{ ui.generate_btn }}
+    <button class="btn-contained" onclick="generate()" id="gen-btn" style="width: 100%; height: 50px; justify-content: center; font-size: 1rem; margin-top: 20px;">
+        <span class="material-symbols-outlined" id="btn-icon">auto_awesome</span> 
+        <span id="btn-text" style="margin-left: 8px;">{{ ui.generate_btn }}</span>
     </button>
 </div>
+
 <script>
+const sentenceMap = {
+    'A1': { S: 6, M: 10, L: 17 },
+    'A2': { S: 5, M: 10, L: 15 },
+    'B1': { S: 4, M: 8,  L: 13 },
+    'B2': { S: 4, M: 6,  L: 11 },
+    'C1': { S: 4, M: 5,  L: 8 },
+    'C2': { S: 3, M: 4,  L: 6 }
+};
+
+let selectedSize = 'M';
+
+document.querySelectorAll('.size-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+        document.querySelectorAll('.size-btn').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        selectedSize = this.dataset.size;
+    });
+});
+
 async function generate() {
+    const topic = document.getElementById('topic').value;
+    const level = document.getElementById('lvl').value;
     const btn = document.getElementById('gen-btn');
-    btn.disabled = true; btn.innerHTML = '{{ ui.generating }}';
+    const icon = document.getElementById('btn-icon');
+    const text = document.getElementById('btn-text');
+    
+    if (!topic.trim()) {
+        alert('{{ ui.error_topic_empty if ui.error_topic_empty else "Please enter a topic" }}');
+        return;
+    }
+
+    const count = sentenceMap[level][selectedSize];
+
+    btn.disabled = true; 
+    icon.innerHTML = 'sync';
+    icon.classList.add('rotating');
+    text.innerHTML = '{{ ui.generating }}';
+    
     try {
         const res = await fetch('/api/generate', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                topic: document.getElementById('topic').value,
-                count: document.getElementById('count').value,
-                level: document.getElementById('lvl').value
-            })
+            body: JSON.stringify({ topic, count, level })
         });
+        
+        if (!res.ok) throw new Error();
         const data = await res.json();
         location.href = '/view/' + data.id;
-    } catch (e) { alert('{{ ui.error_alert }}'); btn.disabled = false; btn.innerHTML = '{{ ui.generate_btn }}'; }
+    } catch (e) { 
+        alert('{{ ui.error_alert }}'); 
+        btn.disabled = false; 
+        icon.innerHTML = 'auto_awesome';
+        icon.classList.remove('rotating');
+        text.innerHTML = '{{ ui.generate_btn }}';
+    }
 }
 </script>
 {% endblock %}

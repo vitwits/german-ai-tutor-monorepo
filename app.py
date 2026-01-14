@@ -219,28 +219,53 @@ def explain_grammar():
     sentence = req.get('sentence')
     text_id = req.get('text_id')
     sentence_index = req.get('sentence_index')
+    
+    # Отримуємо рівень тексту з бази, щоб адаптувати пояснення
+    text_level = "B1" # Default
+    if text_id:
+        with get_db() as conn:
+            t = conn.execute('SELECT level FROM texts WHERE id = ?', (text_id,)).fetchone()
+            if t: text_level = t['level']
+
     lang = current_user.interface_language
 
-    # 1. Перевіряємо кеш в базі
+    # --- ПЕРЕВІРКА КЕШУ ---
     if text_id and sentence_index is not None:
         with get_db() as conn:
-            cached = conn.execute('SELECT explanation FROM grammar_explanations WHERE text_id = ? AND sentence_index = ? AND language = ?',
-                                  (text_id, sentence_index, lang)).fetchone()
+            cached = conn.execute(
+                'SELECT explanation FROM grammar_explanations WHERE text_id = ? AND sentence_index = ? AND language = ?',
+                (text_id, sentence_index, lang)
+            ).fetchone()
             if cached:
                 return jsonify({"explanation": cached['explanation']})
 
-    # 2. Якщо немає в кеші - генеруємо
-    # Використовуємо Gemini для пояснення
-    model = genai.GenerativeModel('gemini-2.0-flash')
     target_lang_name = "Ukrainian" if lang == 'ukr' else "English"
-    prompt = f"Explain the grammar of this German sentence for a {target_lang_name} student. Break down cases (Nominativ, Dativ, etc.), declensions, and sentence structure. Keep it concise, clear and use formatting (bolding). Answer in {target_lang_name}. Sentence: '{sentence}'"
+
+    # --- ЯКЩО В КЕШІ НЕМАЄ, ГЕНЕРУЄМО ---
+    prompt = f"""
+    Act as a concise German tutor for a {target_lang_name}-speaking student.
+    Analyze this German sentence (Level {text_level}): "{sentence}"
+
+    RULES FOR EXPLANATION:
+    1. KEEP IT SHORT. Maximum 3-4 bullet points. No long paragraphs.
+    2. DO NOT define obvious words (e.g., don't say "Computer is a noun").
+    3. FOCUS ONLY on grammar nuances relevant to Level {text_level}:
+       - Why this specific article/ending? (Case/Gender)
+       - Word order (Why is the verb here?)
+       - Verb conjugations or tenses.
+    4. If the sentence is very simple (A1/A2), just give 1 sentence summary like: "Standard structure: Subject + Verb + Adjective."
+    5. Highlight key grammar parts in **bold**.
+
+    Respond in {target_lang_name}.
+    """
 
     try:
+        model = genai.GenerativeModel('gemini-2.0-flash')
         response = model.generate_content(prompt)
         explanation = response.text
         
-        # 3. Зберігаємо в базу
-        if text_id and sentence_index is not None and explanation:
+        # Кешування (якщо текст не змінюється)
+        if text_id and sentence_index is not None:
             with get_db() as conn:
                 conn.execute('INSERT OR REPLACE INTO grammar_explanations (text_id, sentence_index, language, explanation) VALUES (?, ?, ?, ?)',
                              (text_id, sentence_index, lang, explanation))
@@ -248,11 +273,13 @@ def explain_grammar():
         
         return jsonify({"explanation": explanation})
     except Exception as e:
-        return jsonify({"error": "Не вдалося отримати пояснення від AI"}), 500
-
+        print(f"Grammar error: {e}")
+        return jsonify({"error": "Error generating explanation"}), 500
+    
 @app.route('/library')
 @login_required
 def library():
+    # Отримуємо всі тексти користувача
     with get_db() as conn:
         db_rows = conn.execute('SELECT * FROM texts WHERE user_id = ? ORDER BY rowid DESC', (current_user.id,)).fetchall()
 
@@ -262,11 +289,21 @@ def library():
         try:
             # Спробувати розпарсити JSON з заголовком
             titles = json.loads(r['title'])
-            r['display_title'] = titles.get(current_user.interface_language, titles.get('ukr', r['title']))
+            # Вибираємо заголовок відповідно до мови інтерфейсу
+            # Пріоритет: Мова юзера -> Українська -> Оригінал
+            lang_key = current_user.interface_language
+            # Якщо мова інтерфейсу англійська, шукаємо 'eng', якщо укр - 'ukr'
+            # (У базі ми зберігали як 'ukr'/'eng' або 'ua'/'en' - треба перевірити консистентність)
+            # В generate_german_text ми пишемо keys: 'title_ua', 'title_en'
+            # А в базу кладемо: 'ukr': data['title_ua'], 'eng': data['title_en']
+            
+            target_key = 'ukr' if lang_key == 'ukr' else 'eng'
+            r['display_title'] = titles.get(target_key, titles.get('ukr', r['title']))
         except (json.JSONDecodeError, TypeError):
             # Fallback для старих текстів, де title - це просто рядок
             r['display_title'] = r['title']
         texts.append(r)
+        
     return render_template('library.html', texts=texts)
 
 @app.route('/view/<tid>')
