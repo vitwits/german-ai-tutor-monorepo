@@ -76,4 +76,14 @@ def init_db():
             explanation TEXT,
             PRIMARY KEY (text_id, sentence_index, language)
         )''')
+
+        # 3. Міграції для налаштувань відображення (View Settings)
+        try:
+            conn.execute('ALTER TABLE users ADD COLUMN library_view_mode TEXT DEFAULT "list"')
+            conn.execute('ALTER TABLE users ADD COLUMN library_per_page INTEGER DEFAULT 20')
+            conn.execute('ALTER TABLE users ADD COLUMN vocab_view_mode TEXT DEFAULT "list"')
+            conn.execute('ALTER TABLE users ADD COLUMN vocab_per_page INTEGER DEFAULT 20')
+        except sqlite3.OperationalError:
+            pass # Колонка вже існує
+
         conn.commit()

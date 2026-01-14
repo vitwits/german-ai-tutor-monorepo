@@ -1,6 +1,7 @@
 import os
 import uuid
 import hashlib
+import math
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, send_from_directory
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -109,19 +110,31 @@ UI_STRINGS = {
 }
 
 class User(UserMixin):
-    def __init__(self, id, email, interface_language='ukr'):
+    def __init__(self, id, email, interface_language='ukr', 
+                 library_view_mode='list', library_per_page=20,
+                 vocab_view_mode='list', vocab_per_page=20):
         self.id = id
         self.email = email
         self.interface_language = interface_language or 'ukr'
+        self.library_view_mode = library_view_mode
+        self.library_per_page = library_per_page
+        self.vocab_view_mode = vocab_view_mode
+        self.vocab_per_page = vocab_per_page
 
 @login_manager.user_loader
 def load_user(user_id):
     with get_db() as conn:
         u = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
         if u:
-            # `u.keys()` робить код безпечним для рядків, створених до додавання колонки
-            lang = u['interface_language'] if 'interface_language' in u.keys() and u['interface_language'] else 'ukr'
-            return User(u['id'], u['email'], lang)
+            keys = u.keys()
+            lang = u['interface_language'] if 'interface_language' in keys and u['interface_language'] else 'ukr'
+            # Завантажуємо налаштування або дефолтні значення
+            lvm = u['library_view_mode'] if 'library_view_mode' in keys and u['library_view_mode'] else 'list'
+            lpp = u['library_per_page'] if 'library_per_page' in keys and u['library_per_page'] else 20
+            vvm = u['vocab_view_mode'] if 'vocab_view_mode' in keys and u['vocab_view_mode'] else 'list'
+            vpp = u['vocab_per_page'] if 'vocab_per_page' in keys and u['vocab_per_page'] else 20
+            
+            return User(u['id'], u['email'], lang, lvm, lpp, vvm, vpp)
     return None
 
 @app.context_processor
@@ -281,10 +294,32 @@ def explain_grammar():
 @app.route('/library')
 @login_required
 def library():
+    # 1. Отримуємо параметри (пріоритет: URL -> DB -> Default)
+    arg_view = request.args.get('view')
+    arg_per_page = request.args.get('per_page', type=int)
+    
+    view_mode = arg_view if arg_view else current_user.library_view_mode
+    per_page = arg_per_page if arg_per_page else current_user.library_per_page
+    
+    # 2. Якщо параметри змінилися, зберігаємо в базу
+    if (arg_view and arg_view != current_user.library_view_mode) or (arg_per_page and arg_per_page != current_user.library_per_page):
+        with get_db() as conn:
+            conn.execute('UPDATE users SET library_view_mode = ?, library_per_page = ? WHERE id = ?', 
+                         (view_mode, per_page, current_user.id))
+            conn.commit()
+        current_user.library_view_mode = view_mode
+        current_user.library_per_page = per_page
+
+    page = request.args.get('page', 1, type=int)
+    # per_page вже визначено вище
+    offset = (page - 1) * per_page
+
     # Отримуємо всі тексти користувача
     with get_db() as conn:
-        db_rows = conn.execute('SELECT * FROM texts WHERE user_id = ? ORDER BY rowid DESC', (current_user.id,)).fetchall()
+        total_count = conn.execute('SELECT COUNT(*) FROM texts WHERE user_id = ?', (current_user.id,)).fetchone()[0]
+        db_rows = conn.execute('SELECT * FROM texts WHERE user_id = ? ORDER BY rowid DESC LIMIT ? OFFSET ?', (current_user.id, per_page, offset)).fetchall()
 
+    total_pages = math.ceil(total_count / per_page)
     texts = []
     for row in db_rows:
         r = dict(row)
@@ -306,7 +341,7 @@ def library():
             r['display_title'] = r['title']
         texts.append(r)
         
-    return render_template('library.html', texts=texts)
+    return render_template('library.html', texts=texts, page=page, per_page=per_page, total_pages=total_pages, view_mode=view_mode)
 
 @app.route('/view/<tid>')
 @login_required
@@ -467,9 +502,29 @@ def update_word():
 @login_required
 def vocab():
     lang = current_user.interface_language
-    with get_db() as conn:
-        db_words = conn.execute('SELECT * FROM vocabulary WHERE user_id = ? AND is_favorite = 1 ORDER BY rowid DESC', (current_user.id,)).fetchall()
     
+    arg_view = request.args.get('view')
+    arg_per_page = request.args.get('per_page', type=int)
+    
+    view_mode = arg_view if arg_view else current_user.vocab_view_mode
+    per_page = arg_per_page if arg_per_page else current_user.vocab_per_page
+    
+    if (arg_view and arg_view != current_user.vocab_view_mode) or (arg_per_page and arg_per_page != current_user.vocab_per_page):
+        with get_db() as conn:
+            conn.execute('UPDATE users SET vocab_view_mode = ?, vocab_per_page = ? WHERE id = ?', 
+                         (view_mode, per_page, current_user.id))
+            conn.commit()
+        current_user.vocab_view_mode = view_mode
+        current_user.vocab_per_page = per_page
+
+    page = request.args.get('page', 1, type=int)
+    offset = (page - 1) * per_page
+
+    with get_db() as conn:
+        total_count = conn.execute('SELECT COUNT(*) FROM vocabulary WHERE user_id = ? AND is_favorite = 1', (current_user.id,)).fetchone()[0]
+        db_words = conn.execute('SELECT * FROM vocabulary WHERE user_id = ? AND is_favorite = 1 ORDER BY rowid DESC LIMIT ? OFFSET ?', (current_user.id, per_page, offset)).fetchall()
+    
+    total_pages = math.ceil(total_count / per_page)
     words = []
     for row in db_words:
         w = dict(row)
@@ -477,7 +532,7 @@ def vocab():
         w['display_trans'] = w['ua'] if lang == 'ukr' else w['en']
         words.append(w)
         
-    return render_template('vocab.html', words=words)
+    return render_template('vocab.html', words=words, page=page, per_page=per_page, total_pages=total_pages, view_mode=view_mode)
 
 @app.route('/api/toggle_fav', methods=['POST'])
 @login_required
