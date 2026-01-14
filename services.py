@@ -19,16 +19,17 @@ def clean_json_response(text):
     match = re.search(r'\{.*\}', text, re.DOTALL)
     return match.group(0) if match else text
 
-def generate_german_text(topic, count, level, target_lang):
+def generate_german_text(topic, count, level):
     prompt = f"""You are a German teacher. Generate a coherent German text about "{topic}".
-    Level: {level}. Exactly {count} sentences. Translate each sentence into {target_lang}.
+    Level: {level}. Exactly {count} sentences.
+    Translate each sentence into Ukrainian (ua) and English (en).
     CRITICAL RULES FOR TEXT:
     - The "de" field must contain ONLY pure German sentences.
     - STRICTLY FORBIDDEN: Do not include articles, plural forms, or translations in parentheses within the "de" sentence.
     Return ONLY JSON:
     {{
-      "title": "...",
-      "sentences": [ {{"de": "Clean German sentence", "trans": "Translation"}} ]
+      "title_de": "German Title", "title_ua": "Ukrainian Title", "title_en": "English Title",
+      "sentences": [ {{"de": "Clean German sentence", "ua": "Ukrainian translation", "en": "English translation"}} ]
     }}"""
     
     response = client.models.generate_content(

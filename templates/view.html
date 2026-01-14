@@ -25,7 +25,8 @@
 </style>
 
 <div class="card">
-    <h1 style="font-size:1.5rem; margin:0 0 16px 0;">{{ text.title }}</h1>
+    <h1 style="font-size:1.5rem; margin:0 0 4px 0;">{{ display_title }}</h1>
+    {% if trans_title %}<h2 style="font-size: 1rem; color: var(--on-surface); opacity: 0.6; margin: 0 0 16px 0; font-weight: 400;">{{ trans_title }}</h2>{% endif %}
     
     <div style="display:flex; align-items:center; gap:12px; margin-bottom:24px; flex-wrap:wrap;">
         <span style="background:var(--primary); color:var(--on-primary); padding:6px 12px; border-radius:16px; font-size:0.85rem; font-weight:500;">
@@ -33,11 +34,11 @@
         </span>
         
         <button class="btn-text" onclick="toggleTrans()" id="trans-btn" style="border: 1px solid var(--border);">
-            <span class="material-symbols-outlined">translate</span> Показати переклад
+            <span class="material-symbols-outlined">translate</span> {{ ui.show_translation }}
         </button>
 
         <button class="btn-contained" onclick="playAll()" id="play-all-btn" style="margin-left: auto;">
-            <span class="material-symbols-outlined">play_arrow</span> ПРОГРАТИ ВСЕ
+            <span class="material-symbols-outlined">play_arrow</span> {{ ui.play_all }}
         </button>
     </div>
     
@@ -50,7 +51,7 @@
                 </button>
                 <span class="de-text" style="font-size:1.1rem; font-weight:400; line-height:1.6;">{{ s.de_html | safe }}</span>
             </div>
-            <button class="btn-text" onclick="explainGrammar(this, '{{text.id}}', {{loop.index0}})" title="Пояснити граматику" style="color: var(--primary); opacity: 0.7;">
+            <button class="btn-text" onclick="explainGrammar(this, '{{text.id}}', {{loop.index0}})" title="{{ ui.grammar_tooltip }}" style="color: var(--primary); opacity: 0.7;">
                 <span class="material-symbols-outlined">quiz</span>
             </button>
         </div>
@@ -60,10 +61,10 @@
     {% endfor %}
 </div>
 
-<h2 style="font-size:1.2rem; color:var(--primary);">СЛОВНИК УРОКУ</h2>
+<h2 style="font-size:1.2rem; color:var(--primary);">{{ ui.lesson_vocab }}</h2>
 <div class="card" style="padding:0;">
     {% if not vocab %}
-    <div style="padding:20px; text-align:center; opacity:0.6;">Виділіть слово в тексті, щоб додати переклад.</div>
+    <div style="padding:20px; text-align:center; opacity:0.6;">{{ ui.empty_vocab_prompt }}</div>
     {% endif %}
     {% for v in vocab %}
     <div class="vocab-item" style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid var(--border);">
@@ -76,7 +77,7 @@
                       onclick="showCtx('{{v.sentence_index}}')">
                     {{ v.display }}
                 </span>
-                <div style="font-size:0.85rem; opacity:0.7;">{{ v.ua }} / {{ v.en }}</div>
+                <div style="font-size:0.85rem; opacity:0.7;">{{ v.ua if lang == 'ukr' else v.en }}</div>
             </div>
         </div>
         <div style="display:flex; gap:8px;">
@@ -89,12 +90,13 @@
     {% endfor %}
 </div>
 
-<div id="pop" style="position:absolute; display:none; background:var(--on-surface); color:var(--bg); padding:8px 16px; border-radius:4px; z-index:100; cursor:pointer; font-weight:500; font-size:0.8rem;">+ ПЕРЕКЛАСТИ</div>
+<div id="pop" style="position:absolute; display:none; background:var(--on-surface); color:var(--bg); padding:8px 16px; border-radius:4px; z-index:100; cursor:pointer; font-weight:500; font-size:0.8rem;">{{ ui.add_translation }}</div>
 <div id="learned-pop" style="position:absolute; display:none; background:var(--surface); color:var(--on-surface); padding:8px 12px; border-radius:4px; box-shadow:0 4px 12px rgba(0,0,0,0.15); z-index:101; border:1px solid var(--border); min-width:auto; max-width: 250px;">
     <div id="lp-content"></div>
 </div>
 
 <script>
+const userLang = '{{ lang }}';
 // Ініціалізація даних словника для швидкого доступу
 const vocabData = {{ vocab | tojson }};
 const vocabMap = {};
@@ -139,12 +141,12 @@ async function playAll() {
     if (isPlayingAll) {
         isPlayingAll = false;
         if (currentAudio) currentAudio.pause();
-        btn.innerHTML = '<span class="material-symbols-outlined">play_arrow</span> ПРОГРАТИ ВСЕ';
+        btn.innerHTML = '<span class="material-symbols-outlined">play_arrow</span> {{ ui.play_all }}';
         return;
     }
 
     isPlayingAll = true;
-    btn.innerHTML = '<span class="material-symbols-outlined">pause</span> ЗУПИНИТИ';
+    btn.innerHTML = '<span class="material-symbols-outlined">pause</span> {{ ui.stop }}';
     
     const lines = document.querySelectorAll('.de-text');
     
@@ -165,7 +167,7 @@ async function playAll() {
     }
     
     isPlayingAll = false;
-    btn.innerHTML = '<span class="material-symbols-outlined">play_arrow</span> ПРОГРАТИ ВСЕ';
+    btn.innerHTML = '<span class="material-symbols-outlined">play_arrow</span> {{ ui.play_all }}';
 }
 
 function toggleTrans() {
@@ -178,9 +180,9 @@ function toggleTrans() {
     rows.forEach(r => r.style.display = isHidden ? 'block' : 'none');
     
     if (isHidden) {
-        btn.innerHTML = '<span class="material-symbols-outlined">visibility_off</span> Приховати переклад';
+        btn.innerHTML = '<span class="material-symbols-outlined">visibility_off</span> {{ ui.hide_translation }}';
     } else {
-        btn.innerHTML = '<span class="material-symbols-outlined">translate</span> Показати переклад';
+        btn.innerHTML = '<span class="material-symbols-outlined">translate</span> {{ ui.show_translation }}';
     }
 }
 
@@ -290,7 +292,7 @@ document.addEventListener('mouseup', (e) => {
         };
     } else { 
         pop.style.display = 'none'; 
-        pop.innerHTML = '+ ПЕРЕКЛАСТИ'; 
+        pop.innerHTML = '{{ ui.add_translation }}'; 
     }
 });
 
@@ -306,7 +308,7 @@ async function toggleFav(id, btn) {
 }
 
 async function rmWord(id) {
-    if(!confirm('Видалити слово з цього тексту?')) return;
+    if(!confirm('{{ ui.confirm_remove_word_from_text }}')) return;
     await fetch('/api/remove_word', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id: id, from_vocab: false})});
     location.reload();
 }
@@ -347,7 +349,7 @@ async function explainGrammar(btn, textId, sentIdx) {
             formatted = formatted.replace(/\n/g, '<br>');
             box.innerHTML = formatted;
         } catch (e) {
-            box.innerHTML = "Не вдалося отримати пояснення.";
+            box.innerHTML = "{{ ui.grammar_explanation_error }}";
         }
         
         btn.innerHTML = originalIcon;
@@ -374,10 +376,10 @@ document.addEventListener('click', (e) => {
             const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
             const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
             
+            const translation = userLang === 'ukr' ? word.ua : word.en;
             const html = `
                 <div style="font-size:0.9rem; line-height:1.4; text-align: center;">
-                    <div style="font-weight:500; color:var(--primary); margin-bottom:2px;">${word.ua}</div>
-                    <div style="opacity:0.7; font-size:0.8rem;">${word.en}</div>
+                    <div style="font-weight:500; color:var(--primary);">${translation || ''}</div>
                 </div>
             `;
             

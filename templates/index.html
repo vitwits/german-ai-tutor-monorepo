@@ -17,38 +17,33 @@
 <div class="card form-container">
     <div class="header-section">
         <span class="material-symbols-outlined header-icon">auto_stories</span>
-        <h2 style="margin: 0; color: var(--primary); font-weight: 500; letter-spacing: 1px;">СТВОРИТИ УРОК</h2>
+        <h2 style="margin: 0; color: var(--primary); font-weight: 500; letter-spacing: 1px;">{{ ui.generate_new.upper() }}</h2>
     </div>
 
     <div class="form-group">
-        <label class="form-label">Тема уроку</label>
-        <input type="text" id="topic" class="form-control" placeholder="Наприклад: Подорож, IT, Спорт..." autofocus>
+        <label class="form-label">{{ ui.topic }}</label>
+        <input type="text" id="topic" class="form-control" placeholder="{{ ui.topic_placeholder }}" autofocus>
     </div>
 
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
         <div class="form-group">
-            <label class="form-label">Рівень</label>
+            <label class="form-label">{{ ui.level }}</label>
             <select id="lvl" class="form-control">{% for l in ['A1','A2','B1','B2','C1'] %}<option value="{{l}}">{{l}}</option>{% endfor %}</select>
         </div>
         <div class="form-group">
-            <label class="form-label">Кількість речень</label>
-            <select id="count" class="form-control">{% for i in range(5, 31, 5) %}<option value="{{i}}">{{i}}</option>{% endfor %}</select>
+            <label class="form-label">{{ ui.count }}</label>
+            <select id="count" class="form-control">{% for i in range(10, 31, 5) %}<option value="{{i}}">{{i}}</option>{% endfor %}</select>
         </div>
     </div>
 
-    <div class="form-group">
-        <label class="form-label">Мова перекладу</label>
-        <select id="lng" class="form-control"><option value="ukr">Українська</option><option value="eng">English</option></select>
-    </div>
-
     <button class="btn-contained" onclick="generate()" id="gen-btn" style="width: 100%; height: 48px; justify-content: center; font-size: 1rem; margin-top: 10px;">
-            <span class="material-symbols-outlined">auto_awesome</span> Згенерувати
+            <span class="material-symbols-outlined">auto_awesome</span> {{ ui.generate_btn }}
     </button>
 </div>
 <script>
 async function generate() {
     const btn = document.getElementById('gen-btn');
-    btn.disabled = true; btn.innerHTML = 'Генерація...';
+    btn.disabled = true; btn.innerHTML = '{{ ui.generating }}';
     try {
         const res = await fetch('/api/generate', {
             method: 'POST',
@@ -56,13 +51,12 @@ async function generate() {
             body: JSON.stringify({
                 topic: document.getElementById('topic').value,
                 count: document.getElementById('count').value,
-                level: document.getElementById('lvl').value,
-                lang: document.getElementById('lng').value
+                level: document.getElementById('lvl').value
             })
         });
         const data = await res.json();
         location.href = '/view/' + data.id;
-    } catch (e) { alert('Помилка'); btn.disabled = false; btn.innerHTML = 'Згенерувати'; }
+    } catch (e) { alert('{{ ui.error_alert }}'); btn.disabled = false; btn.innerHTML = '{{ ui.generate_btn }}'; }
 }
 </script>
 {% endblock %}

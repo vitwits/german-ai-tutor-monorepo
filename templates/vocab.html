@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<h2 style="font-weight: 400; letter-spacing: 1px;">МІЙ СЛОВНИК</h2>
+<h2 style="font-weight: 400; letter-spacing: 1px;">{{ ui.my_vocab }}</h2>
 <div class="card" style="padding: 0; overflow: hidden;">
     {% for w in words %}
     <div style="border-bottom: 1px solid var(--border);">
@@ -13,7 +13,7 @@
                     </span>
                     <span class="material-symbols-outlined" style="font-size: 18px; cursor: pointer; opacity: 0.5;" onclick="playAudio('{{w.display}}')">volume_up</span>
                 </div>
-                <div style="font-size: 0.9rem; opacity: 0.8;">{{ w.ua }} / {{ w.en }}</div>
+                <div style="font-size: 0.9rem; opacity: 0.8;">{{ w.display_trans }}</div>
             </div>
             <div style="display: flex; gap: 8px;">
                 <button class="btn-text" onclick="toggleFav('{{w.id}}', this)" style="color: #FFC107">
@@ -25,13 +25,13 @@
             </div>
         </div>
         <div id="ctx-{{w.id}}" style="display:none; padding: 0 24px 16px 24px; background-color: rgba(0,0,0,0.02);">
-            <div style="font-size: 0.85rem; color: var(--primary); margin-bottom: 4px; font-weight: 500;">Контекст:</div>
+            <div style="font-size: 0.85rem; color: var(--primary); margin-bottom: 4px; font-weight: 500;">{{ ui.context }}</div>
             <div style="font-style: italic; color: var(--on-surface); opacity: 0.9; margin-bottom: 8px; line-height: 1.5;">
                 {{ w.ctx }}
             </div>
             {% if w.text_id %}
-            <a href="/view/{{w.text_id}}?highlight={{ w.ctx | urlencode }}" class="btn-text" style="padding: 0; font-size: 0.8rem; color: var(--primary); text-decoration: none;">
-                <span class="material-symbols-outlined" style="font-size: 16px;">open_in_new</span> Перейти до тексту
+            <a href="/view/{{w.text_id}}?highlight={{ w.ctx | urlencode }}" class="btn-text" style="padding: 0; font-size: 0.8rem; color: var(--primary); text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
+                <span class="material-symbols-outlined" style="font-size: 16px;">open_in_new</span> {{ ui.go_to_text }}
             </a>
             {% endif %}
         </div>
@@ -62,7 +62,7 @@ async function toggleFav(id, btn) {
 }
 
 async function rmWord(id) {
-    if(!confirm('Видалити зі списку улюблених? (Слово залишиться в тексті)')) return;
+    if(!confirm('{{ ui.confirm_remove_from_fav }}')) return;
     
     // ВАЖЛИВО: from_vocab: true
     await fetch('/api/remove_word', {

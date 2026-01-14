@@ -24,17 +24,111 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
+# --- TRANSLATIONS ---
+UI_STRINGS = {
+    'ukr': {
+        'settings': 'Налаштування',
+        'library': 'Бібліотека',
+        'logout': 'Вийти',
+        'generate_new': 'Створити Урок',
+        'topic': 'Тема уроку',
+        'level': 'Рівень',
+        'count': 'Кількість речень',
+        'generate_btn': 'Згенерувати',
+        'vocab': 'Словник',
+        'back': 'Назад',
+        'topic_placeholder': 'Наприклад: Подорож, IT, Спорт...',
+        'generating': 'Генерація...',
+        'error_alert': 'Помилка',
+        'show_translation': 'Показати переклад',
+        'hide_translation': 'Приховати переклад',
+        'play_all': 'ПРОГРАТИ ВСЕ',
+        'stop': 'ЗУПИНИТИ',
+        'add_translation': '+ ПЕРЕКЛАСТИ',
+        'confirm_remove_word_from_text': 'Видалити слово з цього тексту?',
+        'grammar_tooltip': 'Пояснити граматику',
+        'grammar_explanation_error': 'Не вдалося отримати пояснення.',
+        'lesson_vocab': 'СЛОВНИК УРОКУ',
+        'empty_vocab_prompt': 'Виділіть слово в тексті, щоб додати переклад.',
+        'my_vocab': 'МІЙ СЛОВНИК',
+        'context': 'Контекст:',
+        'go_to_text': 'Перейти до тексту',
+        'confirm_remove_from_fav': 'Видалити зі списку улюблених? (Слово залишиться в тексті)',
+        'save_settings': 'Зберегти',
+        'interface_lang': 'Мова інтерфейсу',
+        'login_header': 'Вхід',
+        'login_btn': 'Увійти',
+        'password': 'Пароль',
+        'no_account': 'Немає аккаунту?',
+        'register_link': 'Зареєструватися',
+        'my_texts': 'Мої тексти',
+        'read': 'Читати',
+        'main': 'Головна',
+    },
+    'eng': {
+        'settings': 'Settings',
+        'library': 'Library',
+        'logout': 'Logout',
+        'generate_new': 'Create Lesson',
+        'topic': 'Lesson Topic',
+        'level': 'Level',
+        'count': 'Sentence count',
+        'generate_btn': 'Generate',
+        'vocab': 'Vocabulary',
+        'back': 'Back',
+        'topic_placeholder': 'E.g.: Travel, IT, Sports...',
+        'generating': 'Generating...',
+        'error_alert': 'Error',
+        'show_translation': 'Show translation',
+        'hide_translation': 'Hide translation',
+        'play_all': 'PLAY ALL',
+        'stop': 'STOP',
+        'add_translation': '+ TRANSLATE',
+        'confirm_remove_word_from_text': 'Remove word from this text?',
+        'grammar_tooltip': 'Explain grammar',
+        'grammar_explanation_error': 'Failed to get explanation.',
+        'lesson_vocab': 'LESSON VOCABULARY',
+        'empty_vocab_prompt': 'Highlight a word in the text to add a translation.',
+        'my_vocab': 'MY VOCABULARY',
+        'context': 'Context:',
+        'go_to_text': 'Go to text',
+        'confirm_remove_from_fav': 'Remove from favorites? (The word will remain in the text)',
+        'save_settings': 'Save',
+        'interface_lang': 'Interface Language',
+        'login_header': 'Login',
+        'login_btn': 'Log In',
+        'password': 'Password',
+        'no_account': "Don't have an account?",
+        'register_link': 'Register',
+        'my_texts': 'My Texts',
+        'read': 'Read',
+        'main': 'Home',
+    }
+}
+
 class User(UserMixin):
-    def __init__(self, id, email):
+    def __init__(self, id, email, interface_language='ukr'):
         self.id = id
         self.email = email
+        self.interface_language = interface_language or 'ukr'
 
 @login_manager.user_loader
 def load_user(user_id):
     with get_db() as conn:
         u = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
-        if u: return User(u['id'], u['email'])
+        if u:
+            # `u.keys()` робить код безпечним для рядків, створених до додавання колонки
+            lang = u['interface_language'] if 'interface_language' in u.keys() and u['interface_language'] else 'ukr'
+            return User(u['id'], u['email'], lang)
     return None
+
+@app.context_processor
+def inject_ui():
+    # Визначаємо мову, за замовчуванням 'ukr', якщо користувач не в системі
+    lang = 'ukr'
+    if current_user.is_authenticated and hasattr(current_user, 'interface_language'):
+        lang = current_user.interface_language
+    return dict(ui=UI_STRINGS.get(lang, UI_STRINGS['ukr']), lang=lang)
 
 # --- AUTH ROUTES ---
 
@@ -54,8 +148,8 @@ def register():
                 return redirect(url_for('register'))
             
             uid = str(uuid.uuid4())
-            conn.execute('INSERT INTO users (id, email, password_hash) VALUES (?, ?, ?)',
-                         (uid, email, generate_password_hash(password)))
+            conn.execute('INSERT INTO users (id, email, password_hash, interface_language) VALUES (?, ?, ?, ?)',
+                         (uid, email, generate_password_hash(password), 'ukr'))
             conn.commit()
         flash('Успішна реєстрація! Увійдіть.')
         return redirect(url_for('login'))
@@ -69,7 +163,8 @@ def login():
         with get_db() as conn:
             u = conn.execute('SELECT * FROM users WHERE email = ?', (email,)).fetchone()
             if u and check_password_hash(u['password_hash'], password):
-                login_user(User(u['id'], u['email']))
+                lang = u['interface_language'] if 'interface_language' in u.keys() and u['interface_language'] else 'ukr'
+                login_user(User(u['id'], u['email'], lang))
                 return redirect(url_for('index'))
         flash('Невірний email або пароль')
     return render_template('login.html')
@@ -86,17 +181,34 @@ def logout():
 def index():
     return render_template('index.html')
 
+@app.route('/settings', methods=['GET', 'POST'])
+@login_required
+def settings():
+    next_url = request.args.get('next')
+    if request.method == 'POST':
+        lang = request.form.get('language')
+        if lang in ['ukr', 'eng']:
+            with get_db() as conn:
+                conn.execute('UPDATE users SET interface_language = ? WHERE id = ?', (lang, current_user.id))
+                conn.commit()
+            # Оновлюємо об'єкт користувача в сесії
+            current_user.interface_language = lang
+            flash('Налаштування збережено' if lang == 'ukr' else 'Settings saved')
+            if next_url and next_url != url_for('settings'):
+                return redirect(next_url)
+            return redirect(url_for('index')) # Fallback
+    return render_template('settings.html', next_url=next_url)
+
 @app.route('/api/generate', methods=['POST'])
 @login_required
 def generate():
     req = request.json
-    lang = "Ukrainian" if req.get('lang') == 'ukr' else "English"
-    data = services.generate_german_text(req['topic'], req['count'], req['level'], lang)
-    
+    data = services.generate_german_text(req['topic'], req['count'], req['level'])
+    title_json = json.dumps({'de': data.get('title_de', req['topic']), 'ukr': data['title_ua'], 'eng': data['title_en']})
     tid = str(uuid.uuid4())
     with get_db() as conn:
         conn.execute('INSERT INTO texts (id, user_id, title, level, content_json) VALUES (?,?,?,?,?)',
-                     (tid, current_user.id, data['title'], req['level'], json.dumps(data['sentences'])))
+                     (tid, current_user.id, title_json, req['level'], json.dumps(data['sentences'])))
         conn.commit()
     return jsonify({"id": tid})
 
@@ -107,29 +219,31 @@ def explain_grammar():
     sentence = req.get('sentence')
     text_id = req.get('text_id')
     sentence_index = req.get('sentence_index')
+    lang = current_user.interface_language
 
     # 1. Перевіряємо кеш в базі
     if text_id and sentence_index is not None:
         with get_db() as conn:
-            cached = conn.execute('SELECT explanation FROM grammar_explanations WHERE text_id = ? AND sentence_index = ?', 
-                                  (text_id, sentence_index)).fetchone()
+            cached = conn.execute('SELECT explanation FROM grammar_explanations WHERE text_id = ? AND sentence_index = ? AND language = ?',
+                                  (text_id, sentence_index, lang)).fetchone()
             if cached:
                 return jsonify({"explanation": cached['explanation']})
 
     # 2. Якщо немає в кеші - генеруємо
     # Використовуємо Gemini для пояснення
     model = genai.GenerativeModel('gemini-2.0-flash')
-    prompt = f"Explain the grammar of this German sentence for a Ukrainian student. Break down cases (Nominativ, Dativ, etc.), declensions, and sentence structure. Keep it concise, clear and use formatting (bolding).  Answer in Ukrainian. Sentence: '{sentence}'"
-    
+    target_lang_name = "Ukrainian" if lang == 'ukr' else "English"
+    prompt = f"Explain the grammar of this German sentence for a {target_lang_name} student. Break down cases (Nominativ, Dativ, etc.), declensions, and sentence structure. Keep it concise, clear and use formatting (bolding). Answer in {target_lang_name}. Sentence: '{sentence}'"
+
     try:
         response = model.generate_content(prompt)
         explanation = response.text
         
         # 3. Зберігаємо в базу
-        if text_id and sentence_index is not None:
+        if text_id and sentence_index is not None and explanation:
             with get_db() as conn:
-                conn.execute('INSERT OR REPLACE INTO grammar_explanations (text_id, sentence_index, explanation) VALUES (?, ?, ?)',
-                             (text_id, sentence_index, explanation))
+                conn.execute('INSERT OR REPLACE INTO grammar_explanations (text_id, sentence_index, language, explanation) VALUES (?, ?, ?, ?)',
+                             (text_id, sentence_index, lang, explanation))
                 conn.commit()
         
         return jsonify({"explanation": explanation})
@@ -140,8 +254,20 @@ def explain_grammar():
 @login_required
 def library():
     with get_db() as conn:
-        rows = conn.execute('SELECT * FROM texts WHERE user_id = ? ORDER BY rowid DESC', (current_user.id,)).fetchall()
-    return render_template('library.html', texts=rows)
+        db_rows = conn.execute('SELECT * FROM texts WHERE user_id = ? ORDER BY rowid DESC', (current_user.id,)).fetchall()
+
+    texts = []
+    for row in db_rows:
+        r = dict(row)
+        try:
+            # Спробувати розпарсити JSON з заголовком
+            titles = json.loads(r['title'])
+            r['display_title'] = titles.get(current_user.interface_language, titles.get('ukr', r['title']))
+        except (json.JSONDecodeError, TypeError):
+            # Fallback для старих текстів, де title - це просто рядок
+            r['display_title'] = r['title']
+        texts.append(r)
+    return render_template('library.html', texts=texts)
 
 @app.route('/view/<tid>')
 @login_required
@@ -153,6 +279,22 @@ def view_text(tid):
         
     sentences = json.loads(t['content_json'])
     
+    # Адаптація перекладу під мову юзера
+    lang_key = 'ua' if current_user.interface_language == 'ukr' else 'en'
+    for s in sentences:
+        # Створюємо поле 'trans', яке очікує шаблон, беручи потрібну мову
+        s['trans'] = s.get(lang_key, s.get('trans', '')) # Fallback на старий ключ 'trans'
+
+    # Обробка заголовка
+    # За замовчуванням показуємо німецьку назву, якщо є, або оригінальний рядок
+    display_title = t['title'] 
+    trans_title = ""
+    try:
+        titles = json.loads(t['title'])
+        display_title = titles.get('de', titles.get('ukr', t['title'])) # Пріоритет: DE -> UKR -> Raw
+        trans_title = titles.get(current_user.interface_language, '')
+    except (json.JSONDecodeError, TypeError): pass
+
     # --- НОВА ЛОГІКА ПІДСВІТКИ (ЗА КООРДИНАТАМИ) ---
     for i, s in enumerate(sentences):
         original_text = s['de']
@@ -230,7 +372,7 @@ def view_text(tid):
         
         s['de_html'] = built_str
         
-    return render_template('view.html', text=t, sentences=sentences, vocab=vocab_rows)
+    return render_template('view.html', text=t, sentences=sentences, vocab=vocab_rows, display_title=display_title, trans_title=trans_title)
 
 @app.route('/api/quick_translate', methods=['POST'])
 @login_required
@@ -264,8 +406,17 @@ def quick_translate():
 @app.route('/vocab')
 @login_required
 def vocab():
+    lang = current_user.interface_language
     with get_db() as conn:
-        words = conn.execute('SELECT * FROM vocabulary WHERE user_id = ? AND is_favorite = 1 ORDER BY rowid DESC', (current_user.id,)).fetchall()
+        db_words = conn.execute('SELECT * FROM vocabulary WHERE user_id = ? AND is_favorite = 1 ORDER BY rowid DESC', (current_user.id,)).fetchall()
+    
+    words = []
+    for row in db_words:
+        w = dict(row)
+        # Додаємо поле display_trans, щоб уникнути подвійного перекладу в шаблоні
+        w['display_trans'] = w['ua'] if lang == 'ukr' else w['en']
+        words.append(w)
+        
     return render_template('vocab.html', words=words)
 
 @app.route('/api/toggle_fav', methods=['POST'])
@@ -335,7 +486,7 @@ def tts():
     if not os.path.exists(filepath):
         from google.cloud import texttospeech
         s_input = texttospeech.SynthesisInput(text=text)
-        voice = texttospeech.VoiceSelectionParams(language_code="de-DE", name="de-DE-Studio-C")
+        voice = texttospeech.VoiceSelectionParams(language_code="de-DE", name="de-DE-Polyglot-1")
         audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
         response = tts_client.synthesize_speech(input=s_input, voice=voice, audio_config=audio_config)
         with open(filepath, "wb") as out:
