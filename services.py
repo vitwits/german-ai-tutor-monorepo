@@ -11,12 +11,12 @@ client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 # Визначаємо чіткі інструкції для кожного рівня
 CEFR_GUIDELINES = {
-    "A1": "Use strictly short sentences (4-8 words). Structure: Subject-Verb-Object. Present tense only. Basic vocabulary (family, food, daily life). No complex subordinate clauses.",
+    "A1": "Use strictly short sentences (5-8 words). Structure: Subject-Verb-Object. Present tense only. Basic vocabulary (family, food, daily life). No complex subordinate clauses.",
     "A2": "Sentences 6-10 words. Use simple connectors (und, aber, oder). Use Perfekt for past tense. Topics: shopping, work, immediate environment.",
     "B1": "Sentences 8-15 words. MUST use subordinate clauses (weil, wenn, dass). Use Präteritum for modals. Introduce simple abstract topics. Start using distinct connecting words.",
-    "B2": "Complex sentences (12-20+ words). MANDATORY use of: Passive voice, Konjunktiv II (speculation/politeness), relative clauses, and multi-part connectors (zwar... aber, nicht nur... sondern auch). Vocabulary must include abstract terms and specific synonyms. No simple repetition.",
-    "C1": "Sophisticated structure (15-30 words). Use nominalization, complex syntax, fixed idiomatic expressions, and nuances. Text must flow logically with high cohesion. Advanced vocabulary is required.",
-    "C2": "Mastery level. Long, nuanced sentences (20+ words). Use rhetorical devices, irony, and implicit meanings. Vocabulary must be highly specific, academic, or literary depending on context."
+    "B2": "Complex sentences (12-18+ words). MANDATORY use of: Passive voice, Konjunktiv II (speculation/politeness), relative clauses, and multi-part connectors (zwar... aber, nicht nur... sondern auch). Try to use at least one idiom useful for the context. Vocabulary must include abstract terms and specific synonyms. No simple repetition.",
+    "C1": "Sophisticated structure (15-20 words). Use nominalization, complex syntax, fixed idiomatic expressions, and nuances. Text must flow logically with high cohesion. Advanced vocabulary is required.",
+    "C2": "Mastery level. Long, nuanced sentences (18+ words). Use rhetorical devices, irony, and implicit meanings. Vocabulary must be highly specific, academic, or literary depending on context."
 }
 
 def get_tts_client():

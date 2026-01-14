@@ -247,7 +247,7 @@ def explain_grammar():
     Analyze this German sentence (Level {text_level}): "{sentence}"
 
     RULES FOR EXPLANATION:
-    1. KEEP IT SHORT. Maximum 3-4 bullet points. No long paragraphs.
+    1. KEEP IT SHORT. Maximum 3-4 bullet points. No long paragraphs. No intro, no Let's start no small talk.
     2. DO NOT define obvious words (e.g., don't say "Computer is a noun").
     3. FOCUS ONLY on grammar nuances relevant to Level {text_level}:
        - Why this specific article/ending? (Case/Gender)
