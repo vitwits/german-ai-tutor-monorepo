@@ -1,0 +1,411 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+    .learned {
+        background-color: rgba(25, 118, 210, 0.15);
+        border-bottom: 2px solid var(--primary);
+        cursor: pointer;
+        border-radius: 3px;
+        padding: 0 1px;
+    }
+    .highlight-sentence {
+        background-color: #FFF9C4;
+        transition: background-color 2s ease-out;
+    }
+    .grammar-box {
+        background-color: #E3F2FD;
+        padding: 12px;
+        border-radius: 4px;
+        margin-top: 8px;
+        font-size: 0.95rem;
+        line-height: 1.6;
+        border-left: 4px solid var(--primary);
+        display: none; /* Приховано за замовчуванням */
+    }
+</style>
+
+<div class="card">
+    <h1 style="font-size:1.5rem; margin:0 0 16px 0;">{{ text.title }}</h1>
+    
+    <div style="display:flex; align-items:center; gap:12px; margin-bottom:24px; flex-wrap:wrap;">
+        <span style="background:var(--primary); color:var(--on-primary); padding:6px 12px; border-radius:16px; font-size:0.85rem; font-weight:500;">
+            {{ text.level }}
+        </span>
+        
+        <button class="btn-text" onclick="toggleTrans()" id="trans-btn" style="border: 1px solid var(--border);">
+            <span class="material-symbols-outlined">translate</span> Показати переклад
+        </button>
+
+        <button class="btn-contained" onclick="playAll()" id="play-all-btn" style="margin-left: auto;">
+            <span class="material-symbols-outlined">play_arrow</span> ПРОГРАТИ ВСЕ
+        </button>
+    </div>
+    
+    {% for s in sentences %}
+    <div class="de-line" id="sent-{{ loop.index0 }}" data-index="{{ loop.index0 }}" data-text="{{ s.de }}" style="padding:8px 0; border-bottom:1px solid var(--border);">
+        <div style="display:flex; justify-content: space-between; align-items: flex-start;">
+            <div style="display:flex; align-items:baseline; gap:12px; flex: 1;">
+                <button class="btn-text" onclick="playAudio('{{s.de}}')" style="height:32px; width:32px; padding:0; min-width:32px;">
+                    <span class="material-symbols-outlined" style="font-size:20px; color:var(--primary)">volume_up</span>
+                </button>
+                <span class="de-text" style="font-size:1.1rem; font-weight:400; line-height:1.6;">{{ s.de_html | safe }}</span>
+            </div>
+            <button class="btn-text" onclick="explainGrammar(this, '{{text.id}}', {{loop.index0}})" title="Пояснити граматику" style="color: var(--primary); opacity: 0.7;">
+                <span class="material-symbols-outlined">quiz</span>
+            </button>
+        </div>
+        <div class="trans-row" style="color:gray; padding-left:44px; font-size:0.9rem; display:none; margin-top:4px;">{{ s.trans }}</div>
+        <div class="grammar-box" style="margin-left: 44px;"></div>
+    </div>
+    {% endfor %}
+</div>
+
+<h2 style="font-size:1.2rem; color:var(--primary);">СЛОВНИК УРОКУ</h2>
+<div class="card" style="padding:0;">
+    {% if not vocab %}
+    <div style="padding:20px; text-align:center; opacity:0.6;">Виділіть слово в тексті, щоб додати переклад.</div>
+    {% endif %}
+    {% for v in vocab %}
+    <div class="vocab-item" style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid var(--border);">
+        <div style="display:flex; align-items:center; gap:12px;">
+            <button class="btn-text" onclick="playAudio('{{v.display}}')" style="padding:0; min-width:unset; color:var(--primary); opacity:0.6;">
+                <span class="material-symbols-outlined" style="font-size:18px;">volume_up</span>
+            </button>
+            <div>
+                <span style="font-weight: 500; color: var(--primary); font-size: 1.1rem; cursor: pointer; text-decoration: underline; text-decoration-style: dotted;" 
+                      onclick="showCtx('{{v.sentence_index}}')">
+                    {{ v.display }}
+                </span>
+                <div style="font-size:0.85rem; opacity:0.7;">{{ v.ua }} / {{ v.en }}</div>
+            </div>
+        </div>
+        <div style="display:flex; gap:8px;">
+            <button class="btn-text" onclick="toggleFav('{{v.id}}', this)" style="color: {% if v.is_favorite %}#FFC107{% else %}inherit{% endif %}; padding: 0; min-width: 32px;">
+                <span class="material-symbols-outlined {% if v.is_favorite %}filled{% endif %}">star</span>
+            </button>
+            <button class="btn-text" onclick="rmWord('{{v.id}}')" style="color:red; padding: 0; min-width: 32px;"><span class="material-symbols-outlined">delete</span></button>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<div id="pop" style="position:absolute; display:none; background:var(--on-surface); color:var(--bg); padding:8px 16px; border-radius:4px; z-index:100; cursor:pointer; font-weight:500; font-size:0.8rem;">+ ПЕРЕКЛАСТИ</div>
+<div id="learned-pop" style="position:absolute; display:none; background:var(--surface); color:var(--on-surface); padding:8px 12px; border-radius:4px; box-shadow:0 4px 12px rgba(0,0,0,0.15); z-index:101; border:1px solid var(--border); min-width:auto; max-width: 250px;">
+    <div id="lp-content"></div>
+</div>
+
+<script>
+// Ініціалізація даних словника для швидкого доступу
+const vocabData = {{ vocab | tojson }};
+const vocabMap = {};
+vocabData.forEach(v => vocabMap[v.id] = v);
+
+let currentAudio = null;
+let isPlayingAll = false;
+
+// 1. ПРОГРАВАННЯ АУДІО
+async function playAudio(text) {
+    if (currentAudio) {
+        currentAudio.pause();
+        currentAudio.src = "";
+    }
+    try {
+        const response = await fetch('/api/tts', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ text: text.split('(')[0].trim() })
+        });
+
+        if (!response.ok) return;
+
+        const data = await response.json();
+        currentAudio = new Audio(data.url);
+        
+        // Повертаємо проміс для playAll
+        return new Promise((resolve) => {
+            currentAudio.onended = resolve;
+            currentAudio.onerror = resolve;
+            currentAudio.play();
+        });
+    } catch (error) {
+        console.error('TTS Error:', error);
+    }
+}
+
+// 2. ПРОГРАВАННЯ ВСЬОГО ТЕКСТУ
+async function playAll() {
+    const btn = document.getElementById('play-all-btn');
+    
+    if (isPlayingAll) {
+        isPlayingAll = false;
+        if (currentAudio) currentAudio.pause();
+        btn.innerHTML = '<span class="material-symbols-outlined">play_arrow</span> ПРОГРАТИ ВСЕ';
+        return;
+    }
+
+    isPlayingAll = true;
+    btn.innerHTML = '<span class="material-symbols-outlined">pause</span> ЗУПИНИТИ';
+    
+    const lines = document.querySelectorAll('.de-text');
+    
+    for (let line of lines) {
+        if (!isPlayingAll) break;
+        
+        const parent = line.closest('.de-line');
+        const originalBg = parent.style.backgroundColor;
+        
+        parent.style.backgroundColor = "var(--secondary)";
+        
+        // Чекаємо поки дограє речення
+        await playAudio(line.innerText);
+        
+        parent.style.backgroundColor = "";
+        // Пауза між реченнями
+        await new Promise(r => setTimeout(r, 600));
+    }
+    
+    isPlayingAll = false;
+    btn.innerHTML = '<span class="material-symbols-outlined">play_arrow</span> ПРОГРАТИ ВСЕ';
+}
+
+function toggleTrans() {
+    const rows = document.querySelectorAll('.trans-row');
+    const btn = document.getElementById('trans-btn');
+    let isHidden = true;
+    
+    if (rows.length > 0) isHidden = (rows[0].style.display === 'none');
+    
+    rows.forEach(r => r.style.display = isHidden ? 'block' : 'none');
+    
+    if (isHidden) {
+        btn.innerHTML = '<span class="material-symbols-outlined">visibility_off</span> Приховати переклад';
+    } else {
+        btn.innerHTML = '<span class="material-symbols-outlined">translate</span> Показати переклад';
+    }
+}
+
+// 3. СКРОЛ ПРИ ЗАВАНТАЖЕННІ (якщо є параметр highlight)
+// 3. СКРОЛ ПРИ ЗАВАНТАЖЕННІ
+window.onload = function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const highlightCtx = urlParams.get('highlight');
+    
+    if (highlightCtx) {
+        const lines = document.querySelectorAll('.de-line');
+        for (let line of lines) {
+            if (line.getAttribute('data-text') && line.getAttribute('data-text').trim() === highlightCtx.trim()) {
+                line.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                line.classList.add('highlight-sentence');
+                setTimeout(() => line.classList.remove('highlight-sentence'), 3000);
+                
+                // === ОСЬ ЦЕ ВИПРАВЛЕННЯ ===
+                // Ми видаляємо параметри запиту (?highlight=...) з адреси браузера.
+                // Це не перезавантажує сторінку, але "чистить" історію.
+                // При наступному location.reload() параметр вже буде пустим.
+                window.history.replaceState({}, document.title, window.location.pathname);
+                
+                break;
+            }
+        }
+    }
+};
+
+// 4. СКРОЛ ЗІ СЛОВНИКА (локальний)
+function showCtx(sentIdx) {
+    if (sentIdx === 'None' || sentIdx === undefined || sentIdx === "") return;
+    const line = document.getElementById('sent-' + sentIdx);
+    if (line) {
+        line.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        line.classList.add('highlight-sentence');
+        setTimeout(() => line.classList.remove('highlight-sentence'), 2000);
+    }
+}
+
+// 5. ОБРОБКА ВИДІЛЕННЯ (ЗАХИСТ ВІД ДУБЛІКАТІВ)
+document.addEventListener('mouseup', (e) => {
+    // Ігноруємо кліки на вже вивчені слова та кнопки
+    if (e.target.closest('button') || e.target.classList.contains('learned')) return;
+
+    const selection = window.getSelection();
+    
+    // --- АВТО-РОЗШИРЕННЯ ВИДІЛЕННЯ ДО ЦІЛИХ СЛІВ ---
+    if (!selection.isCollapsed && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+        // Символи-роздільники (все, що не є частиною слова)
+        const isSeparator = (char) => /[\s\.,!?;:()\[\]"'«»]/.test(char);
+        
+        const container = range.commonAncestorContainer;
+        const el = container.nodeType === 3 ? container.parentElement : container;
+        
+        // Працюємо тільки всередині тексту уроку
+        if (el.closest && el.closest('.de-text')) {
+            if (range.startContainer.nodeType === 3) {
+                let start = range.startOffset;
+                const txt = range.startContainer.textContent;
+                while (start > 0 && !isSeparator(txt[start - 1])) start--;
+                range.setStart(range.startContainer, start);
+            }
+            if (range.endContainer.nodeType === 3) {
+                let end = range.endOffset;
+                const txt = range.endContainer.textContent;
+                while (end < txt.length && !isSeparator(txt[end])) end++;
+                range.setEnd(range.endContainer, end);
+            }
+            selection.removeAllRanges();
+            selection.addRange(range);
+        }
+    }
+
+    const selText = selection.toString().trim();
+    const pop = document.getElementById('pop');
+
+    // Знаходимо контейнер речення
+    const sentenceDiv = e.target.closest('.de-line');
+    
+    // Перевіряємо, чи виділення всередині тексту
+    const textSpan = sentenceDiv ? sentenceDiv.querySelector('.de-text') : null;
+    
+    if(selText && selText.length < 50 && sentenceDiv && textSpan && textSpan.contains(selection.anchorNode)) {
+        const sentIdx = sentenceDiv.getAttribute('data-index');
+        
+        pop.style.display = 'block';
+        pop.style.left = e.pageX + 'px';
+        pop.style.top = (e.pageY - 45) + 'px';
+        
+        pop.onclick = async () => {
+            pop.innerHTML = '...';
+            
+            // Відправляємо: текст, весь контекст речення, ID тексту, номер речення
+            await fetch('/api/quick_translate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    text: selText, 
+                    ctx: textSpan.innerText, 
+                    tid: '{{text.id}}',
+                    sent_idx: sentIdx
+                })
+            });
+            location.reload();
+        };
+    } else { 
+        pop.style.display = 'none'; 
+        pop.innerHTML = '+ ПЕРЕКЛАСТИ'; 
+    }
+});
+
+// 6. ЛАЙКИ ТА ВИДАЛЕННЯ
+async function toggleFav(id, btn) {
+    const res = await fetch('/api/toggle_fav', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id: id})});
+    if(res.ok) {
+        const icon = btn.querySelector('.material-symbols-outlined');
+        icon.classList.toggle('filled');
+        if (icon.classList.contains('filled')) btn.style.color = "#FFC107";
+        else btn.style.color = "inherit";
+    }
+}
+
+async function rmWord(id) {
+    if(!confirm('Видалити слово з цього тексту?')) return;
+    await fetch('/api/remove_word', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id: id, from_vocab: false})});
+    location.reload();
+}
+
+// 7. ПОЯСНЕННЯ ГРАМАТИКИ
+async function explainGrammar(btn, textId, sentIdx) {
+    // Знаходимо контейнер для пояснення (він знаходиться в тому ж батьківському елементі .de-line)
+    const lineDiv = btn.closest('.de-line');
+    // Беремо текст речення з атрибуту data-text, щоб уникнути проблем з лапками
+    const sentence = lineDiv.getAttribute('data-text');
+    const box = lineDiv.querySelector('.grammar-box');
+    
+    // Якщо вже відкрито - закриваємо
+    if (box.style.display === 'block') {
+        box.style.display = 'none';
+        return;
+    }
+    
+    // Якщо контенту ще немає - завантажуємо
+    if (!box.innerHTML) {
+        const originalIcon = btn.innerHTML;
+        btn.innerHTML = '<span class="material-symbols-outlined" style="animation: spin 1s linear infinite;">sync</span>';
+        btn.disabled = true;
+        
+        try {
+            const res = await fetch('/api/explain_grammar', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    sentence: sentence,
+                    text_id: textId,
+                    sentence_index: sentIdx
+                })
+            });
+            const data = await res.json();
+            // Простий конвертер Markdown bold -> HTML bold
+            let formatted = data.explanation.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+            formatted = formatted.replace(/\n/g, '<br>');
+            box.innerHTML = formatted;
+        } catch (e) {
+            box.innerHTML = "Не вдалося отримати пояснення.";
+        }
+        
+        btn.innerHTML = originalIcon;
+        btn.disabled = false;
+    }
+    
+    box.style.display = 'block';
+}
+
+// 8. КЛІК ПО ВИВЧЕНОМУ СЛОВУ (ПОПАП)
+let hideTimeout;
+document.addEventListener('click', (e) => {
+    const pop = document.getElementById('learned-pop');
+    
+    // Якщо клік по слову класу .learned
+    if (e.target.classList.contains('learned')) {
+        const wid = e.target.getAttribute('data-wid');
+        const word = vocabMap[wid];
+        
+        if (word) {
+            if (hideTimeout) clearTimeout(hideTimeout);
+            
+            const rect = e.target.getBoundingClientRect();
+            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+            const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+            
+            const html = `
+                <div style="font-size:0.9rem; line-height:1.4; text-align: center;">
+                    <div style="font-weight:500; color:var(--primary); margin-bottom:2px;">${word.ua}</div>
+                    <div style="opacity:0.7; font-size:0.8rem;">${word.en}</div>
+                </div>
+            `;
+            
+            document.getElementById('lp-content').innerHTML = html;
+            pop.style.display = 'block';
+            
+            const wordCenter = rect.left + (rect.width / 2);
+            pop.style.left = (wordCenter + scrollLeft) + 'px';
+            pop.style.top = (rect.top + scrollTop - 8) + 'px';
+            pop.style.transform = 'translate(-50%, -100%)';
+            
+            e.target.onmouseleave = function() {
+                hideTimeout = setTimeout(() => { pop.style.display = 'none'; }, 1000);
+            };
+            e.target.onmouseenter = function() {
+                if (hideTimeout) clearTimeout(hideTimeout);
+            };
+        }
+        return; // Виходимо, щоб не спрацювало закриття
+    }
+    
+    // Закриття при кліку поза попапом
+    if (pop.style.display === 'block' && !e.target.closest('#learned-pop')) {
+        pop.style.display = 'none';
+    }
+});
+</script>
+<style>
+@keyframes spin { 100% { transform: rotate(360deg); } }
+</style>
+{% endblock %}

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Мої тексти</h2>
+{% for t in texts %}
+<div class="card" style="display: flex; justify-content: space-between; align-items: center;">
+    <div>
+        <div style="font-weight: 500; font-size: 1.1rem;">{{ t.title }}</div>
+        <div style="font-size: 0.8rem; opacity: 0.6;">{{ t.level }}</div>
+    </div>
+    <div style="display: flex; gap: 10px;">
+        <a href="/view/{{t.id}}"><button class="btn-contained">Читати</button></a>
+        <button class="btn-text" style="color: red;" onclick="deleteText('{{t.id}}')"><span class="material-symbols-outlined">delete</span></button>
+    </div>
+</div>
+{% endfor %}
+<script>
+async function deleteText(id) {
+    if(!confirm('Видалити?')) return;
+    await fetch('/api/delete_text', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({id})
+    });
+    location.reload();
+}
+</script>
+{% endblock %}

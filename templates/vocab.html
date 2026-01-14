@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block content %}
+<h2 style="font-weight: 400; letter-spacing: 1px;">МІЙ СЛОВНИК</h2>
+<div class="card" style="padding: 0; overflow: hidden;">
+    {% for w in words %}
+    <div style="border-bottom: 1px solid var(--border);">
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px 24px;">
+            <div style="flex:1;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-weight: 500; color: var(--primary); font-size: 1.1rem; cursor: pointer; text-decoration: underline; text-decoration-style: dotted;" 
+                          onclick="toggleCtx('{{w.id}}')">
+                        {{ w.display }}
+                    </span>
+                    <span class="material-symbols-outlined" style="font-size: 18px; cursor: pointer; opacity: 0.5;" onclick="playAudio('{{w.display}}')">volume_up</span>
+                </div>
+                <div style="font-size: 0.9rem; opacity: 0.8;">{{ w.ua }} / {{ w.en }}</div>
+            </div>
+            <div style="display: flex; gap: 8px;">
+                <button class="btn-text" onclick="toggleFav('{{w.id}}', this)" style="color: #FFC107">
+                    <span class="material-symbols-outlined filled">star</span>
+                </button>
+                <button class="btn-text" style="color: #D32F2F" onclick="rmWord('{{w.id}}')">
+                    <span class="material-symbols-outlined">delete</span>
+                </button>
+            </div>
+        </div>
+        <div id="ctx-{{w.id}}" style="display:none; padding: 0 24px 16px 24px; background-color: rgba(0,0,0,0.02);">
+            <div style="font-size: 0.85rem; color: var(--primary); margin-bottom: 4px; font-weight: 500;">Контекст:</div>
+            <div style="font-style: italic; color: var(--on-surface); opacity: 0.9; margin-bottom: 8px; line-height: 1.5;">
+                {{ w.ctx }}
+            </div>
+            {% if w.text_id %}
+            <a href="/view/{{w.text_id}}?highlight={{ w.ctx | urlencode }}" class="btn-text" style="padding: 0; font-size: 0.8rem; color: var(--primary); text-decoration: none;">
+                <span class="material-symbols-outlined" style="font-size: 16px;">open_in_new</span> Перейти до тексту
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<script>
+let currentAudio = null;
+async function playAudio(text) {
+    if (currentAudio) currentAudio.pause();
+    const cleanText = text.split('(')[0].trim();
+    const res = await fetch('/api/tts', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({text: cleanText})
+    });
+    const data = await res.json();
+    currentAudio = new Audio(data.url);
+    currentAudio.play();
+}
+
+async function toggleFav(id, btn) {
+    // Тут логіка така: якщо ми знімаємо лайк у списку "Вибране", 
+    // слово має зникнути зі списку. Тому простіше перезавантажити сторінку або видалити елемент.
+    await fetch('/api/toggle_fav', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id})});
+    location.reload(); 
+}
+
+async function rmWord(id) {
+    if(!confirm('Видалити зі списку улюблених? (Слово залишиться в тексті)')) return;
+    
+    // ВАЖЛИВО: from_vocab: true
+    await fetch('/api/remove_word', {
+        method: 'POST', 
+        headers: {'Content-Type': 'application/json'}, 
+        body: JSON.stringify({id: id, from_vocab: true})
+    });
+    location.reload();
+}
+
+function toggleCtx(id) {
+    const el = document.getElementById('ctx-' + id);
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+</script>
+{% endblock %}

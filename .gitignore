@@ -1,0 +1,28 @@
+# Virtual Environment
+# Папка з віртуальним середовищем, щоб не завантажувати бібліотеки в git.
+venv/
+.venv/
+env/
+
+# Environment variables
+# Файл з секретними ключами та налаштуваннями API.
+service-account.json
+.env
+.flaskenv
+
+# Python cache & artifacts
+# Автоматично згенеровані файли Python.
+__pycache__/
+*.pyc
+
+# Database and generated files
+# Папка 'data' містить базу даних та згенеровані аудіофайли.
+data/
+
+# OS-specific & IDE configuration
+.DS_Store
+.vscode/
+.idea/
+
+# Other files
+plans.md

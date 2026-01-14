@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini DE Tutor</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+    
+    <link rel="icon" href="data:,">
+    
+    <style>
+        :root {
+            --bg: #F5F5F5; --surface: #FFFFFF; --on-surface: #212121;
+            --primary: #1976D2; --on-primary: #FFFFFF;
+            --secondary: #FFC107; --border: #E0E0E0;
+            --shadow: 0 2px 4px rgba(0,0,0,0.1); --radius: 4px;
+        }
+        body.dark-mode {
+            --bg: #121212; --surface: #1E1E1E; --on-surface: #E0E0E0;
+            --primary: #90CAF9; --on-primary: #000000; --border: #333333;
+        }
+        body { font-family: 'Roboto', sans-serif; background: var(--bg); color: var(--on-surface); margin: 0; line-height: 1.5; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; padding-bottom: 80px; }
+        .header { display: flex; justify-content: space-between; align-items: center; background: var(--surface); padding: 16px 24px; box-shadow: var(--shadow); margin-bottom: 24px; }
+        .brand { font-size: 1.5rem; font-weight: 500; display: flex; align-items: center; gap: 8px; text-transform: uppercase; }
+        .brand span { color: var(--primary); font-weight: 700; }
+        .card { background: var(--surface); padding: 24px; border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 20px; }
+        
+        button { border-radius: var(--radius); font-family: 'Roboto', sans-serif; font-size: 0.875rem; font-weight: 500; text-transform: uppercase; cursor: pointer; border: none; padding: 0 16px; height: 36px; display: inline-flex; align-items: center; gap: 8px; }
+        .btn-contained { background: var(--primary); color: var(--on-primary); }
+        .btn-text { background: transparent; color: var(--on-surface); }
+        
+        .nav-mobile { position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); display: flex; justify-content: space-around; padding: 8px 0; border-top: 1px solid var(--border); box-shadow: 0 -2px 10px rgba(0,0,0,0.05); }
+        .nav-mobile a { text-decoration: none; color: var(--on-surface); font-size: 10px; display: flex; flex-direction: column; align-items: center; opacity: 0.7; }
+        .nav-mobile a.active { color: var(--primary); opacity: 1; }
+
+        /* --- ВИПРАВЛЕНИЙ БЛОК CSS --- */
+        .material-symbols-outlined {
+            font-family: 'Material Symbols Outlined';
+            font-weight: normal;
+            font-style: normal;
+            font-size: 24px;
+            line-height: 1;
+            letter-spacing: normal;
+            text-transform: none;
+            display: inline-block;
+            white-space: nowrap;
+            word-wrap: normal;
+            
+            /* ТУТ БУЛА ПОМИЛКА, ТЕПЕР ВИПРАВЛЕНО (додано крапку з комою) */
+            direction: ltr; 
+            
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            transition: font-variation-settings 0.2s ease, color 0.2s ease;
+        }
+
+        /* Клас для заповненої зірочки */
+        .material-symbols-outlined.filled {
+            font-variation-settings: 'FILL' 1 !important;
+            color: #FFC107 !important;
+        }
+        .dropdown-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; text-decoration: none; color: var(--on-surface); font-size: 0.9rem; transition: background 0.2s; }
+        .dropdown-item:hover { background-color: rgba(0,0,0,0.05); }
+        body.dark-mode .dropdown-item:hover { background-color: rgba(255,255,255,0.1); }
+    </style>
+</head>
+<body id="b">
+    <script>if(localStorage.getItem('t')==='d') document.getElementById('b').classList.add('dark-mode');</script>
+    <div class="header">
+        <div class="brand"><span class="material-symbols-outlined" style="color:var(--primary)">school</span>Gemini <span>DE</span></div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <button class="btn-text" onclick="toggleT()"><span class="material-symbols-outlined" id="t-icon">dark_mode</span></button>
+            {% if current_user.is_authenticated %}
+            <div style="position: relative;">
+                <button class="btn-text settings-trigger" onclick="toggleMenu()">
+                    <span class="material-symbols-outlined">settings</span>
+                </button>
+                <div id="settings-menu" style="display: none; position: absolute; right: 0; top: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); min-width: 160px; z-index: 1000; margin-top: 4px; overflow: hidden;">
+                    <a href="/logout" class="dropdown-item">
+                        <span class="material-symbols-outlined" style="font-size: 20px;">logout</span> Вихід
+                    </a>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    <div class="container">
+        {% block content %}{% endblock %}
+    </div>
+    {% if current_user.is_authenticated %}
+    <div class="nav-mobile">
+        <a href="/" id="nav-home"><span class="material-symbols-outlined">home</span>ГОЛОВНА</a>
+        <a href="/library" id="nav-lib"><span class="material-symbols-outlined">menu_book</span>БІБЛІОТЕКА</a>
+        <a href="/vocab" id="nav-voc"><span class="material-symbols-outlined">style</span>СЛОВНИК</a>
+    </div>
+    {% endif %}
+    <script>
+        function toggleT() {
+            document.getElementById('b').classList.toggle('dark-mode');
+            localStorage.setItem('t', document.getElementById('b').classList.contains('dark-mode')?'d':'l');
+            updateIcon();
+        }
+        function updateIcon() {
+            const isDark = document.getElementById('b').classList.contains('dark-mode');
+            document.getElementById('t-icon').textContent = isDark ? 'light_mode' : 'dark_mode';
+        }
+        function toggleMenu() {
+            const menu = document.getElementById('settings-menu');
+            if(menu) menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+        }
+        document.addEventListener('click', function(e) {
+            const menu = document.getElementById('settings-menu');
+            const btn = e.target.closest('.settings-trigger');
+            if (menu && menu.style.display === 'block' && !btn) {
+                menu.style.display = 'none';
+            }
+        });
+        updateIcon();
+        const path = window.location.pathname;
+        if(path === '/') document.getElementById('nav-home')?.classList.add('active');
+        if(path === '/library') document.getElementById('nav-lib')?.classList.add('active');
+        if(path === '/vocab') document.getElementById('nav-voc')?.classList.add('active');
+    </script>
+</body>
+</html>
