@@ -80,6 +80,12 @@ UI_STRINGS = {
         'undo': 'ВІДМІНИТИ',
         'settings_saved': 'Налаштування збережено',
         'error_generic': 'Сталася помилка',
+        'style_label': 'Стиль тексту',
+        'style_neutral': 'Нейтральний',
+        'style_formal': 'Офіційний',
+        'style_conversational': 'Розмовний',
+        'style_dialogue_informal': 'Неформальний діалог',
+        'style_dialogue_formal': 'Офіційний діалог',
     },
     'eng': {
         'settings': 'Settings',
@@ -134,6 +140,12 @@ UI_STRINGS = {
         'undo': 'UNDO',
         'settings_saved': 'Settings saved',
         'error_generic': 'An error occurred',
+        'style_label': 'Text Style',
+        'style_neutral': 'Neutral',
+        'style_formal': 'Formal',
+        'style_conversational': 'Conversational',
+        'style_dialogue_informal': 'Informal Dialogue',
+        'style_dialogue_formal': 'Formal Dialogue',
     }
 }
 
@@ -246,7 +258,9 @@ def settings():
 @login_required
 def generate():
     req = request.json
-    data = services.generate_german_text(req['topic'], req['count'], req['level'])
+    # Передаємо новий параметр style
+    data = services.generate_german_text(req['topic'], req['count'], req['level'], req.get('style', 'neutral'))
+    
     title_json = json.dumps({'de': data.get('title_de', req['topic']), 'ukr': data['title_ua'], 'eng': data['title_en']})
     tid = str(uuid.uuid4())
     with get_db() as conn:

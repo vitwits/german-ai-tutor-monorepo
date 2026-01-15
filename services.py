@@ -28,21 +28,37 @@ def clean_json_response(text):
     match = re.search(r'\{.*\}', text, re.DOTALL)
     return match.group(0) if match else text
 
-def generate_german_text(topic, count, level):
+def generate_german_text(topic, count, level, style='neutral'):
     # Отримуємо специфічні правила для обраного рівня або дефолтні для B1
     level_rules = CEFR_GUIDELINES.get(level, CEFR_GUIDELINES["B1"])
     
+    # Визначаємо інструкцію для стилю
+    style_instruction = ""
+    if style == 'formal':
+        style_instruction = "Tone: Formal, academic, or professional. Use complex sentence structures suitable for the level."
+    elif style == 'conversational':
+        style_instruction = "Tone: Natural, conversational, storytelling style. Use idioms if appropriate for the level."
+    elif style == 'dialogue_informal':
+        style_instruction = "Format: A dialogue between two people. Tone: Informal/Casual (use 'Du'). Short, natural replies."
+    elif style == 'dialogue_formal':
+        style_instruction = "Format: A dialogue between two people. Tone: Polite/Formal (use 'Sie'). Structured and courteous."
+    else: # neutral
+        style_instruction = "Tone: Neutral, descriptive, standard article style."
+
     prompt = f"""You are an expert German linguist and teacher. 
     Generate a high-quality, coherent German text about "{topic}".
     
     TARGET LEVEL: {level} (Strictly adhere to CEFR standards).
     LENGTH: Exactly {count} sentences.
     
+    STYLE/TONE INSTRUCTIONS:
+    {style_instruction}
+    
     LINGUISTIC REQUIREMENTS FOR {level}:
     {level_rules}
     
     INSTRUCTIONS:
-    1. The text must make sense as a story or logical explanation, not just random sentences.
+    1. The text must make sense as a story or logical explanation (or dialogue if specified), not just random sentences.
     2. Translate each sentence into Ukrainian (ua) and English (en).
     3. "de" field must contain ONLY natural German text. 
        - NO brackets with translations.
