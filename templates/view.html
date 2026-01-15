@@ -216,6 +216,11 @@ window.onload = function() {
             }
         }
     }
+
+    if (sessionStorage.getItem('wordAdded')) {
+    window.toast.show('{{ ui.word_added }}', 'success');
+    sessionStorage.removeItem('wordAdded');
+}
 };
 
 // 4. СКРОЛ ЗІ СЛОВНИКА (локальний)
@@ -283,18 +288,31 @@ document.addEventListener('mouseup', (e) => {
         pop.onclick = async () => {
             pop.innerHTML = '...';
             
-            // Відправляємо: текст, весь контекст речення, ID тексту, номер речення
-            await fetch('/api/quick_translate', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    text: selText, 
-                    ctx: textSpan.innerText, 
-                    tid: '{{text.id}}',
-                    sent_idx: sentIdx
-                })
-            });
-            location.reload();
+            try {
+                const res = await fetch('/api/quick_translate', {
+                    // ... ті самі параметри ...
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        text: selText, 
+                        ctx: textSpan.innerText, 
+                        tid: '{{text.id}}',
+                        sent_idx: sentIdx
+                    })
+                });
+                
+                if (res.ok) {
+                    // Ставимо прапорець для тостера після перезавантаження
+                    sessionStorage.setItem('wordAdded', 'true');
+                    location.reload();
+                } else {
+                    window.toast.show('{{ ui.error_generic }}', 'error');
+                    pop.innerHTML = '{{ ui.add_translation }}';
+                }
+            } catch (e) {
+                window.toast.show('{{ ui.error_generic }}', 'error');
+                pop.innerHTML = '{{ ui.add_translation }}';
+            }
         };
     } else { 
         pop.style.display = 'none'; 
@@ -323,9 +341,13 @@ function handleRowClick(e, id) {
 }
 
 async function rmWord(id) {
-    if(!confirm('{{ ui.confirm_remove_word_from_text }}')) return;
-    await fetch('/api/remove_word', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id: id, from_vocab: false})});
-    location.reload();
+    // Без підтвердження, без Undo (робочий процес)
+    try {
+        await fetch('/api/remove_word', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id: id, from_vocab: false})});
+        location.reload();
+    } catch (e) {
+        window.toast.show('{{ ui.error_generic }}', 'error');
+    }
 }
 
 // 7. ПОЯСНЕННЯ ГРАМАТИКИ

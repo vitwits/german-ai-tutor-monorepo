@@ -70,6 +70,16 @@ UI_STRINGS = {
         'confirm_delete_text_msg': 'Ви впевнені, що хочете видалити цей текст?',
         'btn_delete': 'Видалити',
         'btn_cancel': 'Скасувати',
+        'confirm_title': 'Підтвердження',
+        'confirm_delete_text_msg': 'Видалити цей текст? Весь прогрес по ньому буде втрачено.',
+        'btn_delete': 'Видалити',
+        'btn_cancel': 'Скасувати',
+        'text_deleted': 'Текст видалено',
+        'word_deleted': 'Слово видалено',
+        'word_added': 'Слово додано',
+        'undo': 'ВІДМІНИТИ',
+        'settings_saved': 'Налаштування збережено',
+        'error_generic': 'Сталася помилка',
     },
     'eng': {
         'settings': 'Settings',
@@ -114,6 +124,16 @@ UI_STRINGS = {
         'confirm_delete_text_msg': 'Are you sure you want to delete this text?',
         'btn_delete': 'Delete',
         'btn_cancel': 'Cancel',
+        'confirm_title': 'Confirm',
+        'confirm_delete_text_msg': 'Delete this text? All progress will be lost.',
+        'btn_delete': 'Delete',
+        'btn_cancel': 'Cancel',
+        'text_deleted': 'Text deleted',
+        'word_deleted': 'Word deleted',
+        'word_added': 'Word added',
+        'undo': 'UNDO',
+        'settings_saved': 'Settings saved',
+        'error_generic': 'An error occurred',
     }
 }
 

@@ -297,15 +297,50 @@ async function playAudio(text) {
 }
 
 async function rmWord(id) {
-    if(!confirm('{{ ui.confirm_remove_from_fav }}')) return;
+    // ТУТ НЕМАЄ sysConfirm. Відразу дія.
+
+    // 1. Знаходимо елемент (у Grid або List)
+    // Використовуємо селектор по onclick атрибуту, це надійно
+    let btn = document.querySelector(`button[onclick="rmWord('${id}')"]`);
+    // Якщо кнопки дві (grid footer + main), беремо першу видиму або будь-яку
+    if (!btn) return;
     
-    // ВАЖЛИВО: from_vocab: true
-    await fetch('/api/remove_word', {
-        method: 'POST', 
-        headers: {'Content-Type': 'application/json'}, 
-        body: JSON.stringify({id: id, from_vocab: true})
-    });
-    location.reload();
+    const card = btn.closest('.vocab-item');
+    
+    // 2. Оптимістичне приховування
+    // Зберігаємо оригінальний display (хоча зазвичай це block)
+    const originalDisplay = card.style.display; 
+    card.style.display = 'none';
+
+    let isUndone = false;
+
+    // 3. Тостер з Undo
+    window.toast.show('{{ ui.word_deleted }}', 'success', () => {
+        // --- UNDO ---
+        isUndone = true;
+        card.style.display = ''; // Скидаємо style="none", повертається CSS клас
+    }, 5000);
+
+    // 4. Реальне видалення через 5 сек
+    setTimeout(async () => {
+        if (isUndone) return;
+
+        try {
+            const res = await fetch('/api/remove_word', {
+                method: 'POST', 
+                headers: {'Content-Type': 'application/json'}, 
+                body: JSON.stringify({id: id, from_vocab: true})
+            });
+            if (!res.ok) throw new Error();
+            
+            card.remove();
+            
+            // Перезавантажити якщо сторінка пуста (опціонально)
+        } catch (e) {
+            card.style.display = '';
+            window.toast.show('{{ ui.error_generic }}', 'error');
+        }
+    }, 5000);
 }
 
 async function editWord(id, btn) {

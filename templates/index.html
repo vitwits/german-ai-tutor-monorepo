@@ -130,7 +130,8 @@ async function generate() {
     const text = document.getElementById('btn-text');
     
     if (!topic.trim()) {
-        alert('{{ ui.error_topic_empty if ui.error_topic_empty else "Please enter a topic" }}');
+        // [ЗМІНА] Використовуємо тостер замість alert
+        window.toast.show('{{ ui.error_topic_empty if ui.error_topic_empty else "Please enter a topic" }}', 'error');
         return;
     }
 
@@ -152,7 +153,9 @@ async function generate() {
         const data = await res.json();
         location.href = '/view/' + data.id;
     } catch (e) { 
-        alert('{{ ui.error_alert }}'); 
+        // [ЗМІНА] Використовуємо тостер замість alert
+        window.toast.show('{{ ui.error_alert }}', 'error'); 
+        
         btn.disabled = false; 
         icon.innerHTML = 'auto_awesome';
         icon.classList.remove('rotating');

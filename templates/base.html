@@ -261,5 +261,183 @@
         };
     </script>
 
+    <div id="toast-container"></div>
+
+    <style>
+        /* Контейнер для тостерів */
+        #toast-container {
+            position: fixed;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            /* Десктоп: зверху справа */
+            top: 24px; 
+            right: 24px;
+        }
+
+        /* Мобільна адаптація */
+        @media (max-width: 600px) {
+            #toast-container {
+                top: auto; 
+                bottom: 70px; /* Над нижнім меню (яке ~60px) */
+                left: 16px; 
+                right: 16px;
+                align-items: center;
+            }
+        }
+
+        /* Картка тостера */
+        .toast {
+            background: var(--surface);
+            color: var(--on-surface);
+            border: 1px solid var(--border);
+            padding: 12px 16px;
+            border-radius: var(--radius);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            min-width: 280px;
+            max-width: 100%;
+            animation: toastSlideIn 0.3s ease-out forwards;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Типи тостерів (кольорова смужка зліва) */
+        .toast.success { border-left: 4px solid var(--primary); }
+        .toast.error { border-left: 4px solid #d32f2f; }
+        .toast.info { border-left: 4px solid var(--secondary); }
+
+        .toast-message {
+            flex: 1;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        /* Кнопка Undo */
+        .toast-undo-btn {
+            background: none;
+            border: none;
+            color: var(--primary); /* Колір як у системі */
+            font-weight: 700;
+            font-size: 0.8rem;
+            cursor: pointer;
+            text-transform: uppercase;
+            padding: 4px 8px;
+            letter-spacing: 0.5px;
+        }
+        .toast-undo-btn:hover { background: rgba(0,0,0,0.05); border-radius: 4px; }
+
+        /* --- ТАЙМЕР-БУБЛИК (SVG) --- */
+        .toast-timer {
+            position: relative;
+            width: 24px; height: 24px;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+        }
+        .toast-timer svg {
+            transform: rotate(-90deg); /* Початок зверху */
+            width: 24px; height: 24px;
+        }
+        .toast-timer circle {
+            fill: none;
+            stroke: var(--primary); /* Колір таймера */
+            stroke-width: 3;
+            stroke-dasharray: 56.5; /* 2 * PI * 9 */
+            stroke-dashoffset: 0;
+            stroke-linecap: round;
+        }
+        
+        /* Анімації */
+        @keyframes toastSlideIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes toastFadeOut {
+            to { opacity: 0; transform: scale(0.95); }
+        }
+        @keyframes countdown {
+            from { stroke-dashoffset: 0; }
+            to { stroke-dashoffset: 56.5; }
+        }
+    </style>
+
+    <script>
+        class ToastService {
+            constructor() {
+                this.container = document.getElementById('toast-container');
+            }
+
+            /**
+             * @param {string} message - Текст
+             * @param {string} type - 'success', 'error', 'info'
+             * @param {function} onUndo - Функція відміни. Якщо передана, з'явиться таймер.
+             * @param {number} duration - Час показу (мс). Для Undo це час таймера.
+             */
+            show(message, type = 'success', onUndo = null, duration = 5000) {
+                const toast = document.createElement('div');
+                toast.className = `toast ${type}`;
+                
+                // Якщо є Undo, малюємо SVG таймер
+                let timerHtml = '';
+                if (onUndo) {
+                    timerHtml = `
+                        <div class="toast-timer">
+                            <svg><circle r="9" cx="12" cy="12"></circle></svg>
+                        </div>`;
+                }
+
+                const undoText = '{{ ui.undo }}'; // Змінна з Jinja
+                
+                toast.innerHTML = `
+                    ${timerHtml}
+                    <div class="toast-message">${message}</div>
+                    ${onUndo ? `<button class="toast-undo-btn">${undoText}</button>` : ''}
+                `;
+
+                this.container.appendChild(toast);
+
+                let timerId = null;
+
+                // Логіка Undo
+                if (onUndo) {
+                    // Запуск анімації SVG
+                    const circle = toast.querySelector('circle');
+                    circle.style.animation = `countdown ${duration}ms linear forwards`;
+
+                    // Обробник кліку "Відмінити"
+                    const btn = toast.querySelector('.toast-undo-btn');
+                    btn.onclick = () => {
+                        if (timerId) clearTimeout(timerId); // Скасовуємо авто-закриття
+                        onUndo(); // Викликаємо колбек відновлення
+                        this.remove(toast);
+                    };
+
+                    // Авто-закриття через duration
+                    timerId = setTimeout(() => {
+                        // Якщо час вийшов і не відмінили - просто прибираємо тостер
+                        // (Сама дія видалення вже запланована в викликаючому коді)
+                        this.remove(toast);
+                    }, duration);
+
+                } else {
+                    // Звичайний тостер без Undo
+                    setTimeout(() => this.remove(toast), duration);
+                }
+            }
+
+            remove(toast) {
+                toast.style.animation = 'toastFadeOut 0.2s forwards';
+                toast.addEventListener('animationend', () => {
+                    if (toast.parentNode) toast.remove();
+                });
+            }
+        }
+
+        window.toast = new ToastService();
+    </script>
+
 </body>
 </html>

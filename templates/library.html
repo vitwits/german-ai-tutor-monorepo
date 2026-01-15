@@ -89,34 +89,75 @@
 
 <script>
 async function deleteText(id) {
-    // Викликаємо наш новий красивий попап
-    // Передаємо параметри з серверних змінних (через Jinja)
+    // 1. Питаємо підтвердження (Системний попап)
     const confirmed = await sysConfirm(
-        '{{ ui.confirm_title }}',           // Заголовок
-        '{{ ui.confirm_delete_text_msg }}', // Повідомлення
-        '{{ ui.btn_delete }}',              // Кнопка ОК
-        '{{ ui.btn_cancel }}',              // Кнопка Скасувати
-        true                                // isDanger = true (червона кнопка)
+        '{{ ui.confirm_title }}',
+        '{{ ui.confirm_delete_text_msg }}',
+        '{{ ui.btn_delete }}',
+        '{{ ui.btn_cancel }}',
+        true // isDanger
     );
 
     if (!confirmed) return;
 
-    try {
-        const res = await fetch('/api/delete_text', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({id})
-        });
+    // 2. Знаходимо картку і ховаємо її (Оптимістичне видалення)
+    // Шукаємо кнопку, по якій клікнули, і її батьківську картку
+    // Оскільки ми викликаємо функцію з onclick, нам треба знайти елемент.
+    // Найпростіший спосіб - додати ID або знайти в DOM. 
+    // Але тут ми просто переберемо, або припустимо що кнопка передає this (краще оновити виклик в HTML).
+    
+    // Щоб не міняти HTML виклик скрізь, знайдемо картку хитро:
+    // В library.html у нас є цикл. Давай знайдемо картку, яка містить кнопку з onclick="deleteText('id')"
+    const btn = document.querySelector(`button[onclick="deleteText('${id}')"]`);
+    const card = btn.closest('.card');
+    
+    // Ховаємо
+    card.style.display = 'none';
+
+    // 3. Плануємо реальне видалення через 5 секунд
+    // Створюємо Promise, який ми можемо скасувати
+    let isUndone = false;
+    
+    // Показуємо тостер
+    window.toast.show('{{ ui.text_deleted }}', 'success', () => {
+        // --- ЦЕ КОД ВІДМІНИ (UNDO) ---
+        isUndone = true;
+        card.style.display = 'flex'; // (або block/grid залежно від view_mode, але flex універсально спрацює для list)
+        if(card.closest('.grid')) card.style.display = 'flex'; // Для grid view
         
-        if (res.ok) {
-            location.reload();
-        } else {
-            alert('{{ ui.error_alert }}');
+        // Повертаємо display відповідно до режиму
+        const viewMode = '{{ view_mode }}';
+        card.style.display = viewMode === 'list' ? 'flex' : 'flex'; // Card сама по собі flex
+        
+    }, 5000);
+
+    // Чекаємо 5 секунд
+    setTimeout(async () => {
+        if (isUndone) return; // Якщо натиснули Undo, нічого не робимо
+
+        // Якщо не відмінили - відправляємо запит
+        try {
+            const res = await fetch('/api/delete_text', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({id})
+            });
+            if (!res.ok) throw new Error();
+            
+            // Видаляємо з DOM остаточно
+            card.remove();
+            
+            // Перевірка, чи не стала сторінка порожньою -> reload
+            if (document.querySelectorAll('.texts-container .card').length === 0) {
+                location.reload();
+            }
+
+        } catch (e) {
+            // Якщо помилка API - повертаємо все назад
+            card.style.display = 'flex'; 
+            window.toast.show('{{ ui.error_generic }}', 'error');
         }
-    } catch (e) {
-        console.error(e);
-        alert('{{ ui.error_alert }}');
-    }
+    }, 5000);
 }
 </script>
 {% endblock %}
