@@ -54,13 +54,10 @@
 {% for t in texts %}
 <div class="card" style="{% if view_mode == 'list' %}display: flex; justify-content: space-between; align-items: center;{% endif %}">
     <div>
+        <span style="background:var(--primary); color:var(--on-primary); padding:4px 10px; border-radius:12px; font-size:0.75rem; font-weight:500;">{{ t.level }}</span>
+    </div>
+    <div>
         <div style="font-weight: 500; font-size: 1.1rem;">{{ t.display_title }}</div>
-        {% if t.trans_title %}
-        <div style="font-size: 0.9rem; opacity: 0.7; margin-bottom: 4px;">{{ t.trans_title }}</div>
-        {% endif %}
-        <div style="margin-top: 8px;">
-            <span style="background:var(--primary); color:var(--on-primary); padding:4px 10px; border-radius:12px; font-size:0.75rem; font-weight:500;">{{ t.level }}</span>
-        </div>
     </div>
     <div class="card-actions" style="display: flex; gap: 10px;">
         <a href="/view/{{t.id}}"><button class="btn-contained">{{ ui.read }}</button></a>

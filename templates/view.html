@@ -58,9 +58,9 @@
     </div>
     
     {% for s in sentences %}
-    <div class="de-line" id="sent-{{ loop.index0 }}" data-index="{{ loop.index0 }}" data-text="{{ s.de }}" style="padding:8px 0; border-bottom:1px solid var(--border);">
-        <div style="display:flex; justify-content: space-between; align-items: flex-start;">
-            <div style="display:flex; align-items:baseline; gap:12px; flex: 1;">
+    <div class="de-line" id="sent-{{ loop.index0 }}" data-index="{{ loop.index0 }}" data-text="{{ s.de }}" style="padding:8px 0; {% if not loop.last %}border-bottom:1px solid var(--border);{% endif %}">
+        <div style="display:flex; justify-content: space-between; align-items: center;">
+            <div style="display:flex; align-items:center; gap:12px; flex: 1;">
                 <button class="btn-text" onclick="playAudio({{ s.de | tojson | forceescape }})" style="height:32px; width:32px; padding:0; min-width:32px;">
                     <span class="material-symbols-outlined" style="font-size:20px; color:var(--primary)">volume_up</span>
                 </button>
@@ -70,7 +70,7 @@
                 <span class="material-symbols-outlined">quiz</span>
             </button>
         </div>
-        <div class="trans-row" style="color:gray; padding-left:44px; font-size:0.9rem; display:none; margin-top:4px;">{{ s.trans }}</div>
+        <div class="trans-row" style="color:var(--primary); padding-left:44px; font-size:1rem; display:none; margin-top:4px;">{{ s.trans }}</div>
         <div class="grammar-box" style="margin-left: 44px;"></div>
     </div>
     {% endfor %}
