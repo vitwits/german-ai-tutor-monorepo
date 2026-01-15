@@ -10,16 +10,15 @@
 
     /* --- LIST VIEW STYLES --- */
     .vocab-wrapper.list {
-        background: var(--surface);
-        border-radius: var(--radius);
-        box-shadow: var(--shadow);
-        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
     }
     .vocab-wrapper.list .vocab-item {
-        border-bottom: 1px solid var(--border);
-    }
-    .vocab-wrapper.list .vocab-item:last-child {
-        border-bottom: none;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
     }
 
     /* --- GRID VIEW STYLES --- */
@@ -204,11 +203,11 @@
                     <span class="material-symbols-outlined" style="font-size:18px;">volume_up</span>
                 </button>
                 <div>
-                    <span class="word-text" style="font-weight: 500; color: var(--primary); font-size: 1.1rem; cursor: pointer; text-decoration: underline; text-decoration-style: dotted;" 
+                    <span class="word-text" style="font-weight: 500; color: var(--primary); font-size: 1.1rem; cursor: pointer; text-decoration: none; text-decoration-style: none;" 
                           onclick="toggleCtx('{{w.id}}')">
                         {{ w.display }}
                     </span>
-                    <div style="font-size: 0.9rem; opacity: 0.8; margin-top: 6px;" id="trans-{{w.id}}">{{ w.display_trans }}</div>
+                    <div style="font-size: 0.9rem; opacity: 0.8; margin-top: 8px;" id="trans-{{w.id}}">{{ w.display_trans }}</div>
                 </div>
             </div>
             <div class="list-tools" style="display: flex; gap: 8px;">

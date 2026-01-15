@@ -16,7 +16,7 @@
             --bg: #F5F5F5; --surface: #FFFFFF; --on-surface: #212121;
             --primary: #1976D2; --on-primary: #FFFFFF;
             --secondary: #FFC107; --border: #E0E0E0;
-            --shadow: 0 2px 4px rgba(0,0,0,0.1); --radius: 4px;
+            --shadow: 0 2px 4px rgba(0,0,0,0.1); --radius: 10px;
         }
         body.dark-mode {
             --bg: #121212; --surface: #1E1E1E; --on-surface: #E0E0E0;
@@ -27,7 +27,7 @@
         .header { display: flex; justify-content: space-between; align-items: center; background: var(--surface); padding: 16px 24px; box-shadow: var(--shadow); margin-bottom: 24px; }
         .brand { font-size: 1.5rem; font-weight: 500; display: flex; align-items: center; gap: 8px; text-transform: uppercase; }
         .brand span { color: var(--primary); font-weight: 700; }
-        .card { background: var(--surface); padding: 24px; border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 20px; }
+        .card { background: var(--surface); padding: 20px; border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 20px; }
         
         button, a.btn-contained, a.btn-text { border-radius: var(--radius); font-family: 'Roboto', sans-serif; font-size: 0.875rem; font-weight: 500; text-transform: uppercase; cursor: pointer; border: none; padding: 0 16px; height: 36px; display: inline-flex; align-items: center; gap: 8px; text-decoration: none; }
         .btn-contained { background: var(--primary); color: var(--on-primary); }
