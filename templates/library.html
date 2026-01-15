@@ -89,13 +89,34 @@
 
 <script>
 async function deleteText(id) {
-    if(!confirm('Видалити?')) return;
-    await fetch('/api/delete_text', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({id})
-    });
-    location.reload();
+    // Викликаємо наш новий красивий попап
+    // Передаємо параметри з серверних змінних (через Jinja)
+    const confirmed = await sysConfirm(
+        '{{ ui.confirm_title }}',           // Заголовок
+        '{{ ui.confirm_delete_text_msg }}', // Повідомлення
+        '{{ ui.btn_delete }}',              // Кнопка ОК
+        '{{ ui.btn_cancel }}',              // Кнопка Скасувати
+        true                                // isDanger = true (червона кнопка)
+    );
+
+    if (!confirmed) return;
+
+    try {
+        const res = await fetch('/api/delete_text', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({id})
+        });
+        
+        if (res.ok) {
+            location.reload();
+        } else {
+            alert('{{ ui.error_alert }}');
+        }
+    } catch (e) {
+        console.error(e);
+        alert('{{ ui.error_alert }}');
+    }
 }
 </script>
 {% endblock %}

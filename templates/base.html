@@ -129,5 +129,137 @@
         if(path === '/library') document.getElementById('nav-lib')?.classList.add('active');
         if(path === '/vocab') document.getElementById('nav-voc')?.classList.add('active');
     </script>
+
+    <!-- Confirmation dialogie -->
+<div id="sys-confirm-overlay" class="modal-overlay">
+        <div class="box-area">
+            <h3 class="text-heading5" id="sys-confirm-title">Confirm</h3>
+            <div class="sub-text" id="sys-confirm-body">Message goes here...</div>
+            <div class="action-buttons">
+                <button type="button" id="sys-confirm-cancel" class="btn-text" style="height: 36px;">
+                    <span>Cancel</span>
+                </button>
+                <button type="button" id="sys-confirm-ok" class="btn-contained btn-danger" style="height: 36px;">
+                    <span>Delete</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        /* Стилі самого оверлею (фону) */
+        .modal-overlay {
+            display: none; /* Приховано за замовчуванням */
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(3px);
+            animation: fadeIn 0.1s ease-out;
+        }
+
+        /* Стилі вікна (Твій дизайн + наші змінні) */
+        .box-area {
+            background: var(--surface);
+            padding: 30px;
+            border-radius: var(--radius);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            width: 90%;       /* Адаптив: 90% ширини на мобільному */
+            max-width: 400px; /* Макс 400px на ПК */
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            border: 1px solid var(--border);
+            animation: popIn 0.1s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+
+        .text-heading5 {
+            margin: 0;
+            font-size: 1.25rem;
+            font-weight: 500;
+            color: var(--on-surface);
+        }
+
+        .sub-text {
+            font-size: 0.95rem;
+            color: var(--on-surface);
+            opacity: 0.7;
+            line-height: 1.5;
+        }
+
+        .action-buttons {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            margin-top: 10px;
+        }
+
+        /* Стиль для червоної кнопки (Delete) */
+        .btn-contained.btn-danger {
+            background-color: #d32f2f;
+            color: white;
+        }
+        .btn-contained.btn-danger:hover {
+            background-color: #b71c1c;
+        }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes popIn { 
+            from { opacity: 0; transform: scale(0.9); } 
+            to { opacity: 1; transform: scale(1); } 
+        }
+    </style>
+
+    <script>
+        /**
+         * Нова функція системного підтвердження
+         */
+        window.sysConfirm = function(title, message, okText = 'OK', cancelText = 'Cancel', isDanger = false) {
+            return new Promise((resolve) => {
+                const overlay = document.getElementById('sys-confirm-overlay');
+                const titleEl = document.getElementById('sys-confirm-title');
+                const bodyEl = document.getElementById('sys-confirm-body');
+                const okBtn = document.getElementById('sys-confirm-ok');
+                const cancelBtn = document.getElementById('sys-confirm-cancel');
+
+                // Заповнюємо тексти
+                titleEl.innerText = title;
+                bodyEl.innerText = message || '';
+                
+                // Оновлюємо текст всередині span
+                okBtn.querySelector('span').innerText = okText;
+                cancelBtn.querySelector('span').innerText = cancelText;
+
+                // Керування червоним кольором
+                if (isDanger) {
+                    okBtn.classList.add('btn-danger');
+                    okBtn.style.backgroundColor = ''; // скидаємо інлайн стилі, якщо були
+                } else {
+                    okBtn.classList.remove('btn-danger');
+                    okBtn.style.backgroundColor = 'var(--primary)';
+                }
+
+                // Клонуємо кнопки (щоб стерти старі onclick події)
+                const newOk = okBtn.cloneNode(true);
+                const newCancel = cancelBtn.cloneNode(true);
+                okBtn.parentNode.replaceChild(newOk, okBtn);
+                cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
+
+                const close = (result) => {
+                    overlay.style.display = 'none';
+                    resolve(result);
+                };
+
+                newOk.onclick = () => close(true);
+                newCancel.onclick = () => close(false);
+                overlay.onclick = (e) => { if(e.target === overlay) close(false); }; // Закриття по кліку на фон
+                
+                overlay.style.display = 'flex';
+            });
+        };
+    </script>
+
 </body>
 </html>

@@ -66,6 +66,10 @@ UI_STRINGS = {
         'read': 'Читати',
         'main': 'Головна',
         'edit_translation': 'Редагувати переклад',
+        'confirm_title': 'Підтвердження',
+        'confirm_delete_text_msg': 'Ви впевнені, що хочете видалити цей текст?',
+        'btn_delete': 'Видалити',
+        'btn_cancel': 'Скасувати',
     },
     'eng': {
         'settings': 'Settings',
@@ -106,6 +110,10 @@ UI_STRINGS = {
         'read': 'Read',
         'main': 'Home',
         'edit_translation': 'Edit translation',
+        'confirm_title': 'Confirmation',
+        'confirm_delete_text_msg': 'Are you sure you want to delete this text?',
+        'btn_delete': 'Delete',
+        'btn_cancel': 'Cancel',
     }
 }
 
