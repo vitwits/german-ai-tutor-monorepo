@@ -86,4 +86,10 @@ def init_db():
         except sqlite3.OperationalError:
             pass # Колонка вже існує
 
+        # 4. Міграція для рівня слів
+        try:
+            conn.execute('ALTER TABLE vocabulary ADD COLUMN level TEXT')
+        except sqlite3.OperationalError:
+            pass
+
         conn.commit()

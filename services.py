@@ -74,21 +74,34 @@ def generate_german_text(topic, count, level):
 
 def translate_word(text, ctx):
     prompt = f"""Translate the German word or phrase: "{text}". Context: "{ctx}".
-    STRICT VOCAB FORMAT RULES:
-    - For Nouns: das Haus (die Häuser)
-    - For Verbs: abhören (hört ab, hörte ab, abgehört)
-    - For Adjectives: schön (schöner, am schönsten)
-    
-    Provide:
-    1. 'display': The word with grammar forms (plural, conjugation) as shown above.
-    2. 'ua': 1-2 main meanings in Ukrainian.
-    3. 'en': 1-2 main meanings in English.
-    
-    Return ONLY JSON:
+
+    STRICT GRAMMAR RULES (NO EXCEPTIONS):
+    1. PHRASES (2+ words):
+       - If the input is a phrase (e.g., "kontinuierliche Innovationen", "ferne Sternensysteme"):
+       - Convert to Nominative Singular: "die kontinuierliche Innovation".
+       - NEVER use brackets "()" or dashes "(-)" for phrases. 
+       - If there is more than one word, the result MUST be clean text only.
+       - NO "die kontinuierliche Innovation (die kontinuierlichen Innovationen)" - ONLY "die kontinuierliche Innovation".
+
+    2. SINGLE WORDS (Exactly 1 word):
+       - Only if the input is a single word, provide forms in brackets.
+       - Nouns: "das Haus (die Häuser)".
+       - Pluraletantum: "Leute (Pl.)".
+       - Singularetantum: "das Obst (-)".
+
+    3. VERBS & ADJECTIVES (1 word):
+       - Verbs: Infinitive only.
+       - Adjectives: Base form (e.g., "stark").
+
+    4. TRANSLATIONS:
+       - 1-2 main meanings. Clean text only.
+
+    Provide JSON:
     {{
-      "display": "das Wort (Formen)",
-      "ua": "переклад",
-      "en": "translation"
+      "display": "Correct German form (No brackets for 2+ words)",
+      "ua": "Meanings in Ukrainian",
+      "en": "Meanings in English",
+      "level": "A1-C2"
     }}"""
     
     response = client.models.generate_content(

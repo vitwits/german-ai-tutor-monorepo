@@ -130,6 +130,22 @@
     .vocab-wrapper.list .vocab-face { display: block; position: static; border: none; box-shadow: none; background: transparent; }
     .vocab-wrapper.list .vocab-front { display: block; }
     .vocab-wrapper.list .vocab-back { display: none !important; }
+
+    /* Level Badge */
+    .vocab-level-badge {
+        position: absolute;
+        top: 12px;
+        left: 12px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--primary);
+        background: rgba(25, 118, 210, 0.08);
+        padding: 2px 8px;
+        border-radius: 4px;
+        display: none; /* Hidden in list view */
+        z-index: 10;
+    }
+    .vocab-wrapper.grid .vocab-level-badge { display: block; }
 </style>
 
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
@@ -153,6 +169,9 @@
         <div class="vocab-card-inner">
         <!-- FRONT -->
         <div class="vocab-face vocab-front">
+        {% if w.level %}
+        <div class="vocab-level-badge">{{ w.level }}</div>
+        {% endif %}
         <div class="item-content">
         <div class="vocab-main-row" style="display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; width: 100%; box-sizing: border-box;">
             <div class="vocab-word-group" style="flex:1; display: flex; align-items: center; gap: 12px;">

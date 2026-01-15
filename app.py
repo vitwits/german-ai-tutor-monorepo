@@ -329,16 +329,13 @@ def library():
             # Вибираємо заголовок відповідно до мови інтерфейсу
             # Пріоритет: Мова юзера -> Українська -> Оригінал
             lang_key = current_user.interface_language
-            # Якщо мова інтерфейсу англійська, шукаємо 'eng', якщо укр - 'ukr'
-            # (У базі ми зберігали як 'ukr'/'eng' або 'ua'/'en' - треба перевірити консистентність)
-            # В generate_german_text ми пишемо keys: 'title_ua', 'title_en'
-            # А в базу кладемо: 'ukr': data['title_ua'], 'eng': data['title_en']
             
-            target_key = 'ukr' if lang_key == 'ukr' else 'eng'
-            r['display_title'] = titles.get(target_key, titles.get('ukr', r['title']))
+            r['display_title'] = titles.get('de', r['title'])
+            r['trans_title'] = titles.get(lang_key, '')
         except (json.JSONDecodeError, TypeError):
             # Fallback для старих текстів, де title - це просто рядок
             r['display_title'] = r['title']
+            r['trans_title'] = ""
         texts.append(r)
         
     return render_template('library.html', texts=texts, page=page, per_page=per_page, total_pages=total_pages, view_mode=view_mode)
@@ -469,11 +466,11 @@ def quick_translate():
     
     with get_db() as conn:
         conn.execute('''INSERT INTO vocabulary 
-                        (id, user_id, text_id, origin, display, ua, en, ctx, sentence_index, start_index, end_index) 
-                        VALUES (?,?,?,?,?,?,?,?,?,?,?)''',
+                        (id, user_id, text_id, origin, display, ua, en, ctx, sentence_index, start_index, end_index, level) 
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)''',
                      (wid, current_user.id, req.get('tid'), word, 
                       word_data['display'], word_data['ua'], word_data['en'], req['ctx'],
-                      sentence_index, start_index, end_index))
+                      sentence_index, start_index, end_index, word_data.get('level') or word_data.get('Level')))
         conn.commit()
     return jsonify({"ok": True})
 
