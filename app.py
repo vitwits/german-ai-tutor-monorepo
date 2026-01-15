@@ -641,6 +641,7 @@ def tts():
         from google.cloud import texttospeech
         s_input = texttospeech.SynthesisInput(text=text)
         voice = texttospeech.VoiceSelectionParams(language_code="de-DE", name="de-DE-Polyglot-1")
+        # voice = texttospeech.VoiceSelectionParams(language_code="de-DE", name="de-DE-Standard-F")
         audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
         response = tts_client.synthesize_speech(input=s_input, voice=voice, audio_config=audio_config)
         with open(filepath, "wb") as out:

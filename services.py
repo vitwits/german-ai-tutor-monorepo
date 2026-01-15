@@ -11,12 +11,12 @@ client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 # Визначаємо чіткі інструкції для кожного рівня
 CEFR_GUIDELINES = {
-    "A1": "Use strictly short sentences (5-8 words). Structure: Subject-Verb-Object. Present tense only. Basic vocabulary (family, food, daily life). No complex subordinate clauses.",
-    "A2": "Sentences 6-10 words. Use simple connectors (und, aber, oder). Use Perfekt for past tense. Topics: shopping, work, immediate environment.",
-    "B1": "Sentences 8-15 words. MUST use subordinate clauses (weil, wenn, dass). Use Präteritum for modals. Introduce simple abstract topics. Start using distinct connecting words.",
-    "B2": "Complex sentences (12-18+ words). MANDATORY use of: Passive voice, Konjunktiv II (speculation/politeness), relative clauses, and multi-part connectors (zwar... aber, nicht nur... sondern auch). Try to use at least one idiom useful for the context. Vocabulary must include abstract terms and specific synonyms. No simple repetition.",
-    "C1": "Sophisticated structure (15-20 words). Use nominalization, complex syntax, fixed idiomatic expressions, and nuances. Text must flow logically with high cohesion. Advanced vocabulary is required.",
-    "C2": "Mastery level. Long, nuanced sentences (18+ words). Use rhetorical devices, irony, and implicit meanings. Vocabulary must be highly specific, academic, or literary depending on context."
+    "A1": "Use natural but simple sentences (5-9 words). Avoid 3-word sentences. Structure: Subject-Verb-Complement/Object. Present tense. Use common nouns and basic adjectives (e.g., instead of 'Das Kino ist klein', use 'Das kleine Kino ist sehr modern').",
+    "A2": "Sentences 8-12 words. Avoid 6-word sentences. Use simple connectors (und, aber, oder). Use Perfekt for past tense. Topics: shopping, work, immediate environment.",
+    "B1": "Sentences 10-15 words. MUST use subordinate clauses (weil, wenn, dass). Use Präteritum for modals. Introduce simple abstract topics. Start using distinct connecting words.",
+    "B2": "Average length: 13-16 words. STRICT LIMIT: No sentence over 18 words and less than 13. Focus on syntactic variety: use Passive voice in one sentence, a Relative clause in another, and ONE multi-part connector (e.g., 'zwar... aber') in a third. DO NOT combine these in a single sentence. Include one idiom. Use abstract vocabulary, but keep the flow concise and teacher-like.",
+    "C1": "Sophisticated structure (14-18 words). No sentence over 19 words and less than 13. Use nominalization, complex syntax, fixed idiomatic expressions, and nuances. Text must flow logically with high cohesion. Advanced vocabulary is required.",
+    "C2": "Mastery level. Long, nuanced sentences (16-22 words). No sentence over 22 words and less than 15. Use rhetorical devices, irony, and implicit meanings. Vocabulary must be highly specific, academic, or literary depending on context."
 }
 
 def get_tts_client():
@@ -72,6 +72,9 @@ def generate_german_text(topic, count, level, style='neutral'):
     3. "de" field must contain ONLY natural German text. 
        - NO brackets with translations.
        - NO grammatical hints inside the text.
+    !ABSOLUTE MAXIMUM: No sentence should ever exceed 22 words, even for C2!
+    NO CLUTTER: Do not use multiple complex grammatical structures in a single sentence. Spread them across the text.
+    NATURAL FLOW: The text must sound like it was written by a human teacher, not a grammar-obsessed robot.
     
     Return ONLY JSON:
     {{
