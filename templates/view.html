@@ -52,7 +52,7 @@
     <div class="de-line" id="sent-{{ loop.index0 }}" data-index="{{ loop.index0 }}" data-text="{{ s.de }}" style="padding:8px 0; border-bottom:1px solid var(--border);">
         <div style="display:flex; justify-content: space-between; align-items: flex-start;">
             <div style="display:flex; align-items:baseline; gap:12px; flex: 1;">
-                <button class="btn-text" onclick="playAudio('{{s.de}}')" style="height:32px; width:32px; padding:0; min-width:32px;">
+                <button class="btn-text" onclick="playAudio({{ s.de | tojson | forceescape }})" style="height:32px; width:32px; padding:0; min-width:32px;">
                     <span class="material-symbols-outlined" style="font-size:20px; color:var(--primary)">volume_up</span>
                 </button>
                 <span class="de-text" style="font-size:1.1rem; font-weight:400; line-height:1.6;">{{ s.de_html | safe }}</span>
@@ -75,7 +75,7 @@
     {% for v in vocab %}
     <div class="vocab-item" onclick="handleRowClick(event, '{{v.id}}')" style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border:1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); cursor: pointer;">
         <div style="display:flex; align-items:center; gap:12px;">
-            <button class="btn-text" onclick="playAudio('{{v.display}}')" style="padding:0; min-width:unset; color:var(--primary); opacity:0.6;">
+            <button class="btn-text" onclick="playAudio({{ v.display | tojson | forceescape }})" style="padding:0; min-width:unset; color:var(--primary); opacity:0.6;">
                 <span class="material-symbols-outlined" style="font-size:18px;">volume_up</span>
             </button>
             <div>
