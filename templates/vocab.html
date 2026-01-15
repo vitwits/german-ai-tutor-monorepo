@@ -77,13 +77,38 @@
         flex-direction: column;
     }
 
+    /* Fix for interaction: disable pointer events on hidden faces */
+    .vocab-wrapper.grid .vocab-front { pointer-events: auto; }
+    .vocab-wrapper.grid .vocab-back { pointer-events: none; }
+    .vocab-wrapper.grid .vocab-item.flipped .vocab-front { pointer-events: none; }
+    .vocab-wrapper.grid .vocab-item.flipped .vocab-back { pointer-events: auto; }
+
     .vocab-wrapper.grid .vocab-back {
         transform: rotateY(180deg);
-        justify-content: center;
-        align-items: center;
-        padding: 20px;
+        padding: 16px 16px 8px 16px;
         box-sizing: border-box;
+        text-align: center;
+        display: flex;
+        flex-direction: column;
     }
+
+    .vocab-wrapper.grid .vocab-back-scroll {
+        flex: 1;
+        overflow-y: auto;
+        scrollbar-width: thin;
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+    }
+
+    .vocab-wrapper.grid .vocab-back-scroll > div {
+        margin: auto; /* Центрує вертикально, якщо текст малий, і дозволяє скрол, якщо великий */
+    }
+
+    /* Стилізація скролбару */
+    .vocab-wrapper.grid .vocab-back-scroll::-webkit-scrollbar { width: 4px; }
+    .vocab-wrapper.grid .vocab-back-scroll::-webkit-scrollbar-track { background: transparent; }
+    .vocab-wrapper.grid .vocab-back-scroll::-webkit-scrollbar-thumb { background-color: rgba(0,0,0,0.2); border-radius: 4px; }
 
     /* Footer для Grid View */
     .grid-footer {
@@ -223,7 +248,16 @@
         </div>
         <!-- BACK -->
         <div class="vocab-face vocab-back">
+            <div class="vocab-back-scroll">
             <div style="font-style: italic; color: var(--on-surface); opacity: 0.9; line-height: 1.6; font-size: 1rem;">{{ w.ctx }}</div>
+            </div>
+            {% if w.text_id %}
+            <div style="text-align: right; margin-top: 12px; flex-shrink: 0;">
+                <a href="/view/{{w.text_id}}?highlight={{ w.ctx | urlencode }}" class="btn-text" style="padding: 0; font-size: 0.75rem; color: var(--primary); text-decoration: none; display: inline-flex; align-items: center; gap: 4px; height: auto;">
+                    <span class="material-symbols-outlined" style="font-size: 14px;">open_in_new</span> {{ ui.go_to_text }}
+                </a>
+            </div>
+            {% endif %}
         </div>
         </div>
     </div>
@@ -362,6 +396,9 @@ function handleCardClick(e, card) {
     if (!card.closest('.vocab-wrapper.grid')) return;
     // Ignore clicks on buttons/inputs
     if (e.target.closest('button') || e.target.closest('input') || e.target.closest('a')) return;
+    
+    // Ignore if text is selected (allows selecting text on the back without flipping)
+    if (window.getSelection().toString().length > 0) return;
     
     card.classList.toggle('flipped');
 }
