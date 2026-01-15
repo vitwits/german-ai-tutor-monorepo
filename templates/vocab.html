@@ -285,7 +285,7 @@
 let currentAudio = null;
 async function playAudio(text) {
     if (currentAudio) currentAudio.pause();
-    const cleanText = text.split('(')[0].trim();
+    const cleanText = text.trim();
     const res = await fetch('/api/tts', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -443,7 +443,7 @@ function handleCardLeave(card) {
     card.flipTimeout = setTimeout(() => {
         card.classList.remove('flipped');
         card.flipTimeout = null;
-    }, 1000);
+    }, 500);
 }
 
 function handleCardEnter(card) {

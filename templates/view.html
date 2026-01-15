@@ -121,7 +121,7 @@ async function playAudio(text) {
         const response = await fetch('/api/tts', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ text: text.split('(')[0].trim() })
+            body: JSON.stringify({ text: text.trim() })
         });
 
         if (!response.ok) return;
@@ -341,12 +341,51 @@ function handleRowClick(e, id) {
 }
 
 async function rmWord(id) {
-    // Без підтвердження, без Undo (робочий процес)
+    // 1. Знаходимо кнопку і рядок у списку
+    const btn = document.querySelector(`button[onclick="rmWord('${id}')"]`);
+    if (!btn) return;
+    const row = btn.closest('.vocab-item');
+
+    // 2. Візуально видаляємо рядок (анімація)
+    row.style.transition = 'all 0.3s ease';
+    row.style.opacity = '0';
+    row.style.transform = 'translateX(20px)';
+    
+    setTimeout(() => {
+        row.remove();
+        // Перевірка: якщо слів більше немає, показати заглушку (опціонально)
+        const container = document.querySelector('.vocab-item')?.parentElement;
+        if (container && !container.querySelector('.vocab-item')) {
+            // Можна додати текст "Empty", але поки просто залишимо як є
+        }
+    }, 300);
+
+    // 3. Прибираємо підсвітку в тексті (без перезавантаження!)
+    // Знаходимо всі span з цим ID (клас .learned)
+    const highlights = document.querySelectorAll(`.learned[data-wid="${id}"]`);
+    highlights.forEach(span => {
+        // Створюємо текстовий вузол з вмістом спану
+        const textNode = document.createTextNode(span.innerText);
+        // Замінюємо спан на текст
+        span.parentNode.replaceChild(textNode, span);
+    });
+
+    // 4. Відправляємо запит на сервер (фоново)
     try {
-        await fetch('/api/remove_word', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id: id, from_vocab: false})});
-        location.reload();
+        const res = await fetch('/api/remove_word', {
+            method: 'POST', 
+            headers: {'Content-Type': 'application/json'}, 
+            body: JSON.stringify({id: id, from_vocab: false})
+        });
+        
+        if (!res.ok) throw new Error();
+        
+        // Успіх: нічого більше робити не треба, UI вже оновлено.
+        
     } catch (e) {
+        // Якщо помилка - показуємо тостер і (на жаль) перезавантажуємо, щоб повернути актуальний стан
         window.toast.show('{{ ui.error_generic }}', 'error');
+        setTimeout(() => location.reload(), 1500);
     }
 }
 

@@ -37,9 +37,18 @@ def generate_german_text(topic, count, level, style='neutral'):
     if style == 'formal':
         style_instruction = "Tone: Formal, academic, or professional. Use complex sentence structures suitable for the level."
     elif style == 'conversational':
-        style_instruction = "Tone: Natural, conversational, storytelling style. Use idioms if appropriate for the level."
+        style_instruction = """Tone: Authentic spoken German (Umgangssprache). 
+        - Focus on how native speakers actually talk, not textbook German.
+        - Use modal particles (e.g., 'halt', 'doch', 'mal', 'ja', 'eh') to make it sound natural.
+        - Use common colloquial idioms and phrasing suitable for the level.
+        - Avoid stiff or overly written constructions."""
     elif style == 'dialogue_informal':
-        style_instruction = "Format: A dialogue between two people. Tone: Informal/Casual (use 'Du'). Short, natural replies."
+        style_instruction = """Format: A realistic dialogue between close friends or family. 
+        Tone: Highly Informal/Colloquial (Umgangssprache). 
+        - MANDATORY use of 'Du'.
+        - Use slang, conversational fillers, and interjections (e.g., 'Na?', 'Ach so', 'Echt jetzt?').
+        - Use spoken contractions (e.g., 'mach's' instead of 'mache es', 'hast'e' instead of 'hast du' if appropriate).
+        - Sentences should be dynamic, sometimes elliptical (incomplete), typical of real chats."""
     elif style == 'dialogue_formal':
         style_instruction = "Format: A dialogue between two people. Tone: Polite/Formal (use 'Sie'). Structured and courteous."
     else: # neutral
@@ -92,6 +101,17 @@ def translate_word(text, ctx):
     prompt = f"""Translate the German word or phrase: "{text}". Context: "{ctx}".
 
     STRICT GRAMMAR RULES (NO EXCEPTIONS):
+
+    0. COLLOQUIALISMS, SLANG, AND CONTRACTIONS (HIGHEST PRIORITY):
+       - IF the input is a spoken contraction (e.g., "hast'e", "hab's", "bist'e", "gib's", "mach's") or slang ("nix", "ne"):
+       - **YOU MUST PRESERVE** the colloquial spelling in the 'display' field.
+       - DO NOT expand it to standard German (e.g. DO NOT change "hast'e" to "hast du").
+       - Format: "colloquial_form (standard_form)".
+       - Examples: 
+         * Input: "hast'e" -> Display: "hast'e (hast du)"
+         * Input: "hab's" -> Display: "hab's (habe es)"
+         * Input: "nix" -> Display: "nix (nichts)"
+
     1. PHRASES (2+ words):
        - If the input is a phrase (e.g., "kontinuierliche Innovationen", "ferne Sternensysteme"):
        - Convert to Nominative Singular: "die kontinuierliche Innovation".
@@ -111,6 +131,12 @@ def translate_word(text, ctx):
 
     4. TRANSLATIONS:
        - 1-2 main meanings. Clean text only.
+
+    5. CEFR LEVEL (CRITICAL):
+       - Determine the specific CEFR level where this word/phrase is typically introduced.
+       - OUTPUT MUST BE EXACTLY ONE OF: "A1", "A2", "B1", "B2", "C1", "C2".
+       - NEVER return ranges like "A1-C2".
+       - Example: "Haus" -> "A1", "Argument" -> "B1".
 
     Provide JSON:
     {{

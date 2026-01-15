@@ -632,7 +632,7 @@ def tts():
     tts_client = services.get_tts_client()
     if not tts_client: return jsonify({"error": "TTS not configured"}), 500
     
-    text = request.json.get('text', '').split('(')[0].strip()
+    text = request.json.get('text', '').strip()
     file_hash = hashlib.md5(text.encode()).hexdigest()
     filename = f"{file_hash}.mp3"
     filepath = os.path.join(AUDIO_DIR, filename)
