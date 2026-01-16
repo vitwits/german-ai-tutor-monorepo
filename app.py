@@ -83,6 +83,16 @@ UI_STRINGS = {
         'style_conversational': 'Розмовний',
         'style_dialogue_informal': 'Неформальний діалог',
         'style_dialogue_formal': 'Офіційний діалог',
+        'speaking_sentences': 'Речення',
+        'speaking_small_talk': 'Розмова',
+        'speaking_press_start': 'Натисніть Старт',
+        'speaking_loading': 'Завантаження...',
+        'speaking_cancelled': 'Скасовано. Натисніть ще раз.',
+        'speaking_you': 'Ви',
+        'speaking_silence': '(Тиша)',
+        'speaking_mic_denied': 'Доступ до мікрофону заборонено',
+        'speaking_audio_not_supported': 'Запис аудіо не підтримується',
+        'speaking_error': 'Помилка: ',
     },
     'eng': {
         'settings': 'Settings',
@@ -139,6 +149,16 @@ UI_STRINGS = {
         'style_conversational': 'Conversational',
         'style_dialogue_informal': 'Informal Dialogue',
         'style_dialogue_formal': 'Formal Dialogue',
+        'speaking_sentences': 'Sentences',
+        'speaking_small_talk': 'Small Talk',
+        'speaking_press_start': 'Press Start to begin',
+        'speaking_loading': 'Loading sentences...',
+        'speaking_cancelled': 'Cancelled. Tap to try again.',
+        'speaking_you': 'You',
+        'speaking_silence': '(Silence)',
+        'speaking_mic_denied': 'Mic access denied',
+        'speaking_audio_not_supported': 'Audio recording not supported',
+        'speaking_error': 'Error: ',
     }
 }
 

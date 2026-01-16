@@ -124,13 +124,14 @@ def get_tts_audio(text, lang='de'):
 
     if lang == 'de':
         language_code = "de-DE"
-        name = "de-DE-Polyglot-1" 
+        name = "de-DE-Standard-B" 
     elif lang == 'uk':
         language_code = "uk-UA"
-        name = "uk-UA-Standard-A"
+        # name = "uk-UA-Standard-A"
+        name = "uk-UA-Wavenet-A"
     else:
         language_code = "en-US"
-        name = "en-US-Standard-H"
+        name = "en-US-Standard-C"
 
     s_input = texttospeech.SynthesisInput(text=text)
     voice = texttospeech.VoiceSelectionParams(language_code=language_code, name=name)
@@ -180,29 +181,35 @@ def generate_practice_batch(count, level, interface_lang):
         return [{"de": "Hallo, wie geht es dir?", "source": "Привіт, як справи?"}]
     
 def evaluate_audio_with_gemini(original_text, audio_bytes, interface_lang, mime_type='audio/webm'):
-    """Оцінює аудіо-файл через Gemini"""
+    """Оцінює аудіо-файл через Gemini. Відновлено гнучку логіку вчителя."""
     feedback_lang = "Ukrainian" if interface_lang == 'uk' else "English"
     
+    # Використовуємо твій оригінальний підхід, але додаємо суворе правило щодо мови фідбеку
     prompt = f"""
     You are a German teacher. Listen to the user's audio.
     Task: The user is trying to translate this sentence into German: "{original_text}".
     
+    INSTRUCTIONS:
     1. Transcribe EXACTLY what the user said in German.
     2. Compare it to the correct German translation of "{original_text}".
     3. Evaluate grammar, vocabulary, and pronunciation.
     4. If the audio is silent or unintelligible, set score to 0.
     
+    STRICT FORMATTING RULES:
+    - The "feedback" field MUST be in {feedback_lang} ONLY. 
+    - NEVER use German in the "feedback" field.
+    - Keep feedback encouraging and short (max 5 words).
+    
     Output JSON:
     {{
         "transcribed_text": "What user actually said",
         "score": 0-100 (integer),
-        "feedback": "Short, encouraging phrase feedback in {feedback_lang} (max 3-5 words) or one word, don't use german language",
+        "feedback": "Short, encouraging feedback in {feedback_lang}",
         "correction": "Correct German version"
     }}
     """
     
     try:
-        # Використовуємо types.Blob для inline_data
         response = client.models.generate_content(
             model="gemini-2.0-flash",
             contents=[
@@ -215,16 +222,24 @@ def evaluate_audio_with_gemini(original_text, audio_bytes, interface_lang, mime_
                 )
             ],
             config=types.GenerateContentConfig(
-                response_mime_type="application/json"
+                response_mime_type="application/json",
+                # Піднімаємо температуру до 0.2, щоб повернути "людяність" оцінці,
+                # але не дати моделі сильно галюцинувати.
+                temperature=0.2 
             )
         )
         return json.loads(clean_json_response(response.text))
     except Exception as e:
-        error_msg = str(e)
-        print(f"Audio Eval Error: {error_msg}")
+        print(f"Audio Eval Error: {e}")
+        # Визначаємо текст помилки залежно від мови інтерфейсу
+        if interface_lang in ['ukr', 'uk']:
+            err_msg = "Помилка оцінки"
+        else:
+            err_msg = "Evaluation error"
+            
         return {
             "score": 0, 
-            "feedback": f"Error: {error_msg[:50]}...", 
+            "feedback": err_msg, 
             "correction": None, 
             "transcribed_text": ""
         }

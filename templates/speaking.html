@@ -49,11 +49,11 @@
 
 <div class="speak-container">
     <div class="mode-switch">
-        <button class="mode-btn active">Sentences</button>
-        <button class="mode-btn" style="cursor: not-allowed; opacity: 0.3;">Small Talk 🔒</button>
+        <button class="mode-btn active">{{ ui.speaking_sentences }}</button>
+        <button class="mode-btn" style="cursor: not-allowed; opacity: 0.3;">{{ ui.speaking_small_talk }} 🔒</button>
     </div>
 
-    <div class="task-text" id="task-display">Press Start to begin</div>
+    <div class="task-text" id="task-display">{{ ui.speaking_press_start }}</div>
 
     <div class="mic-wrapper">
         <div class="mic-ring" id="visualizer"></div>
@@ -72,13 +72,25 @@
 </div>
 
 <script>
+const UI = {
+    loading: '{{ ui.speaking_loading }}',
+    cancelled: '{{ ui.speaking_cancelled }}',
+    you: '{{ ui.speaking_you }}',
+    silence: '{{ ui.speaking_silence }}',
+    mic_denied: '{{ ui.speaking_mic_denied }}',
+    audio_not_supported: '{{ ui.speaking_audio_not_supported }}',
+    error_prefix: '{{ ui.speaking_error }}'
+};
+
 // --- STATE ---
 let sentencesQueue = [];
 let currentSentence = null;
 let isRecording = false;
 let isProcessing = false;
 let isFetching = false;
-let isResultState = false; // Стан: показуємо результат (чекаємо клік Next)
+let isResultState = false; 
+let isRetryState = false;  
+
 let mediaRecorder = null;
 let audioChunks = [];
 let audioContext = null;
@@ -88,18 +100,20 @@ let micStream = null;
 // Змінні для детектора тиші
 let silenceCheckInterval = null;
 let lastVoiceTimestamp = 0;
-const SILENCE_THRESHOLD = 1400; // 1.4 секунди
-const NOISE_LEVEL = 10; // Поріг шуму
+let hasUserStartedSpeaking = false;
+let recordStartTime = 0;
+
+const NO_SPEECH_TIMEOUT = 5000; 
+const SILENCE_AFTER_SPEECH = 2000; 
+const NOISE_LEVEL = 15; 
 
 let gameStarted = false;
 
-// --- INIT ---
 window.onload = async () => {
-    // 1. При вході вантажимо 2 речення (швидкий старт)
     loadSentences(2);
-    
+    if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        alert("Audio recording not supported.");
+        alert(UI.audio_not_supported);
     }
 };
 
@@ -120,25 +134,37 @@ async function loadSentences(count) {
     } catch (e) { console.error(e); } finally { isFetching = false; }
 }
 
-// --- LOGIC ---
-
 async function handleMainClick() {
-    // 1. Якщо ми в стані результату (навіть якщо кнопка вже синя), клік веде далі
+    if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+    }
+
+    if (isRetryState) {
+        startCurrentRound(); 
+        return;
+    }
+
     if (isResultState) {
         nextRound();
         return;
     }
+    
     if (isProcessing) return;
 
     if (isRecording) {
-        stopRecording();
+        // --- ВИПРАВЛЕННЯ ТУТ ---
+        // Якщо юзер ще не почав говорити (тиша) і натиснув стоп -> просто скасовуємо
+        if (!hasUserStartedSpeaking) {
+            stopRecording(false); // upload = false
+        } else {
+            stopRecording(true);  // upload = true
+        }
         return;
     }
     
-    // 2. Старт гри
     if (!gameStarted) {
         gameStarted = true;
-        loadSentences(10); // Тягнемо основний батч
+        loadSentences(10); 
         nextRound();
     } else {
         nextRound();
@@ -147,36 +173,37 @@ async function handleMainClick() {
 
 async function nextRound() {
     isResultState = false;
+    isRetryState = false;
 
-    // 3. Довантаження, якщо залишилось мало
-    if (sentencesQueue.length <= 5 && !isFetching) {
-        loadSentences(10);
-    }
+    if (sentencesQueue.length <= 5 && !isFetching) loadSentences(10);
 
     if (sentencesQueue.length === 0) {
         if (!isFetching) loadSentences(3);
-        document.getElementById('task-display').innerText = "Loading sentences...";
+        document.getElementById('task-display').innerText = UI.loading;
         return;
     }
     
-    // Reset UI
+    currentSentence = sentencesQueue.shift();
+    startCurrentRound();
+}
+
+async function startCurrentRound() {
+    if (!currentSentence) return;
+    
+    isResultState = false;
+    isRetryState = false;
+
     document.getElementById('transcript-display').innerText = '';
     document.getElementById('correction-display').style.display = 'none';
     document.getElementById('score-display').style.display = 'none';
     updateUIState('idle');
-    
-    currentSentence = sentencesQueue.shift();
-    if (!currentSentence) return;
 
-    // Show Text
     const taskEl = document.getElementById('task-display');
     taskEl.style.opacity = 0;
-    setTimeout(() => {
-        taskEl.innerText = currentSentence.source;
-        taskEl.style.opacity = 1;
-    }, 300);
+    taskEl.innerText = currentSentence.source;
     
-    // Speak Source
+    setTimeout(() => { taskEl.style.opacity = 1; }, 100);
+    
     const langCode = '{{ "uk" if lang == "ukr" else "en" }}';
     await playAudio(currentSentence.source, langCode);
     
@@ -194,39 +221,54 @@ async function startRecording() {
         mediaRecorder.ondataavailable = event => {
             if (event.data.size > 0) audioChunks.push(event.data);
         };
+        
+        mediaRecorder.shouldUpload = false;
 
         mediaRecorder.onstop = async () => {
-            const mimeType = mediaRecorder.mimeType || 'audio/webm';
-            const audioBlob = new Blob(audioChunks, { type: mimeType });
-            processAudioBlob(audioBlob);
             micStream.getTracks().forEach(track => track.stop());
+            
+            if (mediaRecorder.shouldUpload) {
+                const mimeType = mediaRecorder.mimeType || 'audio/webm';
+                const audioBlob = new Blob(audioChunks, { type: mimeType });
+                processAudioBlob(audioBlob);
+            } else {
+                console.log("Recording cancelled (manual or silence).");
+                updateUIState('idle');
+                document.getElementById('transcript-display').innerText = UI.cancelled;
+                isRetryState = true; 
+                
+                // Змінюємо іконку на refresh
+                const icon = document.getElementById('btn-icon');
+                icon.innerText = 'refresh'; 
+            }
         };
 
         mediaRecorder.start();
         isRecording = true;
         updateUIState('listening');
-        
         initAudioAndSilenceDetector(micStream);
 
     } catch (e) {
         console.error(e);
-        window.toast.show("Mic access denied", "error");
+        window.toast.show(UI.mic_denied, "error");
         updateUIState('idle');
     }
 }
 
-function stopRecording() {
+function stopRecording(upload = true) {
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.shouldUpload = upload;
         mediaRecorder.stop();
     }
-    isRecording = false;
-    isProcessing = true;
-    updateUIState('processing');
-    
     if (silenceCheckInterval) clearInterval(silenceCheckInterval);
+    isRecording = false;
+    
+    if (upload) {
+        isProcessing = true;
+        updateUIState('processing');
+    }
 }
 
-// --- SILENCE DETECTION ---
 async function initAudioAndSilenceDetector(stream) {
     try {
         if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -239,7 +281,9 @@ async function initAudioAndSilenceDetector(stream) {
         
         drawVisualizer();
         
+        hasUserStartedSpeaking = false;
         lastVoiceTimestamp = Date.now();
+        recordStartTime = Date.now();
         
         if (silenceCheckInterval) clearInterval(silenceCheckInterval);
         
@@ -254,20 +298,24 @@ async function initAudioAndSilenceDetector(stream) {
             for(let i = 0; i < bufferLength; i++) sum += dataArray[i];
             let average = sum / bufferLength;
             
-            // Якщо голос
             if (average > NOISE_LEVEL) {
+                if (!hasUserStartedSpeaking) hasUserStartedSpeaking = true;
                 lastVoiceTimestamp = Date.now();
             } else {
-                // Якщо тиша > 1.4с
-                if (Date.now() - lastVoiceTimestamp > SILENCE_THRESHOLD) {
-                    stopRecording();
+                const now = Date.now();
+                if (hasUserStartedSpeaking) {
+                    if (now - lastVoiceTimestamp > SILENCE_AFTER_SPEECH) {
+                        stopRecording(true); 
+                    }
+                } else {
+                    if (now - recordStartTime > NO_SPEECH_TIMEOUT) {
+                        stopRecording(false); 
+                    }
                 }
             }
         }, 100); 
-        
     } catch (e) { console.error(e); }
 }
-
 
 async function processAudioBlob(blob) {
     const formData = new FormData();
@@ -277,23 +325,13 @@ async function processAudioBlob(blob) {
     try {
         const res = await fetch('/api/evaluate_audio', { method: 'POST', body: formData });
         const rawData = await res.json();
-        
-        // ФІКС: Обробка масиву або об'єкту
-        let result = rawData;
-        if (Array.isArray(rawData)) {
-            result = rawData.length > 0 ? rawData[0] : null;
-        }
+        let result = Array.isArray(rawData) ? (rawData.length > 0 ? rawData[0] : null) : rawData;
 
         if (!result) throw new Error("Empty response");
         showFeedback(result);
-        
     } catch (e) {
         console.error(e);
-        showFeedback({
-            score: 0,
-            feedback: "Error: " + e.message,
-            transcribed_text: ""
-        });
+        showFeedback({ score: 0, feedback: UI.error_prefix + e.message, transcribed_text: "" });
     }
 }
 
@@ -302,24 +340,23 @@ async function showFeedback(result) {
     isResultState = true; 
 
     if (result.transcribed_text) {
-        document.getElementById('transcript-display').innerText = `You: "${result.transcribed_text}"`;
+        document.getElementById('transcript-display').innerText = `${UI.you}: "${result.transcribed_text}"`;
+    } else {
+        document.getElementById('transcript-display').innerText = UI.silence;
     }
 
     let score = (result.score !== undefined && result.score !== null) ? result.score : 0;
-    
-    // Колір кнопки
     const btn = document.getElementById('main-btn');
     if (score >= 80) btn.style.backgroundColor = '#4CAF50'; 
     else if (score >= 50) btn.style.backgroundColor = '#FFC107'; 
     else btn.style.backgroundColor = '#f44336'; 
 
-    // Показуємо оцінку
     updateUIState('next');
     document.getElementById('score-num').innerText = score;
 
     const langCode = '{{ "uk" if lang == "ukr" else "en" }}';
     
-    if (result.feedback && result.feedback.startsWith('Error:')) {
+    if (result.feedback && (result.feedback.startsWith('Error:') || result.feedback.startsWith(UI.error_prefix))) {
          document.getElementById('correction-display').innerText = result.feedback;
          document.getElementById('correction-display').style.display = 'block';
     } else {
@@ -330,23 +367,22 @@ async function showFeedback(result) {
             corrBox.innerText = result.correction;
             corrBox.style.display = 'block';
             await new Promise(r => setTimeout(r, 500));
+            // Correction is always German
             await playAudio(result.correction, 'de');
-        } else if (score === 100) {
-            await playAudio("Correct!", 'en');
-        }
+        } 
+        // Прибрано блок else if (score === 100) { playAudio("Correct!") }
+        // Тепер звук тільки з result.feedback
     }
     
-    // Авто-скидання кнопки через 3 сек, але текст лишається
     setTimeout(() => {
         if (isResultState) {
             const btn = document.getElementById('main-btn');
             const scoreDiv = document.getElementById('score-display');
             const icon = document.getElementById('btn-icon');
-            
             btn.style.backgroundColor = 'var(--primary)';
             scoreDiv.style.display = 'none';
             icon.style.display = 'block';
-            icon.innerText = 'play_arrow'; // Start/Next icon
+            icon.innerText = 'play_arrow'; 
         }
     }, 3000);
 }
@@ -361,27 +397,21 @@ function updateUIState(state) {
 
     if (state === 'listening') {
         btn.style.backgroundColor = '#d32f2f'; 
-        icon.style.display = 'block';
-        icon.innerText = 'stop';
-        ring.style.display = 'block';
-        scoreDiv.style.display = 'none';
+        icon.style.display = 'block'; icon.innerText = 'stop';
+        ring.style.display = 'block'; scoreDiv.style.display = 'none';
     } else if (state === 'processing') {
         btn.style.backgroundColor = '#9E9E9E'; 
-        ring.style.display = 'none';
-        icon.style.display = 'block';
-        icon.innerText = 'sync';
-        icon.classList.add('rotating');
+        ring.style.display = 'none'; icon.style.display = 'block';
+        icon.innerText = 'sync'; icon.classList.add('rotating');
         scoreDiv.style.display = 'none';
     } else if (state === 'next') {
-        ring.style.display = 'none';
-        icon.style.display = 'none';
+        ring.style.display = 'none'; icon.style.display = 'none';
         scoreDiv.style.display = 'block';
     } else {
-        // IDLE
+        // IDLE / RETRY
         btn.style.backgroundColor = 'var(--primary)';
-        ring.style.display = 'none';
-        icon.style.display = 'block';
-        icon.innerText = 'mic';
+        ring.style.display = 'none'; icon.style.display = 'block';
+        icon.innerText = isRetryState ? 'refresh' : 'mic'; 
         scoreDiv.style.display = 'none';
     }
 }
@@ -397,25 +427,24 @@ async function playAudio(text, lang) {
         const data = await res.json();
         const audio = new Audio(data.url);
         return new Promise(resolve => {
-            audio.onended = resolve;
-            audio.onerror = resolve;
-            audio.play();
+            audio.onended = resolve; audio.onerror = resolve; audio.play();
         });
     } catch(e) { console.error(e); }
 }
 
 function playBeep() {
     try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
+        if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
         osc.connect(gain);
-        gain.connect(ctx.destination);
+        gain.connect(audioContext.destination);
         osc.frequency.value = 600;
         gain.gain.value = 0.1;
         osc.start();
         setTimeout(() => osc.stop(), 150);
-    } catch(e) {}
+    } catch(e) { console.error("Beep error", e); }
 }
 
 function drawVisualizer() {
@@ -432,4 +461,5 @@ function drawVisualizer() {
     requestAnimationFrame(drawVisualizer);
 }
 </script>
+
 {% endblock %}
