@@ -49,7 +49,7 @@
         </span>
         
         <button class="btn-text" onclick="toggleTrans()" id="trans-btn" style="border: 1px solid var(--border);">
-            <span class="material-symbols-outlined">translate</span> {{ ui.show_translation }}
+            <span class="material-symbols-outlined">translate</span>
         </button>
 
         <button class="btn-contained" onclick="playAll()" id="play-all-btn" style="margin-left: auto;">
@@ -195,9 +195,9 @@ function toggleTrans() {
     rows.forEach(r => r.style.display = isHidden ? 'block' : 'none');
     
     if (isHidden) {
-        btn.innerHTML = '<span class="material-symbols-outlined">visibility_off</span> {{ ui.hide_translation }}';
+        btn.innerHTML = '<span class="material-symbols-outlined">visibility_off</span>';
     } else {
-        btn.innerHTML = '<span class="material-symbols-outlined">translate</span> {{ ui.show_translation }}';
+        btn.innerHTML = '<span class="material-symbols-outlined">translate</span>';
     }
 }
 
