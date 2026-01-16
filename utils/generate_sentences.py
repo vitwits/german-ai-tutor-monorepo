@@ -1,3 +1,7 @@
+# python generate_sentences.py A2 100
+
+
+
 import os
 import sys
 import csv
@@ -11,9 +15,14 @@ from google import genai
 from google.genai import types
 
 # Завантаження змінних середовища
-load_dotenv()
+# 1. Визначаємо кореневу директорію (на рівень вище utils)
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(BASE_DIR) # Додаємо в path, щоб працювали імпорти з кореня (якщо знадобляться)
 
-API_KEY = os.getenv("GOOGLE_API_KEY")
+# 2. Явно вказуємо шлях до .env
+load_dotenv(os.path.join(BASE_DIR, '.env'))
+
+API_KEY = os.getenv("GEMINI_API_KEY")
 if not API_KEY:
     print("Error: GOOGLE_API_KEY not found in .env file")
     sys.exit(1)
@@ -22,12 +31,12 @@ client = genai.Client(api_key=API_KEY)
 
 # --- КОНФІГУРАЦІЯ CEFR (Локальна копія для редагування) ---
 CEFR_GUIDELINES = {
-    "A1": "Use natural but simple sentences (5-9 words). Avoid 3-word sentences. Structure: Subject-Verb-Complement/Object. Present tense. Use common nouns and basic adjectives (e.g., instead of 'Das Kino ist klein', use 'Das kleine Kino ist sehr modern').",
-    "A2": "Sentences 8-12 words. Avoid 6-word sentences. Use simple connectors (und, aber, oder). Use Perfekt for past tense. Topics: shopping, work, immediate environment.",
-    "B1": "Sentences 10-15 words. MUST use subordinate clauses (weil, wenn, dass). Use Präteritum for modals. Introduce simple abstract topics. Start using distinct connecting words.",
-    "B2": "Average length: 13-16 words. STRICT LIMIT: No sentence over 18 words and less than 13. Focus on syntactic variety: use Passive voice in one sentence, a Relative clause in another, and ONE multi-part connector (e.g., 'zwar... aber') in a third. DO NOT combine these in a single sentence. Include one idiom. Use abstract vocabulary, but keep the flow concise and teacher-like.",
-    "C1": "Sophisticated structure (14-18 words). No sentence over 19 words and less than 13. Use nominalization, complex syntax, fixed idiomatic expressions, and nuances. Text must flow logically with high cohesion. Advanced vocabulary is required.",
-    "C2": "Mastery level. Long, nuanced sentences (16-22 words). No sentence over 22 words and less than 15. Use rhetorical devices, irony, and implicit meanings. Vocabulary must be highly specific, academic, or literary depending on context."
+    "A1": "Sentences strictly 4-7 words (never under 4). Only Präsens. Maximize variety: 30-50 percent of sentences NOT starting with 'Ich' (use 'Das ist...', 'Es ist...', 'Mein/e... ist...', 'Wo...?'. 'Wie...?'. 'Heute ist...', 'Am...'). Always include in batches: questions (yes/no + wh-), negations (nicht/kein/keine), sein + Adj/Ort. Mix subjects (Ich/Du/Er/Sie/Es/Wir/Das/Mein Name). Topics: introductions, family/pets, home, hobbies, food, weather, routine, shopping, birthdays. Natural like Goethe A1 model sentences or textbooks (Netzwerk/Schritte).",
+    "A2": "Sentences 6-11 words (avoid under 6 or over 12). Use Präsens + Perfekt (haben/sein dominant, especially sein for motion like fahren, gehen). Include connectors: und, aber, oder, weil (at least 20-40% with weil for reasons). Separable verbs (aufstehen, einkaufen, ausgehen, mitkommen). Full Akkusativ, introduce Dativ (mit, zu, von, bei, aus). Modal verbs in Präsens: können, wollen, müssen, sollen, mögen. Time expressions: gestern, morgen, oft, manchmal, jeden Tag/Morgen, am Wochenende. Vary starts: Am..., Gestern..., Ich habe/bin..., Manchmal..., Weil..., Mit... . Topics: daily routine, past weekend/activities, weather/seasons, food/preferences, simple reasons, hobbies/sport, shopping, travel basics. Natural, like Goethe A2 model sentences or textbooks (Netzwerk, Schritte) – everyday dialogues feel.",
+    "B1": "Sentences 8-13 words (avoid under 8 or over 14). Mandatory subordinate clauses: weil, dass, wenn, obwohl (at least 40-60 percent include one). Dominant: Perfekt for past experiences, Präteritum for war/hatte/modals (konnte, wollte, musste). Basic Konjunktiv II: würde + Infinitiv for wishes; hätte/wäre/konnte for simple unreal/conditions/dreams. Introduce Futur I sparingly (werden + Infinitiv) for plans (10-20% max). Avoid or minimize Plusquamperfekt (only very simple like 'hatte vergessen' if needed – no complex comparisons). Comparative/superlative (besser als). Simple opinions: ich finde, dass...; ich träume davon, dass.... Vary starts: Obwohl..., Weil..., Wenn..., Ich habe..., Gestern.... Topics: experiences, reasons, opinions, dreams, simple future plans, everyday + light abstract. Natural, not overloaded – like Goethe B1 model sentences (focus on weil/dass/obwohl/wenn, basic Konjunktiv II, no heavy past-in-past).",
+    "B2": "Sentences strictly 9-14 words (enforce: no less than 9, no more than 14). Vary syntax in batches of 5–10: include Passive (werden), relative clause (der/die/das/wo/wer), multi-part connector (zwar...aber, sowohl...als auch, entweder...oder, nicht nur...sondern auch) – one or two per sentence max. Use Plusquamperfekt simply (hatte + Partizip II). Konjunktiv II for hypotheticals. Futur I for plans/trends. Include occasional idioms/fixed expressions (es ist üblich, mit sich bringen, in der Lage sein). Topics: technology, culture, city life, environment, work, pros/cons. Natural, repeatable, exam-like (Goethe/telc B2 style) – clear, pronounceable, not overloaded.",
+    "C1": "Sentences 12-18 words (strictly no less than 12, no more than 18). Use sophisticated structures: nominalization (die Tatsache, dass…; die Notwendigkeit; aufgrund eines Fehlers), complex subordinate clauses (In Anbetracht der Tatsache, dass…; Um…zu…, ist es unabdingbar, dass…). Include Konjunktiv I in reported speech or formal contexts (sei, habe). Full Passive and Zustandspassiv (wurde befreit, war befreit worden). Advanced connectors for cohesion and logic (insofern, folglich, zwar…dennoch, angesichts, aufgrund, infolge). Nuanced/fixed expressions (nicht verwunderlich, es gelingt, unabdingbar, sich Zeit nehmen). Topics: society, culture, work processes, environment, technology impacts, abstract pros/cons. Flow logical and cohesive, natural like advanced German texts or Goethe C1 models – sophisticated but not overly rhetorical yet.",
+    "C2": "Sentences 14-20 words (strictly no more than 22, no less than 14). Mastery level: long, nuanced sentences with rhetorical devices (rhetorische Fragen, Ironie, Kontrastkonstruktionen, litotes, euphemism, hyperbole). Subtext and implicit criticism of society, trends, human nature. Use all tenses/moods fluently and stylistically (Konjunktiv I/II advanced, Futur II for assumptions, Plusquamperfekt narrative). Highly specific, academic, literary or journalistic vocabulary (grassierend, höhlt aus, wohlklingend, Zurschaustellung, Selbstoptimierungswelle, Muße, Kontemplation, unerschütterlich, keineswegs). Multi-part connectors (nicht nur … sondern auch, zwar … doch, mehr … als, allzu oft). Topics: social inequality, self-optimization culture, spirituality vs. reality, charity hypocrisy, human-animal relations, modern alienation. Flow elegant, cohesive, with critical depth – like high-level opinion articles, essays or literary commentary in German media (Zeit, FAZ Feuilleton, Philosophie Magazin)."
 }
 
 # --- СПИСОК ТЕМ (100+) ---
@@ -151,25 +160,25 @@ BASE_TOPICS = [
 
 LEVEL_RULES = {
     "A1": {
-        "allowed_topics": BASE_TOPICS[:6],
+        "allowed_topics": BASE_TOPICS[:20],
         "abstraction": "none",
         "sentence_length": "short",
         "grammar": ["present", "basic verbs"]
     },
     "A2": {
-        "allowed_topics": BASE_TOPICS[:9],
+        "allowed_topics": BASE_TOPICS[:39],
         "abstraction": "low",
         "sentence_length": "short-medium",
         "grammar": ["past", "modal verbs"]
     },
     "B1": {
-        "allowed_topics": BASE_TOPICS[:12],
+        "allowed_topics": BASE_TOPICS[:58],
         "abstraction": "medium",
         "sentence_length": "medium",
         "grammar": ["subordinate clauses"]
     },
     "B2": {
-        "allowed_topics": BASE_TOPICS[:14],
+        "allowed_topics": BASE_TOPICS[:83],
         "abstraction": "high",
         "sentence_length": "long",
         "grammar": ["passive", "Konjunktiv II"]
