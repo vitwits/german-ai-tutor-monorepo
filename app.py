@@ -2,12 +2,11 @@ import os
 import uuid
 import hashlib
 import math
+import json
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, send_from_directory
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
-import json
-import google.generativeai as genai
 
 from database import get_db, init_db
 import services
@@ -15,8 +14,10 @@ import services
 load_dotenv()
 init_db()
 
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 app = Flask(__name__)
+# Налаштування для коректного відображення кирилиці в JSON
+app.json.ensure_ascii = False 
+
 app.config['SECRET_KEY'] = os.getenv("SECRET_KEY", "dev-key")
 AUDIO_DIR = "data/audio"
 os.makedirs(AUDIO_DIR, exist_ok=True)
@@ -68,10 +69,6 @@ UI_STRINGS = {
         'edit_translation': 'Редагувати переклад',
         'confirm_title': 'Підтвердження',
         'confirm_delete_text_msg': 'Ви впевнені, що хочете видалити цей текст?',
-        'btn_delete': 'Видалити',
-        'btn_cancel': 'Скасувати',
-        'confirm_title': 'Підтвердження',
-        'confirm_delete_text_msg': 'Видалити цей текст? Весь прогрес по ньому буде втрачено.',
         'btn_delete': 'Видалити',
         'btn_cancel': 'Скасувати',
         'text_deleted': 'Текст видалено',
@@ -130,10 +127,6 @@ UI_STRINGS = {
         'confirm_delete_text_msg': 'Are you sure you want to delete this text?',
         'btn_delete': 'Delete',
         'btn_cancel': 'Cancel',
-        'confirm_title': 'Confirm',
-        'confirm_delete_text_msg': 'Delete this text? All progress will be lost.',
-        'btn_delete': 'Delete',
-        'btn_cancel': 'Cancel',
         'text_deleted': 'Text deleted',
         'word_deleted': 'Word deleted',
         'word_added': 'Word added',
@@ -179,7 +172,6 @@ def load_user(user_id):
 
 @app.context_processor
 def inject_ui():
-    # Визначаємо мову, за замовчуванням 'ukr', якщо користувач не в системі
     lang = 'ukr'
     if current_user.is_authenticated and hasattr(current_user, 'interface_language'):
         lang = current_user.interface_language
@@ -258,7 +250,7 @@ def settings():
 @login_required
 def generate():
     req = request.json
-    # Передаємо новий параметр style
+    # Передаємо параметр style
     data = services.generate_german_text(req['topic'], req['count'], req['level'], req.get('style', 'neutral'))
     
     title_json = json.dumps({'de': data.get('title_de', req['topic']), 'ukr': data['title_ua'], 'eng': data['title_en']})
@@ -298,7 +290,7 @@ def explain_grammar():
 
     target_lang_name = "Ukrainian" if lang == 'ukr' else "English"
 
-    # --- ЯКЩО В КЕШІ НЕМАЄ, ГЕНЕРУЄМО ---
+    # --- ФОРМУВАННЯ ПРОМПТА ТУТ, А ВИКЛИК ЧЕРЕЗ СЕРВІС ---
     prompt = f"""
     Act as a concise German tutor for a {target_lang_name}-speaking student.
     Analyze this German sentence (Level {text_level}): "{sentence}"
@@ -316,12 +308,11 @@ def explain_grammar():
     Respond in {target_lang_name}.
     """
 
-    try:
-        model = genai.GenerativeModel('gemini-2.0-flash')
-        response = model.generate_content(prompt)
-        explanation = response.text
-        
-        # Кешування (якщо текст не змінюється)
+    # Викликаємо функцію з services
+    explanation = services.explain_grammar_text(prompt)
+    
+    if explanation:
+        # Кешування
         if text_id and sentence_index is not None:
             with get_db() as conn:
                 conn.execute('INSERT OR REPLACE INTO grammar_explanations (text_id, sentence_index, language, explanation) VALUES (?, ?, ?, ?)',
@@ -329,21 +320,18 @@ def explain_grammar():
                 conn.commit()
         
         return jsonify({"explanation": explanation})
-    except Exception as e:
-        print(f"Grammar error: {e}")
+    else:
         return jsonify({"error": "Error generating explanation"}), 500
     
 @app.route('/library')
 @login_required
 def library():
-    # 1. Отримуємо параметри (пріоритет: URL -> DB -> Default)
     arg_view = request.args.get('view')
     arg_per_page = request.args.get('per_page', type=int)
     
     view_mode = arg_view if arg_view else current_user.library_view_mode
     per_page = arg_per_page if arg_per_page else current_user.library_per_page
     
-    # 2. Якщо параметри змінилися, зберігаємо в базу
     if (arg_view and arg_view != current_user.library_view_mode) or (arg_per_page and arg_per_page != current_user.library_per_page):
         with get_db() as conn:
             conn.execute('UPDATE users SET library_view_mode = ?, library_per_page = ? WHERE id = ?', 
@@ -353,10 +341,8 @@ def library():
         current_user.library_per_page = per_page
 
     page = request.args.get('page', 1, type=int)
-    # per_page вже визначено вище
     offset = (page - 1) * per_page
 
-    # Отримуємо всі тексти користувача
     with get_db() as conn:
         total_count = conn.execute('SELECT COUNT(*) FROM texts WHERE user_id = ?', (current_user.id,)).fetchone()[0]
         db_rows = conn.execute('SELECT * FROM texts WHERE user_id = ? ORDER BY rowid DESC LIMIT ? OFFSET ?', (current_user.id, per_page, offset)).fetchall()
@@ -366,16 +352,12 @@ def library():
     for row in db_rows:
         r = dict(row)
         try:
-            # Спробувати розпарсити JSON з заголовком
             titles = json.loads(r['title'])
-            # Вибираємо заголовок відповідно до мови інтерфейсу
-            # Пріоритет: Мова юзера -> Українська -> Оригінал
             lang_key = current_user.interface_language
             
             r['display_title'] = titles.get('de', r['title'])
             r['trans_title'] = titles.get(lang_key, '')
         except (json.JSONDecodeError, TypeError):
-            # Fallback для старих текстів, де title - це просто рядок
             r['display_title'] = r['title']
             r['trans_title'] = ""
         texts.append(r)
@@ -392,97 +374,37 @@ def view_text(tid):
         
     sentences = json.loads(t['content_json'])
     
-    # Адаптація перекладу під мову юзера
     lang_key = 'ua' if current_user.interface_language == 'ukr' else 'en'
     for s in sentences:
-        # Створюємо поле 'trans', яке очікує шаблон, беручи потрібну мову
-        s['trans'] = s.get(lang_key, s.get('trans', '')) # Fallback на старий ключ 'trans'
+        s['trans'] = s.get(lang_key, s.get('trans', ''))
 
-    # Обробка заголовка
-    # За замовчуванням показуємо німецьку назву, якщо є, або оригінальний рядок
     display_title = t['title'] 
     trans_title = ""
     try:
         titles = json.loads(t['title'])
-        display_title = titles.get('de', titles.get('ukr', t['title'])) # Пріоритет: DE -> UKR -> Raw
+        display_title = titles.get('de', titles.get('ukr', t['title']))
         trans_title = titles.get(current_user.interface_language, '')
     except (json.JSONDecodeError, TypeError): pass
 
-    # --- НОВА ЛОГІКА ПІДСВІТКИ (ЗА КООРДИНАТАМИ) ---
     for i, s in enumerate(sentences):
         original_text = s['de']
-        
-        # Знаходимо слова, які належать САМЕ ДО ЦЬОГО речення
         my_words = [v for v in vocab_rows if v['sentence_index'] == i]
-        
-        # Сортуємо їх з кінця до початку (reverse), 
-        # щоб вставка тегів не збивала індекси попередніх слів!
         my_words.sort(key=lambda x: x['start_index'], reverse=True)
         
-        # Перетворюємо рядок на список символів, бо стрічки незмінні
-        # Але простіше різати стрічку
-        final_html = original_text
-        
-        for w in my_words:
-            start = w['start_index']
-            end = w['end_index']
-            
-            # Перевірка на валідність індексів (щоб не крашнулось, якщо текст змінився)
-            if start is not None and start >= 0 and end <= len(original_text):
-                # Вставка тегу
-                # Беремо оригінальне слово за координатами (надійніше)
-                word_in_text = original_text[start:end]
-                replacement = f'<span class="learned" data-wid="{w["id"]}">{word_in_text}</span>'
-                
-                # "Хірургічна" вставка
-                # Оскільки ми йдемо з кінця, ми можемо різати final_html
-                # Але final_html вже змінений... стоп.
-                # Якщо ми йдемо з кінця, то індекси початку речення НЕ ЗМІНЮЮТЬСЯ.
-                # Тому ми ріжемо original_text? Ні.
-                
-                # Правильний алгоритм з кінця:
-                # final_html зараз дорівнює original_text.
-                # Ми беремо [0:start] + replacement + [end:]
-                # АЛЕ наступний цикл (який ближче до початку) візьме ВЖЕ ЗМІНЕНИЙ final_html?
-                # Ні, індекси start/end відносяться до ОРИГІНАЛУ.
-                
-                # Тому краще так: ріжемо final_html? Ні.
-                pass 
-        
-        # Переписуємо алгоритм складання рядка, щоб було надійно
-        # Створюємо мапу замін
-        # Але найпростіше - таки різати рядок з кінця.
-        # Тільки треба пам'ятати, що start/end валідні для ORIGINAL_TEXT.
-        
-        # Робочий метод:
-        # Розбиваємо оригінал на шматки і збираємо заново.
         last_idx = len(original_text)
         built_str = ""
         
-        # Сортуємо слова з кінця (reverse=True по start_index)
-        # Приклад: текст 100 симв. Слова на 80-90 і 10-20.
-        # 1. Беремо слово 80-90. built_str = replacement + original[90:100]
-        # last_idx стає 80.
-        # 2. Беремо слово 10-20. built_str = replacement + original[20:80] + built_str
-        # last_idx стає 10.
-        # 3. Кінець: built_str = original[0:10] + built_str.
-        
         for w in my_words:
             start = w['start_index']
             end = w['end_index']
             
-            if start is not None and start >= 0:
-                # Додаємо хвіст після слова
+            if start is not None and start >= 0 and end <= len(original_text):
                 built_str = original_text[end:last_idx] + built_str
-                # Додаємо саме слово в тегу
                 word_val = original_text[start:end]
                 built_str = f'<span class="learned" data-wid="{w["id"]}">{word_val}</span>' + built_str
-                # Зсуваємо вказівник
                 last_idx = start
         
-        # Додаємо початок речення
         built_str = original_text[0:last_idx] + built_str
-        
         s['de_html'] = built_str
         
     return render_template('view.html', text=t, sentences=sentences, vocab=vocab_rows, display_title=display_title, trans_title=trans_title)
@@ -494,17 +416,13 @@ def quick_translate():
     word_data = services.translate_word(req['text'], req['ctx'])
     wid = str(uuid.uuid4())
     
-    # Вираховуємо індекси на сервері (це простіше і надійніше, ніж в JS з купою тегів)
     full_sentence = req['ctx']
     word = req['text']
     
-    # Знаходимо де починається слово. 
-    # Увага: це знайде ПЕРШЕ входження у реченні. 
-    # Якщо в реченні два рази "die", виділиться перше. Це компроміс для MVP.
     start_index = full_sentence.find(word)
     end_index = start_index + len(word)
     
-    sentence_index = req.get('sent_idx', 0) # Отримуємо номер речення
+    sentence_index = req.get('sent_idx', 0)
     
     with get_db() as conn:
         conn.execute('''INSERT INTO vocabulary 
@@ -532,7 +450,6 @@ def update_word():
     col = 'ua' if lang == 'ukr' else 'en'
     
     with get_db() as conn:
-        # Оновлюємо тільки ту колонку, яка відповідає поточній мові інтерфейсу
         conn.execute(f'UPDATE vocabulary SET {col} = ? WHERE id = ? AND user_id = ?', (new_trans, wid, current_user.id))
         conn.commit()
     return jsonify({"ok": True})
@@ -567,7 +484,6 @@ def vocab():
     words = []
     for row in db_words:
         w = dict(row)
-        # Додаємо поле display_trans, щоб уникнути подвійного перекладу в шаблоні
         w['display_trans'] = w['ua'] if lang == 'ukr' else w['en']
         words.append(w)
         
@@ -588,24 +504,17 @@ def toggle_fav():
 def remove_word():
     req = request.json
     wid = req.get('id')
-    # Параметр 'from_vocab' скаже нам, звідки ми видаляємо (зі сторінки словника чи тексту)
     from_vocab = req.get('from_vocab', False) 
     
     with get_db() as conn:
         if from_vocab:
-            # Якщо видаляємо зі сторінки Словника -> просто знімаємо зірочку
-            # Слово залишається в базі (прив'язаним до тексту), якщо воно має text_id
             conn.execute('UPDATE vocabulary SET is_favorite = 0 WHERE id = ? AND user_id = ?', (wid, current_user.id))
-            # (Опціонально) Чистка сміття: якщо слово не прив'язане до тексту і не улюблене - видаляємо зовсім
             conn.execute('DELETE FROM vocabulary WHERE id = ? AND is_favorite = 0 AND text_id IS NULL', (wid,))
         else:
-            # Якщо видаляємо зі сторінки Тексту
             word = conn.execute('SELECT is_favorite FROM vocabulary WHERE id = ?', (wid,)).fetchone()
             if word and word['is_favorite'] == 1:
-                # Якщо слово улюблене -> не видаляємо з бази, а лише відв'язуємо від тексту
                 conn.execute('UPDATE vocabulary SET text_id = NULL WHERE id = ? AND user_id = ?', (wid, current_user.id))
             else:
-                # Якщо не улюблене -> видаляємо назавжди
                 conn.execute('DELETE FROM vocabulary WHERE id = ? AND user_id = ?', (wid, current_user.id))
         
         conn.commit()
@@ -617,11 +526,8 @@ def delete_text():
     tid = request.json.get('id')
     with get_db() as conn:
         conn.execute('DELETE FROM texts WHERE id = ? AND user_id = ?', (tid, current_user.id))
-        # ВИПРАВЛЕННЯ: При видаленні тексту, улюблені слова не видаляються, а просто відв'язуються (text_id = NULL)
         conn.execute('UPDATE vocabulary SET text_id = NULL WHERE text_id = ? AND user_id = ? AND is_favorite = 1', (tid, current_user.id))
-        # А не улюблені видаляються
         conn.execute('DELETE FROM vocabulary WHERE text_id = ? AND user_id = ? AND is_favorite = 0', (tid, current_user.id))
-        # Видаляємо кеш граматики для цього тексту
         conn.execute('DELETE FROM grammar_explanations WHERE text_id = ?', (tid,))
         conn.commit()
     return jsonify({"ok": True})
@@ -629,29 +535,61 @@ def delete_text():
 @app.route('/api/tts', methods=['POST'])
 @login_required
 def tts():
-    tts_client = services.get_tts_client()
-    if not tts_client: return jsonify({"error": "TTS not configured"}), 500
-    
     text = request.json.get('text', '').strip()
-    file_hash = hashlib.md5(text.encode()).hexdigest()
+    lang = request.json.get('lang', 'de')
+    
+    file_hash = hashlib.md5(f"{text}_{lang}".encode()).hexdigest()
     filename = f"{file_hash}.mp3"
     filepath = os.path.join(AUDIO_DIR, filename)
     
     if not os.path.exists(filepath):
-        from google.cloud import texttospeech
-        s_input = texttospeech.SynthesisInput(text=text)
-        voice = texttospeech.VoiceSelectionParams(language_code="de-DE", name="de-DE-Polyglot-1")
-        # voice = texttospeech.VoiceSelectionParams(language_code="de-DE", name="de-DE-Standard-F")
-        audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
-        response = tts_client.synthesize_speech(input=s_input, voice=voice, audio_config=audio_config)
-        with open(filepath, "wb") as out:
-            out.write(response.audio_content)
+        audio_content = services.get_tts_audio(text, lang)
+        if audio_content:
+            with open(filepath, "wb") as out:
+                out.write(audio_content)
+        else:
+            return jsonify({"error": "TTS failed"}), 500
             
     return jsonify({"url": f"/audio/{filename}"})
 
 @app.route('/audio/<filename>')
 def serve_audio(filename):
     return send_from_directory(AUDIO_DIR, filename)
+
+@app.route('/speaking')
+@login_required
+def speaking():
+    return render_template('speaking.html')
+
+@app.route('/api/get_practice_batch', methods=['POST'])
+@login_required
+def get_practice_batch():
+    count = request.json.get('count', 5)
+    lang_map = {'ukr': 'Ukrainian', 'eng': 'English'}
+    if_lang = lang_map.get(current_user.interface_language, 'Ukrainian')
+    
+    sentences = services.generate_practice_batch(count, "A2", if_lang)
+    return jsonify(sentences)
+
+@app.route('/api/evaluate_audio', methods=['POST'])
+@login_required
+def evaluate_audio():
+    if 'audio' not in request.files:
+        return jsonify({"error": "No audio file"}), 400
+        
+    audio_file = request.files['audio']
+    original_text = request.form.get('original_text', '')
+    
+    mime_type = audio_file.content_type or 'audio/webm'
+    audio_data = audio_file.read()
+    
+    if len(audio_data) == 0:
+        return jsonify({"error": "Empty audio file"}), 400
+    
+    lang_code = 'uk' if current_user.interface_language == 'ukr' else 'en'
+    
+    result = services.evaluate_audio_with_gemini(original_text, audio_data, lang_code, mime_type)
+    return jsonify(result)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

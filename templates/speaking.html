@@ -1,0 +1,435 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+    .speak-container {
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        min-height: 70vh; text-align: center; position: relative;
+    }
+    .mode-switch {
+        display: flex; background: var(--surface); border: 1px solid var(--border);
+        border-radius: 20px; padding: 4px; margin-bottom: 40px;
+    }
+    .mode-btn {
+        padding: 8px 24px; border-radius: 16px; border: none; background: transparent;
+        color: var(--on-surface); font-weight: 500; cursor: pointer; opacity: 0.6; transition: 0.2s;
+    }
+    .mode-btn.active {
+        background: var(--primary); color: var(--on-primary); opacity: 1; box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    .task-text {
+        font-size: 1.5rem; font-weight: 500; margin-bottom: 40px; min-height: 4rem;
+        color: var(--on-surface); transition: opacity 0.3s; padding: 0 10px;
+    }
+    .mic-wrapper {
+        position: relative; width: 140px; height: 140px; display: flex;
+        align-items: center; justify-content: center; margin-bottom: 40px;
+    }
+    .mic-btn {
+        width: 100px; height: 100px; border-radius: 50%; border: none; background: var(--primary);
+        color: var(--on-primary); font-size: 1.2rem; font-weight: 700; cursor: pointer;
+        box-shadow: 0 8px 20px rgba(25, 118, 210, 0.3); z-index: 2; transition: transform 0.2s, background-color 0.3s;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+    }
+    .mic-btn:active { transform: scale(0.95); }
+    .mic-ring {
+        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        width: 100px; height: 100px; border-radius: 50%; background: var(--primary); opacity: 0.3;
+        z-index: 1; transition: width 0.1s, height 0.1s;
+    }
+    .feedback-area { width: 100%; max-width: 400px; min-height: 100px; }
+    .user-transcript { font-style: italic; color: var(--on-surface); opacity: 0.8; margin-bottom: 12px; }
+    .correction-box {
+        background: rgba(76, 175, 80, 0.1); border: 1px solid #4CAF50; color: #2E7D32;
+        padding: 12px; border-radius: var(--radius); font-weight: 500; display: none;
+    }
+    .score-val { font-size: 2rem; line-height: 1; }
+    .rotating { animation: rotate 1.5s linear infinite; }
+    @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+</style>
+
+<div class="speak-container">
+    <div class="mode-switch">
+        <button class="mode-btn active">Sentences</button>
+        <button class="mode-btn" style="cursor: not-allowed; opacity: 0.3;">Small Talk 🔒</button>
+    </div>
+
+    <div class="task-text" id="task-display">Press Start to begin</div>
+
+    <div class="mic-wrapper">
+        <div class="mic-ring" id="visualizer"></div>
+        <button class="mic-btn" id="main-btn" onclick="handleMainClick()">
+            <span class="material-symbols-outlined" style="font-size: 40px;" id="btn-icon">play_arrow</span>
+            <div id="score-display" style="display:none;">
+                <div class="score-val" id="score-num">0</div>
+            </div>
+        </button>
+    </div>
+
+    <div class="feedback-area">
+        <div class="user-transcript" id="transcript-display"></div>
+        <div class="correction-box" id="correction-display"></div>
+    </div>
+</div>
+
+<script>
+// --- STATE ---
+let sentencesQueue = [];
+let currentSentence = null;
+let isRecording = false;
+let isProcessing = false;
+let isFetching = false;
+let isResultState = false; // Стан: показуємо результат (чекаємо клік Next)
+let mediaRecorder = null;
+let audioChunks = [];
+let audioContext = null;
+let analyser = null;
+let micStream = null;
+
+// Змінні для детектора тиші
+let silenceCheckInterval = null;
+let lastVoiceTimestamp = 0;
+const SILENCE_THRESHOLD = 1400; // 1.4 секунди
+const NOISE_LEVEL = 10; // Поріг шуму
+
+let gameStarted = false;
+
+// --- INIT ---
+window.onload = async () => {
+    // 1. При вході вантажимо 2 речення (швидкий старт)
+    loadSentences(2);
+    
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert("Audio recording not supported.");
+    }
+};
+
+async function loadSentences(count) {
+    if (isFetching) return;
+    isFetching = true;
+    try {
+        const res = await fetch('/api/get_practice_batch', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ count: count })
+        });
+        const data = await res.json();
+        if (data && Array.isArray(data) && data.length > 0) {
+            sentencesQueue.push(...data);
+            if (gameStarted && !currentSentence) nextRound();
+        }
+    } catch (e) { console.error(e); } finally { isFetching = false; }
+}
+
+// --- LOGIC ---
+
+async function handleMainClick() {
+    // 1. Якщо ми в стані результату (навіть якщо кнопка вже синя), клік веде далі
+    if (isResultState) {
+        nextRound();
+        return;
+    }
+    if (isProcessing) return;
+
+    if (isRecording) {
+        stopRecording();
+        return;
+    }
+    
+    // 2. Старт гри
+    if (!gameStarted) {
+        gameStarted = true;
+        loadSentences(10); // Тягнемо основний батч
+        nextRound();
+    } else {
+        nextRound();
+    }
+}
+
+async function nextRound() {
+    isResultState = false;
+
+    // 3. Довантаження, якщо залишилось мало
+    if (sentencesQueue.length <= 5 && !isFetching) {
+        loadSentences(10);
+    }
+
+    if (sentencesQueue.length === 0) {
+        if (!isFetching) loadSentences(3);
+        document.getElementById('task-display').innerText = "Loading sentences...";
+        return;
+    }
+    
+    // Reset UI
+    document.getElementById('transcript-display').innerText = '';
+    document.getElementById('correction-display').style.display = 'none';
+    document.getElementById('score-display').style.display = 'none';
+    updateUIState('idle');
+    
+    currentSentence = sentencesQueue.shift();
+    if (!currentSentence) return;
+
+    // Show Text
+    const taskEl = document.getElementById('task-display');
+    taskEl.style.opacity = 0;
+    setTimeout(() => {
+        taskEl.innerText = currentSentence.source;
+        taskEl.style.opacity = 1;
+    }, 300);
+    
+    // Speak Source
+    const langCode = '{{ "uk" if lang == "ukr" else "en" }}';
+    await playAudio(currentSentence.source, langCode);
+    
+    playBeep();
+    startRecording();
+}
+
+async function startRecording() {
+    try {
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const options = MediaRecorder.isTypeSupported('audio/webm') ? { mimeType: 'audio/webm' } : {};
+        mediaRecorder = new MediaRecorder(micStream, options);
+        audioChunks = [];
+
+        mediaRecorder.ondataavailable = event => {
+            if (event.data.size > 0) audioChunks.push(event.data);
+        };
+
+        mediaRecorder.onstop = async () => {
+            const mimeType = mediaRecorder.mimeType || 'audio/webm';
+            const audioBlob = new Blob(audioChunks, { type: mimeType });
+            processAudioBlob(audioBlob);
+            micStream.getTracks().forEach(track => track.stop());
+        };
+
+        mediaRecorder.start();
+        isRecording = true;
+        updateUIState('listening');
+        
+        initAudioAndSilenceDetector(micStream);
+
+    } catch (e) {
+        console.error(e);
+        window.toast.show("Mic access denied", "error");
+        updateUIState('idle');
+    }
+}
+
+function stopRecording() {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+    }
+    isRecording = false;
+    isProcessing = true;
+    updateUIState('processing');
+    
+    if (silenceCheckInterval) clearInterval(silenceCheckInterval);
+}
+
+// --- SILENCE DETECTION ---
+async function initAudioAndSilenceDetector(stream) {
+    try {
+        if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioContext.state === 'suspended') await audioContext.resume();
+        
+        analyser = audioContext.createAnalyser();
+        const src = audioContext.createMediaStreamSource(stream);
+        src.connect(analyser);
+        analyser.fftSize = 256;
+        
+        drawVisualizer();
+        
+        lastVoiceTimestamp = Date.now();
+        
+        if (silenceCheckInterval) clearInterval(silenceCheckInterval);
+        
+        silenceCheckInterval = setInterval(() => {
+            if (!isRecording) return;
+            
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            analyser.getByteFrequencyData(dataArray);
+            
+            let sum = 0;
+            for(let i = 0; i < bufferLength; i++) sum += dataArray[i];
+            let average = sum / bufferLength;
+            
+            // Якщо голос
+            if (average > NOISE_LEVEL) {
+                lastVoiceTimestamp = Date.now();
+            } else {
+                // Якщо тиша > 1.4с
+                if (Date.now() - lastVoiceTimestamp > SILENCE_THRESHOLD) {
+                    stopRecording();
+                }
+            }
+        }, 100); 
+        
+    } catch (e) { console.error(e); }
+}
+
+
+async function processAudioBlob(blob) {
+    const formData = new FormData();
+    formData.append('audio', blob);
+    formData.append('original_text', currentSentence.source);
+
+    try {
+        const res = await fetch('/api/evaluate_audio', { method: 'POST', body: formData });
+        const rawData = await res.json();
+        
+        // ФІКС: Обробка масиву або об'єкту
+        let result = rawData;
+        if (Array.isArray(rawData)) {
+            result = rawData.length > 0 ? rawData[0] : null;
+        }
+
+        if (!result) throw new Error("Empty response");
+        showFeedback(result);
+        
+    } catch (e) {
+        console.error(e);
+        showFeedback({
+            score: 0,
+            feedback: "Error: " + e.message,
+            transcribed_text: ""
+        });
+    }
+}
+
+async function showFeedback(result) {
+    isProcessing = false;
+    isResultState = true; 
+
+    if (result.transcribed_text) {
+        document.getElementById('transcript-display').innerText = `You: "${result.transcribed_text}"`;
+    }
+
+    let score = (result.score !== undefined && result.score !== null) ? result.score : 0;
+    
+    // Колір кнопки
+    const btn = document.getElementById('main-btn');
+    if (score >= 80) btn.style.backgroundColor = '#4CAF50'; 
+    else if (score >= 50) btn.style.backgroundColor = '#FFC107'; 
+    else btn.style.backgroundColor = '#f44336'; 
+
+    // Показуємо оцінку
+    updateUIState('next');
+    document.getElementById('score-num').innerText = score;
+
+    const langCode = '{{ "uk" if lang == "ukr" else "en" }}';
+    
+    if (result.feedback && result.feedback.startsWith('Error:')) {
+         document.getElementById('correction-display').innerText = result.feedback;
+         document.getElementById('correction-display').style.display = 'block';
+    } else {
+        if (result.feedback) await playAudio(result.feedback, langCode);
+        
+        if (result.correction && score < 100) {
+            const corrBox = document.getElementById('correction-display');
+            corrBox.innerText = result.correction;
+            corrBox.style.display = 'block';
+            await new Promise(r => setTimeout(r, 500));
+            await playAudio(result.correction, 'de');
+        } else if (score === 100) {
+            await playAudio("Correct!", 'en');
+        }
+    }
+    
+    // Авто-скидання кнопки через 3 сек, але текст лишається
+    setTimeout(() => {
+        if (isResultState) {
+            const btn = document.getElementById('main-btn');
+            const scoreDiv = document.getElementById('score-display');
+            const icon = document.getElementById('btn-icon');
+            
+            btn.style.backgroundColor = 'var(--primary)';
+            scoreDiv.style.display = 'none';
+            icon.style.display = 'block';
+            icon.innerText = 'play_arrow'; // Start/Next icon
+        }
+    }, 3000);
+}
+
+function updateUIState(state) {
+    const btn = document.getElementById('main-btn');
+    const ring = document.getElementById('visualizer');
+    const icon = document.getElementById('btn-icon');
+    const scoreDiv = document.getElementById('score-display');
+    
+    icon.classList.remove('rotating');
+
+    if (state === 'listening') {
+        btn.style.backgroundColor = '#d32f2f'; 
+        icon.style.display = 'block';
+        icon.innerText = 'stop';
+        ring.style.display = 'block';
+        scoreDiv.style.display = 'none';
+    } else if (state === 'processing') {
+        btn.style.backgroundColor = '#9E9E9E'; 
+        ring.style.display = 'none';
+        icon.style.display = 'block';
+        icon.innerText = 'sync';
+        icon.classList.add('rotating');
+        scoreDiv.style.display = 'none';
+    } else if (state === 'next') {
+        ring.style.display = 'none';
+        icon.style.display = 'none';
+        scoreDiv.style.display = 'block';
+    } else {
+        // IDLE
+        btn.style.backgroundColor = 'var(--primary)';
+        ring.style.display = 'none';
+        icon.style.display = 'block';
+        icon.innerText = 'mic';
+        scoreDiv.style.display = 'none';
+    }
+}
+
+async function playAudio(text, lang) {
+    if(!text) return;
+    try {
+        const res = await fetch('/api/tts', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({text: text, lang: lang})
+        });
+        const data = await res.json();
+        const audio = new Audio(data.url);
+        return new Promise(resolve => {
+            audio.onended = resolve;
+            audio.onerror = resolve;
+            audio.play();
+        });
+    } catch(e) { console.error(e); }
+}
+
+function playBeep() {
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.value = 600;
+        gain.gain.value = 0.1;
+        osc.start();
+        setTimeout(() => osc.stop(), 150);
+    } catch(e) {}
+}
+
+function drawVisualizer() {
+    if (!isRecording) return;
+    const bufferLength = analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+    analyser.getByteFrequencyData(dataArray);
+    let sum = 0;
+    for(let i = 0; i < bufferLength; i++) sum += dataArray[i];
+    let average = sum / bufferLength;
+    const scale = 1 + (average / 150); 
+    const ring = document.getElementById('visualizer');
+    ring.style.transform = `translate(-50%, -50%) scale(${scale})`;
+    requestAnimationFrame(drawVisualizer);
+}
+</script>
+{% endblock %}

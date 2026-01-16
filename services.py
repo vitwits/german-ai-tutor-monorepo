@@ -1,15 +1,18 @@
 import os
 import re
 import json
+import random
 from google import genai
+from google.genai import types
 from google.cloud import texttospeech
 from dotenv import load_dotenv
 
 load_dotenv()
 
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+# Ініціалізація клієнта (New SDK)
+client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
 
-# Визначаємо чіткі інструкції для кожного рівня
+# ПОВНІ ПРАВИЛА CEFR
 CEFR_GUIDELINES = {
     "A1": "Use natural but simple sentences (5-9 words). Avoid 3-word sentences. Structure: Subject-Verb-Complement/Object. Present tense. Use common nouns and basic adjectives (e.g., instead of 'Das Kino ist klein', use 'Das kleine Kino ist sehr modern').",
     "A2": "Sentences 8-12 words. Avoid 6-word sentences. Use simple connectors (und, aber, oder). Use Perfekt for past tense. Topics: shopping, work, immediate environment.",
@@ -25,14 +28,20 @@ def get_tts_client():
     return None
 
 def clean_json_response(text):
-    match = re.search(r'\{.*\}', text, re.DOTALL)
-    return match.group(0) if match else text
+    # Покращена очистка: шукає [списки] або {об'єкти}
+    match_list = re.search(r'\[.*\]', text, re.DOTALL)
+    if match_list: return match_list.group(0)
+    
+    match_obj = re.search(r'\{.*\}', text, re.DOTALL)
+    if match_obj: return match_obj.group(0)
+    
+    return text
 
 def generate_german_text(topic, count, level, style='neutral'):
     # Отримуємо специфічні правила для обраного рівня або дефолтні для B1
     level_rules = CEFR_GUIDELINES.get(level, CEFR_GUIDELINES["B1"])
     
-    # Визначаємо інструкцію для стилю
+    # Визначаємо інструкцію для стилю (ПОВНА ВЕРСІЯ)
     style_instruction = ""
     if style == 'formal':
         style_instruction = "Tone: Formal, academic, or professional. Use complex sentence structures suitable for the level."
@@ -90,17 +99,138 @@ def generate_german_text(topic, count, level, style='neutral'):
       ]
     }}"""
     
-    response = client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=prompt,
-        config={
-            "response_mime_type": "application/json",
-            "temperature": 0.7  # Трохи зменшуємо креативність для кращого дотримання правил
+    try:
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                temperature=0.7
+            )
+        )
+        return json.loads(clean_json_response(response.text))
+    except Exception as e:
+        print(f"Gen Error: {e}")
+        return {"sentences": [], "title_ua": "Error", "title_de": "Error", "title_en": "Error"}
+
+def get_tts_audio(text, lang='de'):
+    """
+    Генерує аудіо через Google TTS.
+    lang: 'de' (German), 'uk' (Ukrainian), 'en' (English)
+    """
+    if not text: return None
+    tts_client = get_tts_client()
+    if not tts_client: return None
+
+    if lang == 'de':
+        language_code = "de-DE"
+        name = "de-DE-Polyglot-1" 
+    elif lang == 'uk':
+        language_code = "uk-UA"
+        name = "uk-UA-Standard-A"
+    else:
+        language_code = "en-US"
+        name = "en-US-Standard-H"
+
+    s_input = texttospeech.SynthesisInput(text=text)
+    voice = texttospeech.VoiceSelectionParams(language_code=language_code, name=name)
+    audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
+    
+    response = tts_client.synthesize_speech(input=s_input, voice=voice, audio_config=audio_config)
+    return response.audio_content
+
+def generate_practice_batch(count, level, interface_lang):
+    """Генерує список речень для практики з випадковими темами"""
+    
+    topics_pool = [
+        "Shopping & Groceries", "Travel by Train", "At the Restaurant", 
+        "Job Interview", "Walking the Dog", "Cooking Dinner", 
+        "Tech Support", "Planning a Holiday", "At the Doctor", 
+        "Meeting Friends", "Hobbies & Sports", "Weather Forecast",
+        "Public Transport", "Renting an Apartment", "Cinema & Movies"
+    ]
+    
+    selected_topics = ", ".join(random.sample(topics_pool, 3))
+
+    prompt = f"""Generate {count} unique, natural German sentences for a learner (Level {level}).
+    Current Topics: {selected_topics}. Mix them.
+    
+    Output JSON ONLY (A list of objects):
+    [
+        {{
+            "de": "German sentence",
+            "source": "Translation in {interface_lang}"
+        }}
+    ]
+    """
+    
+    try:
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                temperature=0.9
+            )
+        )
+        cleaned = clean_json_response(response.text)
+        return json.loads(cleaned)
+    except Exception as e:
+        print(f"Batch Gen Error: {e}")
+        return [{"de": "Hallo, wie geht es dir?", "source": "Привіт, як справи?"}]
+    
+def evaluate_audio_with_gemini(original_text, audio_bytes, interface_lang, mime_type='audio/webm'):
+    """Оцінює аудіо-файл через Gemini"""
+    feedback_lang = "Ukrainian" if interface_lang == 'uk' else "English"
+    
+    prompt = f"""
+    You are a German teacher. Listen to the user's audio.
+    Task: The user is trying to translate this sentence into German: "{original_text}".
+    
+    1. Transcribe EXACTLY what the user said in German.
+    2. Compare it to the correct German translation of "{original_text}".
+    3. Evaluate grammar, vocabulary, and pronunciation.
+    4. If the audio is silent or unintelligible, set score to 0.
+    
+    Output JSON:
+    {{
+        "transcribed_text": "What user actually said",
+        "score": 0-100 (integer),
+        "feedback": "Short, encouraging phrase feedback in {feedback_lang} (max 3-5 words) or one word, don't use german language",
+        "correction": "Correct German version"
+    }}
+    """
+    
+    try:
+        # Використовуємо types.Blob для inline_data
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=[
+                prompt,
+                types.Part(
+                    inline_data=types.Blob(
+                        mime_type=mime_type,
+                        data=audio_bytes
+                    )
+                )
+            ],
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json"
+            )
+        )
+        return json.loads(clean_json_response(response.text))
+    except Exception as e:
+        error_msg = str(e)
+        print(f"Audio Eval Error: {error_msg}")
+        return {
+            "score": 0, 
+            "feedback": f"Error: {error_msg[:50]}...", 
+            "correction": None, 
+            "transcribed_text": ""
         }
-    )
-    return json.loads(clean_json_response(response.text))
 
 def translate_word(text, ctx):
+    # ПОВНИЙ, ОРИГІНАЛЬНИЙ ПРОМПТ
     prompt = f"""Translate the German word or phrase: "{text}". Context: "{ctx}".
 
     STRICT GRAMMAR RULES (NO EXCEPTIONS):
@@ -149,9 +279,29 @@ def translate_word(text, ctx):
       "level": "A1-C2"
     }}"""
     
-    response = client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=prompt,
-        config={'response_mime_type': 'application/json'}
-    )
-    return json.loads(clean_json_response(response.text))
+    try:
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json"
+            )
+        )
+        return json.loads(clean_json_response(response.text))
+    except Exception as e:
+        print(f"Translate Error: {e}")
+        return {"display": text, "ua": "Error", "en": "Error", "level": "?"}
+
+def explain_grammar_text(prompt_text):
+    """
+    Виконує запит на пояснення граматики.
+    """
+    try:
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt_text
+        )
+        return response.text
+    except Exception as e:
+        print(f"Grammar Error: {e}")
+        return None

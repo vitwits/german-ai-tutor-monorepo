@@ -102,9 +102,11 @@
     <div class="nav-mobile">
         <a href="/" id="nav-home"><span class="material-symbols-outlined">home</span>{{ ui.main }}</a>
         <a href="/library" id="nav-lib"><span class="material-symbols-outlined">menu_book</span>{{ ui.library }}</a>
+        <a href="/speaking" id="nav-speak"><span class="material-symbols-outlined">mic</span>Voice</a>
         <a href="/vocab" id="nav-voc"><span class="material-symbols-outlined">style</span>{{ ui.vocab }}</a>
     </div>
     {% endif %}
+
     <script>
         function toggleT() {
             document.getElementById('b').classList.toggle('dark-mode');
@@ -127,10 +129,16 @@
             }
         });
         updateIcon();
+
+        // --- ЛОГІКА ПІДСВІТКИ АКТИВНОЇ КНОПКИ ---
         const path = window.location.pathname;
         if(path === '/') document.getElementById('nav-home')?.classList.add('active');
         if(path === '/library') document.getElementById('nav-lib')?.classList.add('active');
         if(path === '/vocab') document.getElementById('nav-voc')?.classList.add('active');
+        if(path === '/speaking') document.getElementById('nav-speak')?.classList.add('active');
+        
+        // Додаємо перевірку для нової сторінки
+        if(path === '/speaking') document.getElementById('nav-speak')?.classList.add('active');
     </script>
 
     <!-- Confirmation dialogie -->
