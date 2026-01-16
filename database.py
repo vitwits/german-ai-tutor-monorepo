@@ -21,12 +21,20 @@ def init_db():
         except sqlite3.OperationalError:
             pass # Колонка вже існує
 
+        # 1.1 Додаємо колонку рівня мови (Global Level)
+        try:
+            conn.execute('ALTER TABLE users ADD COLUMN level TEXT DEFAULT "A2"')
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass
+
         # Таблиця користувачів
         conn.execute('''CREATE TABLE IF NOT EXISTS users (
             id TEXT PRIMARY KEY,
             email TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
-            interface_language TEXT DEFAULT 'ukr'
+            interface_language TEXT DEFAULT 'ukr',
+            level TEXT DEFAULT 'A2'
         )''')
         
         # Таблиця текстів

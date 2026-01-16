@@ -165,7 +165,7 @@ UI_STRINGS = {
 class User(UserMixin):
     def __init__(self, id, email, interface_language='ukr', 
                  library_view_mode='list', library_per_page=20,
-                 vocab_view_mode='list', vocab_per_page=20):
+                 vocab_view_mode='list', vocab_per_page=20, level='A2'):
         self.id = id
         self.email = email
         self.interface_language = interface_language or 'ukr'
@@ -173,6 +173,7 @@ class User(UserMixin):
         self.library_per_page = library_per_page
         self.vocab_view_mode = vocab_view_mode
         self.vocab_per_page = vocab_per_page
+        self.level = level
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -186,8 +187,9 @@ def load_user(user_id):
             lpp = u['library_per_page'] if 'library_per_page' in keys and u['library_per_page'] else 20
             vvm = u['vocab_view_mode'] if 'vocab_view_mode' in keys and u['vocab_view_mode'] else 'list'
             vpp = u['vocab_per_page'] if 'vocab_per_page' in keys and u['vocab_per_page'] else 20
+            lvl = u['level'] if 'level' in keys and u['level'] else 'A2'
             
-            return User(u['id'], u['email'], lang, lvm, lpp, vvm, vpp)
+            return User(u['id'], u['email'], lang, lvm, lpp, vvm, vpp, lvl)
     return None
 
 @app.context_processor
@@ -215,8 +217,8 @@ def register():
                 return redirect(url_for('register'))
             
             uid = str(uuid.uuid4())
-            conn.execute('INSERT INTO users (id, email, password_hash, interface_language) VALUES (?, ?, ?, ?)',
-                         (uid, email, generate_password_hash(password), 'ukr'))
+            conn.execute('INSERT INTO users (id, email, password_hash, interface_language, level) VALUES (?, ?, ?, ?, ?)',
+                         (uid, email, generate_password_hash(password), 'ukr', 'A2'))
             conn.commit()
         flash('Успішна реєстрація! Увійдіть.')
         return redirect(url_for('login'))
@@ -231,7 +233,7 @@ def login():
             u = conn.execute('SELECT * FROM users WHERE email = ?', (email,)).fetchone()
             if u and check_password_hash(u['password_hash'], password):
                 lang = u['interface_language'] if 'interface_language' in u.keys() and u['interface_language'] else 'ukr'
-                login_user(User(u['id'], u['email'], lang))
+                login_user(load_user(u['id'])) # Використовуємо load_user для повного завантаження полів
                 return redirect(url_for('index'))
         flash('Невірний email або пароль')
     return render_template('login.html')
@@ -265,6 +267,18 @@ def settings():
                 return redirect(next_url)
             return redirect(url_for('index')) # Fallback
     return render_template('settings.html', next_url=next_url)
+
+@app.route('/api/update_level', methods=['POST'])
+@login_required
+def update_level():
+    new_level = request.json.get('level')
+    if new_level in ['A1', 'A2', 'B1', 'B2', 'C1']:
+        with get_db() as conn:
+            conn.execute('UPDATE users SET level = ? WHERE id = ?', (new_level, current_user.id))
+            conn.commit()
+        current_user.level = new_level
+        return jsonify({"ok": True})
+    return jsonify({"error": "Invalid level"}), 400
 
 @app.route('/api/generate', methods=['POST'])
 @login_required
@@ -588,7 +602,8 @@ def get_practice_batch():
     lang_map = {'ukr': 'Ukrainian', 'eng': 'English'}
     if_lang = lang_map.get(current_user.interface_language, 'Ukrainian')
     
-    sentences = services.generate_practice_batch(count, "A2", if_lang)
+    # Використовуємо глобальний рівень користувача
+    sentences = services.generate_practice_batch(count, current_user.level, if_lang)
     return jsonify(sentences)
 
 @app.route('/api/evaluate_audio', methods=['POST'])

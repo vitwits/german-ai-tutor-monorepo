@@ -68,6 +68,23 @@
         .dropdown-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; text-decoration: none; color: var(--on-surface); font-size: 0.9rem; transition: background 0.2s; }
         .dropdown-item:hover { background-color: rgba(0,0,0,0.05); }
         body.dark-mode .dropdown-item:hover { background-color: rgba(255,255,255,0.1); }
+
+        /* --- LEVEL TILES --- */
+        .level-tiles { display: flex; gap: 4px; margin-right: 12px; }
+        .lvl-tile {
+            width: 28px; height: 28px;
+            display: flex; align-items: center; justify-content: center;
+            border-radius: 4px; font-size: 0.75rem; font-weight: 700;
+            cursor: pointer; color: white; opacity: 0.3; transition: all 0.2s;
+            border: none; padding: 0;
+        }
+        .lvl-tile:hover { opacity: 0.7; transform: translateY(-1px); }
+        .lvl-tile.active { opacity: 1; transform: scale(1.1); box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        .lvl-a1 { background-color: #8BC34A; }
+        .lvl-a2 { background-color: #4CAF50; }
+        .lvl-b1 { background-color: #29B6F6; }
+        .lvl-b2 { background-color: #1976D2; }
+        .lvl-c1 { background-color: #D32F2F; }
     </style>
 </head>
 <body id="b">
@@ -75,6 +92,16 @@
     <div class="header">
         <a href="/" class="brand" style="text-decoration: none; color: var(--on-surface);"><span class="material-symbols-outlined" style="color:var(--primary)">school</span>Gemini <span>DE</span></a>
         <div style="display: flex; align-items: center; gap: 8px;">
+            {% if current_user.is_authenticated %}
+            <div class="level-tiles">
+                {% for l in ['A1', 'A2', 'B1', 'B2', 'C1'] %}
+                <button class="lvl-tile lvl-{{l.lower()}} {% if current_user.level == l %}active{% endif %}" 
+                        onclick="setLevel('{{l}}')" id="lvl-{{l}}">
+                    {{l}}
+                </button>
+                {% endfor %}
+            </div>
+            {% endif %}
             <button class="btn-text" onclick="toggleT()"><span class="material-symbols-outlined" id="t-icon">dark_mode</span></button>
             {% if current_user.is_authenticated %}
             <div style="position: relative;">
@@ -139,6 +166,22 @@
         
         // Додаємо перевірку для нової сторінки
         if(path === '/speaking') document.getElementById('nav-speak')?.classList.add('active');
+
+        // --- ЗМІНА РІВНЯ ---
+        async function setLevel(lvl) {
+            // Оптимістичне оновлення UI
+            document.querySelectorAll('.lvl-tile').forEach(t => t.classList.remove('active'));
+            document.getElementById('lvl-' + lvl).classList.add('active');
+
+            try {
+                await fetch('/api/update_level', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({level: lvl})
+                });
+                window.dispatchEvent(new CustomEvent('level-updated', { detail: lvl }));
+            } catch(e) { console.error(e); }
+        }
     </script>
 
     <!-- Confirmation dialogie -->

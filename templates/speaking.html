@@ -79,7 +79,8 @@ const UI = {
     silence: '{{ ui.speaking_silence }}',
     mic_denied: '{{ ui.speaking_mic_denied }}',
     audio_not_supported: '{{ ui.speaking_audio_not_supported }}',
-    error_prefix: '{{ ui.speaking_error }}'
+    error_prefix: '{{ ui.speaking_error }}',
+    press_start: '{{ ui.speaking_press_start }}'
 };
 
 // --- STATE ---
@@ -460,6 +461,37 @@ function drawVisualizer() {
     ring.style.transform = `translate(-50%, -50%) scale(${scale})`;
     requestAnimationFrame(drawVisualizer);
 }
+
+window.addEventListener('level-updated', async () => {
+    // 1. Hard stop recording if active
+    if (isRecording && mediaRecorder) {
+        mediaRecorder.onstop = null; 
+        mediaRecorder.stop();
+        if(micStream) micStream.getTracks().forEach(track => track.stop());
+    }
+    if (silenceCheckInterval) clearInterval(silenceCheckInterval);
+    
+    // 2. Reset State
+    isRecording = false;
+    isProcessing = false;
+    isResultState = false;
+    isRetryState = false;
+    gameStarted = false;
+    sentencesQueue = [];
+    currentSentence = null;
+    isFetching = false; // Force allow new fetch
+    
+    // 3. Reset UI
+    updateUIState('idle');
+    document.getElementById('transcript-display').innerText = '';
+    document.getElementById('correction-display').style.display = 'none';
+    document.getElementById('score-display').style.display = 'none';
+    document.getElementById('task-display').innerText = UI.loading;
+    
+    // 4. Fetch new sentences & Restore UI
+    await loadSentences(2);
+    document.getElementById('task-display').innerText = UI.press_start;
+});
 </script>
 
 {% endblock %}

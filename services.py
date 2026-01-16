@@ -38,8 +38,10 @@ def clean_json_response(text):
     return text
 
 def generate_german_text(topic, count, level, style='neutral'):
-    # Отримуємо специфічні правила для обраного рівня або дефолтні для B1
-    level_rules = CEFR_GUIDELINES.get(level, CEFR_GUIDELINES["B1"])
+    # Використовуємо змінну level. Якщо значення некоректне - фолбек на A2 (глобальний дефолт)
+    if level not in CEFR_GUIDELINES:
+        level = "A2"
+    level_rules = CEFR_GUIDELINES[level]
     
     # Визначаємо інструкцію для стилю (ПОВНА ВЕРСІЯ)
     style_instruction = ""
@@ -127,8 +129,8 @@ def get_tts_audio(text, lang='de'):
         name = "de-DE-Standard-B" 
     elif lang == 'uk':
         language_code = "uk-UA"
-        # name = "uk-UA-Standard-A"
-        name = "uk-UA-Wavenet-A"
+        name = "uk-UA-Standard-A"
+        # name = "uk-UA-Wavenet-A"
     else:
         language_code = "en-US"
         name = "en-US-Standard-C"
@@ -143,6 +145,11 @@ def get_tts_audio(text, lang='de'):
 def generate_practice_batch(count, level, interface_lang):
     """Генерує список речень для практики з випадковими темами"""
     
+    # Використовуємо змінну level. Якщо значення некоректне - фолбек на A2
+    if level not in CEFR_GUIDELINES:
+        level = "A2"
+    level_rules = CEFR_GUIDELINES[level]
+    
     topics_pool = [
         "Shopping & Groceries", "Travel by Train", "At the Restaurant", 
         "Job Interview", "Walking the Dog", "Cooking Dinner", 
@@ -154,7 +161,14 @@ def generate_practice_batch(count, level, interface_lang):
     selected_topics = ", ".join(random.sample(topics_pool, 3))
 
     prompt = f"""Generate {count} unique, natural German sentences for a learner (Level {level}).
-    Current Topics: {selected_topics}. Mix them.
+    Focus on these topics: {selected_topics}.
+    
+    STRICT LINGUISTIC REQUIREMENTS FOR LEVEL {level}:
+    {level_rules}
+    
+    INSTRUCTIONS:
+    1. Sentences must be grammatically correct and sound natural.
+    2. "source" field must be the translation in {interface_lang}.
     
     Output JSON ONLY (A list of objects):
     [
@@ -171,14 +185,15 @@ def generate_practice_batch(count, level, interface_lang):
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
-                temperature=0.9
+                temperature=0.85
             )
         )
         cleaned = clean_json_response(response.text)
         return json.loads(cleaned)
     except Exception as e:
         print(f"Batch Gen Error: {e}")
-        return [{"de": "Hallo, wie geht es dir?", "source": "Привіт, як справи?"}]
+        fallback_text = "Hello, how are you?" if "English" in interface_lang else "Привіт, як справи?"
+        return [{"de": "Hallo, wie geht es dir?", "source": fallback_text}]
     
 def evaluate_audio_with_gemini(original_text, audio_bytes, interface_lang, mime_type='audio/webm'):
     """Оцінює аудіо-файл через Gemini. Відновлено гнучку логіку вчителя."""
