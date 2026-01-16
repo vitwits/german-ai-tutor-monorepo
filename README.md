@@ -52,6 +52,7 @@ pip install flask flask-login flask-bcrypt python-dotenv
 # Google пакети
 pip install google-generativeai
 pip install google-cloud-texttospeech
+pip install azure-cognitiveservices-speech
 ```
 
 ### Окремо для Apple Silicon (M1/M2/M3/M4), якщо виникають проблеми з `google-cloud-texttospeech`:
@@ -77,6 +78,10 @@ GOOGLE_API_KEY=твій_ключ_для_gemini_generative_ai
 
 # Якщо використовується Text-to-Speech (зазвичай потрібно)
 GOOGLE_APPLICATION_CREDENTIALS=/шлях/до/твого/service-account.json
+
+# Azure Speech (для української озвучки)
+AZURE_SPEECH_KEY=EmA4Xsh4MX9eB17KvNogLfeyGK0kZDL6pfux5FkqqzK6r8QCSamuJQQJ99CAACPV0roXJ3w3AAAYACOGRyja
+AZURE_SPEECH_REGION=germanywestcentral
 ```
 
 - **Gemini** → достатньо лише `GOOGLE_API_KEY`  

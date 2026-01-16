@@ -21,6 +21,13 @@ def init_db():
         except sqlite3.OperationalError:
             pass # Колонка вже існує
 
+        # 1.2 Додаємо колонку кредитів (Billing)
+        try:
+            conn.execute('ALTER TABLE users ADD COLUMN credits REAL DEFAULT 1000.0')
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass
+
         # 1.1 Додаємо колонку рівня мови (Global Level)
         try:
             conn.execute('ALTER TABLE users ADD COLUMN level TEXT DEFAULT "A2"')
@@ -34,7 +41,8 @@ def init_db():
             email TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
             interface_language TEXT DEFAULT 'ukr',
-            level TEXT DEFAULT 'A2'
+            level TEXT DEFAULT 'A2',
+            credits REAL DEFAULT 1000.0
         )''')
         
         # Таблиця текстів

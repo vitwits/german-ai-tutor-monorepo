@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 
 from database import get_db, init_db
 import services
+import billing
 
 load_dotenv()
 init_db()
@@ -165,7 +166,7 @@ UI_STRINGS = {
 class User(UserMixin):
     def __init__(self, id, email, interface_language='ukr', 
                  library_view_mode='list', library_per_page=20,
-                 vocab_view_mode='list', vocab_per_page=20, level='A2'):
+                 vocab_view_mode='list', vocab_per_page=20, level='A2', credits=1000.0):
         self.id = id
         self.email = email
         self.interface_language = interface_language or 'ukr'
@@ -174,6 +175,7 @@ class User(UserMixin):
         self.vocab_view_mode = vocab_view_mode
         self.vocab_per_page = vocab_per_page
         self.level = level
+        self.credits = credits
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -188,8 +190,9 @@ def load_user(user_id):
             vvm = u['vocab_view_mode'] if 'vocab_view_mode' in keys and u['vocab_view_mode'] else 'list'
             vpp = u['vocab_per_page'] if 'vocab_per_page' in keys and u['vocab_per_page'] else 20
             lvl = u['level'] if 'level' in keys and u['level'] else 'A2'
+            crd = u['credits'] if 'credits' in keys and u['credits'] is not None else 1000.0
             
-            return User(u['id'], u['email'], lang, lvm, lpp, vvm, vpp, lvl)
+            return User(u['id'], u['email'], lang, lvm, lpp, vvm, vpp, lvl, crd)
     return None
 
 @app.context_processor
@@ -217,8 +220,8 @@ def register():
                 return redirect(url_for('register'))
             
             uid = str(uuid.uuid4())
-            conn.execute('INSERT INTO users (id, email, password_hash, interface_language, level) VALUES (?, ?, ?, ?, ?)',
-                         (uid, email, generate_password_hash(password), 'ukr', 'A2'))
+            conn.execute('INSERT INTO users (id, email, password_hash, interface_language, level, credits) VALUES (?, ?, ?, ?, ?, ?)',
+                         (uid, email, generate_password_hash(password), 'ukr', 'A2', 1000.0))
             conn.commit()
         flash('Успішна реєстрація! Увійдіть.')
         return redirect(url_for('login'))
@@ -284,6 +287,11 @@ def update_level():
 @login_required
 def generate():
     req = request.json
+    
+    # BILLING: Списання за генерацію уроку
+    new_bal = billing.deduct_credits(current_user.id, billing.PRICING['lesson_generation'])
+    current_user.credits = new_bal # Оновлюємо сесію
+
     # Передаємо параметр style
     data = services.generate_german_text(req['topic'], req['count'], req['level'], req.get('style', 'neutral'))
     
@@ -293,7 +301,7 @@ def generate():
         conn.execute('INSERT INTO texts (id, user_id, title, level, content_json) VALUES (?,?,?,?,?)',
                      (tid, current_user.id, title_json, req['level'], json.dumps(data['sentences'])))
         conn.commit()
-    return jsonify({"id": tid})
+    return jsonify({"id": tid, "credits": new_bal})
 
 @app.route('/api/explain_grammar', methods=['POST'])
 @login_required
@@ -353,7 +361,11 @@ def explain_grammar():
                              (text_id, sentence_index, lang, explanation))
                 conn.commit()
         
-        return jsonify({"explanation": explanation})
+        # BILLING
+        new_bal = billing.deduct_credits(current_user.id, billing.PRICING['grammar_explanation'])
+        current_user.credits = new_bal
+        
+        return jsonify({"explanation": explanation, "credits": new_bal})
     else:
         return jsonify({"error": "Error generating explanation"}), 500
     
@@ -447,6 +459,12 @@ def view_text(tid):
 @login_required
 def quick_translate():
     req = request.json
+    
+    # BILLING
+    cost = billing.calculate_translation_cost(req.get('text', ''))
+    new_bal = billing.deduct_credits(current_user.id, cost)
+    current_user.credits = new_bal
+
     word_data = services.translate_word(req['text'], req['ctx'])
     wid = str(uuid.uuid4())
     
@@ -466,7 +484,7 @@ def quick_translate():
                       word_data['display'], word_data['ua'], word_data['en'], req['ctx'],
                       sentence_index, start_index, end_index, word_data.get('level') or word_data.get('Level')))
         conn.commit()
-    return jsonify({"ok": True})
+    return jsonify({"ok": True, "credits": new_bal})
 
 @app.route('/api/update_word', methods=['POST'])
 @login_required
@@ -576,15 +594,23 @@ def tts():
     filename = f"{file_hash}.mp3"
     filepath = os.path.join(AUDIO_DIR, filename)
     
+    new_bal = current_user.credits
+
     if not os.path.exists(filepath):
         audio_content = services.get_tts_audio(text, lang)
         if audio_content:
+            # BILLING: Тільки якщо генеруємо нове аудіо
+            provider = 'azure' if lang == 'uk' else 'google'
+            cost = billing.calculate_tts_cost(text, provider)
+            new_bal = billing.deduct_credits(current_user.id, cost)
+            current_user.credits = new_bal
+            
             with open(filepath, "wb") as out:
                 out.write(audio_content)
         else:
             return jsonify({"error": "TTS failed"}), 500
             
-    return jsonify({"url": f"/audio/{filename}"})
+    return jsonify({"url": f"/audio/{filename}", "credits": new_bal})
 
 @app.route('/audio/<filename>')
 def serve_audio(filename):
@@ -624,6 +650,12 @@ def evaluate_audio():
     lang_code = 'uk' if current_user.interface_language == 'ukr' else 'en'
     
     result = services.evaluate_audio_with_gemini(original_text, audio_data, lang_code, mime_type)
+    
+    # BILLING
+    new_bal = billing.deduct_credits(current_user.id, billing.PRICING['speaking_evaluation'])
+    current_user.credits = new_bal
+    result['credits'] = new_bal # Додаємо баланс у відповідь
+    
     return jsonify(result)
 
 if __name__ == '__main__':

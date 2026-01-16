@@ -85,6 +85,14 @@
         .lvl-b1 { background-color: #29B6F6; }
         .lvl-b2 { background-color: #1976D2; }
         .lvl-c1 { background-color: #D32F2F; }
+
+        /* --- CREDITS INDICATOR --- */
+        .credits-pill {
+            position: absolute; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.05); border: 1px solid var(--border);
+            padding: 4px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 500;
+            display: flex; align-items: center; gap: 6px; color: var(--on-surface);
+        }
     </style>
 </head>
 <body id="b">
@@ -92,6 +100,12 @@
     <div class="header">
         <a href="/" class="brand" style="text-decoration: none; color: var(--on-surface);"><span class="material-symbols-outlined" style="color:var(--primary)">school</span>Gemini <span>DE</span></a>
         <div style="display: flex; align-items: center; gap: 8px;">
+            {% if current_user.is_authenticated %}
+            <div class="credits-pill" title="Credits">
+                <span>💎</span> <span id="user-credits">{{ current_user.credits | int }}</span> <span style="opacity:0.5; font-size:0.75rem;">/ 1000</span>
+            </div>
+            {% endif %}
+            
             {% if current_user.is_authenticated %}
             <div class="level-tiles">
                 {% for l in ['A1', 'A2', 'B1', 'B2', 'C1'] %}
@@ -181,6 +195,29 @@
                 });
                 window.dispatchEvent(new CustomEvent('level-updated', { detail: lvl }));
             } catch(e) { console.error(e); }
+        }
+
+        // --- GLOBAL CREDITS UPDATER ---
+        // Перехоплюємо всі fetch запити, щоб перевірити, чи повернув сервер новий баланс
+        const originalFetch = window.fetch;
+        window.fetch = async function(...args) {
+            const response = await originalFetch(...args);
+            
+            // Клонуємо відповідь, щоб прочитати JSON не ламаючи оригінальний потік
+            const clone = response.clone();
+            try {
+                const data = await clone.json();
+                if (data && data.credits !== undefined) {
+                    updateCreditsUI(data.credits);
+                }
+            } catch(e) { /* Не JSON або помилка парсингу - ігноруємо */ }
+            
+            return response;
+        };
+
+        function updateCreditsUI(newVal) {
+            const el = document.getElementById('user-credits');
+            if(el) el.innerText = Math.floor(newVal);
         }
     </script>
 

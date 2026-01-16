@@ -6,6 +6,7 @@ from google import genai
 from google.genai import types
 from google.cloud import texttospeech
 from dotenv import load_dotenv
+import azure.cognitiveservices.speech as speechsdk
 
 load_dotenv()
 
@@ -28,13 +29,25 @@ def get_tts_client():
     return None
 
 def clean_json_response(text):
-    # Покращена очистка: шукає [списки] або {об'єкти}
-    match_list = re.search(r'\[.*\]', text, re.DOTALL)
-    if match_list: return match_list.group(0)
+    # 1. Видаляємо Markdown обгортки
+    text = text.strip()
+    text = re.sub(r'^```(?:json)?\s*', '', text)
+    text = re.sub(r'\s*```$', '', text)
     
-    match_obj = re.search(r'\{.*\}', text, re.DOTALL)
-    if match_obj: return match_obj.group(0)
+    # 2. Шукаємо початок структури
+    idx_brace = text.find('{')
+    idx_bracket = text.find('[')
     
+    # Якщо об'єкт починається раніше (або списку немає) -> це об'єкт
+    if idx_brace != -1 and (idx_bracket == -1 or idx_brace < idx_bracket):
+        last_brace = text.rfind('}')
+        if last_brace != -1: return text[idx_brace:last_brace+1]
+
+    # Якщо список починається раніше (або об'єкта немає) -> це список
+    if idx_bracket != -1 and (idx_brace == -1 or idx_bracket < idx_brace):
+        last_bracket = text.rfind(']')
+        if last_bracket != -1: return text[idx_bracket:last_bracket+1]
+
     return text
 
 def generate_german_text(topic, count, level, style='neutral'):
@@ -110,7 +123,11 @@ def generate_german_text(topic, count, level, style='neutral'):
                 temperature=0.7
             )
         )
-        return json.loads(clean_json_response(response.text))
+        data = json.loads(clean_json_response(response.text))
+        # Handle edge case where LLM returns a list instead of a dict
+        if isinstance(data, list):
+            data = data[0] if data else {}
+        return data
     except Exception as e:
         print(f"Gen Error: {e}")
         return {"sentences": [], "title_ua": "Error", "title_de": "Error", "title_en": "Error"}
@@ -121,16 +138,41 @@ def get_tts_audio(text, lang='de'):
     lang: 'de' (German), 'uk' (Ukrainian), 'en' (English)
     """
     if not text: return None
+    
+    # Azure TTS for Ukrainian
+    if lang == 'uk':
+        try:
+            # Використовуємо ключі з Azure
+            speech_key = os.getenv("AZURE_SPEECH_KEY")
+            service_region = os.getenv("AZURE_SPEECH_REGION")
+            
+            if not speech_key or not service_region:
+                print("Azure credentials not found")
+                return None
+            
+            speech_config = speechsdk.SpeechConfig(subscription=speech_key, region=service_region)
+            speech_config.speech_synthesis_voice_name = "uk-UA-PolinaNeural"
+            # Встановлюємо формат MP3, щоб відповідати розширенню файлу в app.py
+            speech_config.set_speech_synthesis_output_format(speechsdk.SpeechSynthesisOutputFormat.Audio24Khz160KBitRateMonoMp3)
+            
+            synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=None)
+            result = synthesizer.speak_text_async(text).get()
+            
+            if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
+                return result.audio_data
+            else:
+                print(f"Azure TTS Canceled: {result.cancellation_details.reason}")
+                return None
+        except Exception as e:
+            print(f"Azure TTS Error: {e}")
+            return None
+
     tts_client = get_tts_client()
     if not tts_client: return None
 
     if lang == 'de':
         language_code = "de-DE"
         name = "de-DE-Standard-B" 
-    elif lang == 'uk':
-        language_code = "uk-UA"
-        name = "uk-UA-Standard-A"
-        # name = "uk-UA-Wavenet-A"
     else:
         language_code = "en-US"
         name = "en-US-Standard-C"
@@ -189,7 +231,11 @@ def generate_practice_batch(count, level, interface_lang):
             )
         )
         cleaned = clean_json_response(response.text)
-        return json.loads(cleaned)
+        data = json.loads(cleaned)
+        # Ensure list (generate_practice_batch expects a list)
+        if isinstance(data, dict):
+            return [data]
+        return data
     except Exception as e:
         print(f"Batch Gen Error: {e}")
         fallback_text = "Hello, how are you?" if "English" in interface_lang else "Привіт, як справи?"
@@ -243,7 +289,11 @@ def evaluate_audio_with_gemini(original_text, audio_bytes, interface_lang, mime_
                 temperature=0.2 
             )
         )
-        return json.loads(clean_json_response(response.text))
+        data = json.loads(clean_json_response(response.text))
+        # Handle edge case where LLM returns a list
+        if isinstance(data, list):
+            data = data[0] if data else {}
+        return data
     except Exception as e:
         print(f"Audio Eval Error: {e}")
         # Визначаємо текст помилки залежно від мови інтерфейсу
@@ -317,7 +367,11 @@ def translate_word(text, ctx):
                 response_mime_type="application/json"
             )
         )
-        return json.loads(clean_json_response(response.text))
+        data = json.loads(clean_json_response(response.text))
+        # Handle edge case where LLM returns a list
+        if isinstance(data, list):
+            data = data[0] if data else {}
+        return data
     except Exception as e:
         print(f"Translate Error: {e}")
         return {"display": text, "ua": "Error", "en": "Error", "level": "?"}
