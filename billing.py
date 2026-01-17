@@ -14,7 +14,8 @@ PRICING = {
     'tts_azure_per_char': 0.015,   # $15 за 1M символів
     
     # --- SPEAKING (Speech-to-Text) ---
-    'stt_fixed_request': 6.0       # $0.006 за транзакцію STT (до 15 сек)
+    'stt_fixed_request': 6.0,      # $0.006 за транзакцію STT (до 15 сек)
+    'speaking_evaluation': 5.0     # Вартість оцінки вимови
 }
 
 def calculate_tts_cost(text, provider='google'):

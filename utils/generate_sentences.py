@@ -247,7 +247,9 @@ def generate_batch(level, count, topics_subset):
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
-                temperature=0.85
+                temperature=1.15,
+                top_p=0.92,
+                top_k=40,
             )
         )
         
