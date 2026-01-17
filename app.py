@@ -111,6 +111,10 @@ UI_STRINGS = {
         'speaking_mic_denied': 'Доступ до мікрофону заборонено',
         'speaking_audio_not_supported': 'Запис аудіо не підтримується',
         'speaking_error': 'Помилка: ',
+        'score_pronunciation': 'Вимова',
+        'score_context': 'Точність',
+        'score_grammar': 'Граматика',
+        'speaking_noise': '(Шум або нерозбірливо)',
     },
     'eng': {
         'settings': 'Settings',
@@ -177,6 +181,10 @@ UI_STRINGS = {
         'speaking_mic_denied': 'Mic access denied',
         'speaking_audio_not_supported': 'Audio recording not supported',
         'speaking_error': 'Error: ',
+        'score_pronunciation': 'Pronunciation',
+        'score_context': 'Accuracy',
+        'score_grammar': 'Grammar',
+        'speaking_noise': '(Noise or unclear)',
     }
 }
 
@@ -991,15 +999,23 @@ def serve_audio(filename):
 def speaking():
     return render_template('speaking.html')
 
-@app.route('/api/get_practice_batch', methods=['POST'])
+@app.route('/api/get_speaking_session', methods=['POST'])
 @login_required
-def get_practice_batch():
-    count = request.json.get('count', 5)
-    lang_map = {'ukr': 'Ukrainian', 'eng': 'English'}
-    if_lang = lang_map.get(current_user.interface_language, 'Ukrainian')
+def get_speaking_session():
+    # 1. Отримуємо всі речення для рівня користувача
+    with get_db() as conn:
+        rows = conn.execute('SELECT * FROM sentences WHERE level = ?', (current_user.level,)).fetchall()
+        
+        # Fallback: якщо немає речень для рівня, спробуємо знайти хоч щось
+        if not rows:
+            rows = conn.execute('SELECT * FROM sentences LIMIT 50').fetchall()
     
-    # Використовуємо глобальний рівень користувача
-    sentences = services.generate_practice_batch(count, current_user.level, if_lang)
+    sentences = [dict(r) for r in rows]
+    
+    # 2. Перемішуємо список
+    random.shuffle(sentences)
+    
+    # Повертаємо весь список (або можна частинами, якщо їх дуже багато)
     return jsonify(sentences)
 
 @app.route('/api/evaluate_audio', methods=['POST'])
@@ -1021,6 +1037,25 @@ def evaluate_audio():
     
     result = services.evaluate_audio_with_gemini(original_text, audio_data, lang_code, mime_type)
     
+    # Розрахунок середнього балу
+    p_score = result.get('pronunciation_score', 0)
+    c_score = result.get('context_score', 0)
+    g_score = result.get('grammar_score', 0)
+    avg_score = int((p_score + c_score + g_score) / 3)
+    result['average_score'] = avg_score
+
+    # Вибір аудіо фідбеку з бази
+    with get_db() as conn:
+        # Шукаємо файл, де середній бал входить в діапазон [min_score, max_score]
+        fb_row = conn.execute('''
+            SELECT file_path FROM feedback 
+            WHERE language = ? AND category = 'common' AND ? >= min_score AND ? <= max_score 
+            ORDER BY RANDOM() LIMIT 1
+        ''', (lang_code, avg_score, avg_score)).fetchone()
+    
+    if fb_row:
+        result['feedback_audio_url'] = f"/static/audio/{fb_row['file_path']}"
+
     # BILLING
     new_bal = billing.deduct_credits(current_user.id, billing.PRICING['speaking_evaluation'])
     current_user.credits = new_bal

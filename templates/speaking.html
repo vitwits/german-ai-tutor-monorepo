@@ -42,10 +42,88 @@
         background: rgba(76, 175, 80, 0.1); border: 1px solid #4CAF50; color: #2E7D32;
         padding: 12px; border-radius: var(--radius); font-weight: 500; display: none;
     }
-    .score-val { font-size: 2rem; line-height: 1; }
     .rotating { animation: rotate 1.5s linear infinite; }
-    @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    @keyframes rotate { from { transform: rotate(360deg); } to { transform: rotate(0deg); } }
+
+    /* --- SPLASH SCREEN STYLES --- */
+    #splash-screen {
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(8px);
+        z-index: 10000; display: none; flex-direction: column;
+        align-items: center; justify-content: center; color: white;
+        opacity: 0; transition: opacity 0.5s ease;
+    }
+    
+    .score-circle {
+        width: 140px; height: 140px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 3rem; font-weight: 700; margin-bottom: 40px;
+        position: relative;
+    }
+    
+    .score-circle svg {
+        position: absolute; top: 0; left: 0;
+        width: 100%; height: 100%; transform: rotate(-90deg);
+    }
+    
+    .score-circle circle {
+        fill: none; stroke-width: 18; stroke-linecap: round;
+    }
+    .score-circle-bg { stroke: #333; }
+    .score-circle-fg {
+        stroke-dasharray: 377; /* 2 * PI * 60 */
+        stroke-dashoffset: 377;
+        transition: stroke-dashoffset 1.5s ease-out;
+    }
+
+    .stats-container { width: 80%; max-width: 300px; }
+    
+    .stat-row { margin-bottom: 16px; }
+    .stat-label { display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 6px; opacity: 0.9; }
+    
+    .progress-bg {
+        height: 30px; background: rgba(255,255,255,0.1); border-radius: 9px; overflow: hidden;
+    }
+    .progress-fill {
+        height: 100%; width: 0%; border-radius: 5px;
+        transition: width 1.5s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    
+    /* Unified Icon Styles */
+    #btn-icon {
+        font-size: 48px;
+        font-variation-settings: 'wght' 600;
+    }
+    #btn-icon.icon-play {
+        font-size: 72px; /* 1.5x larger */
+    }
 </style>
+
+<!-- SPLASH SCREEN -->
+<div id="splash-screen">
+    <div class="score-circle" id="splash-circle">
+        <svg viewBox="0 0 140 140">
+            <circle class="score-circle-bg" cx="70" cy="70" r="60"></circle>
+            <circle class="score-circle-fg" cx="70" cy="70" r="60" id="splash-circle-path"></circle>
+        </svg>
+        <span id="splash-total" style="position: relative; z-index: 1;">0</span>
+    </div>
+    
+    <div class="stats-container">
+        <div class="stat-row">
+            <div class="stat-label"><span>{{ ui.score_pronunciation if ui.score_pronunciation else 'Pronunciation' }}</span> <span id="val-pron">0</span></div>
+            <div class="progress-bg"><div class="progress-fill" id="bar-pron" style="background: #42A5F5;"></div></div>
+        </div>
+        <div class="stat-row">
+            <div class="stat-label"><span>{{ ui.score_context if ui.score_context else 'Accuracy' }}</span> <span id="val-cont">0</span></div>
+            <div class="progress-bg"><div class="progress-fill" id="bar-cont" style="background: #66BB6A;"></div></div>
+        </div>
+        <div class="stat-row">
+            <div class="stat-label"><span>{{ ui.score_grammar if ui.score_grammar else 'Grammar' }}</span> <span id="val-gram">0</span></div>
+            <div class="progress-bg"><div class="progress-fill" id="bar-gram" style="background: #FFA726;"></div></div>
+        </div>
+    </div>
+</div>
 
 <div class="speak-container">
     <div class="mode-switch">
@@ -58,10 +136,7 @@
     <div class="mic-wrapper">
         <div class="mic-ring" id="visualizer"></div>
         <button class="mic-btn" id="main-btn" onclick="handleMainClick()">
-            <span class="material-symbols-outlined" style="font-size: 40px;" id="btn-icon">play_arrow</span>
-            <div id="score-display" style="display:none;">
-                <div class="score-val" id="score-num">0</div>
-            </div>
+            <span class="material-symbols-outlined icon-play" id="btn-icon">play_arrow</span>
         </button>
     </div>
 
@@ -80,17 +155,21 @@ const UI = {
     mic_denied: '{{ ui.speaking_mic_denied }}',
     audio_not_supported: '{{ ui.speaking_audio_not_supported }}',
     error_prefix: '{{ ui.speaking_error }}',
-    press_start: '{{ ui.speaking_press_start }}'
+    press_start: '{{ ui.speaking_press_start }}',
+    noise: '{{ ui.speaking_noise }}'
 };
 
 // --- STATE ---
-let sentencesQueue = [];
+let sessionSentences = [];
+let currentIndex = 0;
 let currentSentence = null;
 let isRecording = false;
 let isProcessing = false;
 let isFetching = false;
 let isResultState = false; 
 let isRetryState = false;  
+let isPlayingAudio = false;
+let roundAborted = false;
 
 let mediaRecorder = null;
 let audioChunks = [];
@@ -103,6 +182,7 @@ let silenceCheckInterval = null;
 let lastVoiceTimestamp = 0;
 let hasUserStartedSpeaking = false;
 let recordStartTime = 0;
+let currentAudioObj = null;
 
 const NO_SPEECH_TIMEOUT = 5000; 
 const SILENCE_AFTER_SPEECH = 2000; 
@@ -111,26 +191,28 @@ const NOISE_LEVEL = 15;
 let gameStarted = false;
 
 window.onload = async () => {
-    loadSentences(2);
+    initSession();
     if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         alert(UI.audio_not_supported);
     }
 };
 
-async function loadSentences(count) {
+async function initSession() {
     if (isFetching) return;
     isFetching = true;
     try {
-        const res = await fetch('/api/get_practice_batch', {
+        const res = await fetch('/api/get_speaking_session', {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ count: count })
+            headers: {'Content-Type': 'application/json'}
         });
         const data = await res.json();
         if (data && Array.isArray(data) && data.length > 0) {
-            sentencesQueue.push(...data);
-            if (gameStarted && !currentSentence) nextRound();
+            sessionSentences = data;
+            currentIndex = 0;
+            console.log(`Session loaded: ${sessionSentences.length} sentences`);
+        } else {
+            document.getElementById('task-display').innerText = "No sentences found in database. Please generate content in Admin Panel.";
         }
     } catch (e) { console.error(e); } finally { isFetching = false; }
 }
@@ -138,6 +220,17 @@ async function loadSentences(count) {
 async function handleMainClick() {
     if (audioContext && audioContext.state === 'suspended') {
         await audioContext.resume();
+    }
+
+    // 1. Interruption Logic: Stop playback if clicked during initial reading
+    if (isPlayingAudio) {
+        if (currentAudioObj) {
+            currentAudioObj.pause();
+            currentAudioObj = null;
+        }
+        isPlayingAudio = false;
+        roundAborted = true;
+        return;
     }
 
     if (isRetryState) {
@@ -165,7 +258,6 @@ async function handleMainClick() {
     
     if (!gameStarted) {
         gameStarted = true;
-        loadSentences(10); 
         nextRound();
     } else {
         nextRound();
@@ -176,15 +268,17 @@ async function nextRound() {
     isResultState = false;
     isRetryState = false;
 
-    if (sentencesQueue.length <= 5 && !isFetching) loadSentences(10);
-
-    if (sentencesQueue.length === 0) {
-        if (!isFetching) loadSentences(3);
-        document.getElementById('task-display').innerText = UI.loading;
-        return;
+    if (sessionSentences.length === 0) {
+        await initSession();
+        if (sessionSentences.length === 0) return; // Stop if still empty
     }
     
-    currentSentence = sentencesQueue.shift();
+    if (currentIndex >= sessionSentences.length) {
+        await initSession(); // Reshuffle and restart
+        if (sessionSentences.length === 0) return;
+    }
+    
+    currentSentence = sessionSentences[currentIndex++];
     startCurrentRound();
 }
 
@@ -193,20 +287,36 @@ async function startCurrentRound() {
     
     isResultState = false;
     isRetryState = false;
+    roundAborted = false;
 
     document.getElementById('transcript-display').innerText = '';
     document.getElementById('correction-display').style.display = 'none';
-    document.getElementById('score-display').style.display = 'none';
     updateUIState('idle');
+
+    // Визначаємо текст для показу (переклад)
+    const langKey = '{{ "text_uk" if lang == "ukr" else "text_en" }}';
+    const sourceText = currentSentence[langKey] || currentSentence['text_en']; // Fallback
 
     const taskEl = document.getElementById('task-display');
     taskEl.style.opacity = 0;
-    taskEl.innerText = currentSentence.source;
+    taskEl.innerText = sourceText;
     
     setTimeout(() => { taskEl.style.opacity = 1; }, 100);
     
-    const langCode = '{{ "uk" if lang == "ukr" else "en" }}';
-    await playAudio(currentSentence.source, langCode);
+    // Програємо аудіо (джерело)
+    isPlayingAudio = true;
+    await playAudioFile(currentSentence['{{ "audio_uk" if lang == "ukr" else "audio_en" }}']);
+    isPlayingAudio = false;
+
+    // Check if aborted
+    if (roundAborted) {
+        isRetryState = true;
+        updateUIState('idle');
+        const icon = document.getElementById('btn-icon');
+        icon.innerText = 'play_arrow';
+        icon.classList.add('icon-play');
+        return;
+    }
     
     playBeep();
     startRecording();
@@ -240,7 +350,8 @@ async function startRecording() {
                 
                 // Змінюємо іконку на refresh
                 const icon = document.getElementById('btn-icon');
-                icon.innerText = 'refresh'; 
+                icon.innerText = 'refresh';
+                icon.classList.remove('icon-play');
             }
         };
 
@@ -321,7 +432,8 @@ async function initAudioAndSilenceDetector(stream) {
 async function processAudioBlob(blob) {
     const formData = new FormData();
     formData.append('audio', blob);
-    formData.append('original_text', currentSentence.source);
+    // Відправляємо оригінальний німецький текст для порівняння
+    formData.append('original_text', currentSentence.text_de);
 
     try {
         const res = await fetch('/api/evaluate_audio', { method: 'POST', body: formData });
@@ -332,7 +444,7 @@ async function processAudioBlob(blob) {
         showFeedback(result);
     } catch (e) {
         console.error(e);
-        showFeedback({ score: 0, feedback: UI.error_prefix + e.message, transcribed_text: "" });
+        showFeedback({ average_score: 0, feedback: UI.error_prefix + e.message, transcribed_text: "" });
     }
 }
 
@@ -341,96 +453,145 @@ async function showFeedback(result) {
     isResultState = true; 
 
     if (result.transcribed_text) {
-        document.getElementById('transcript-display').innerText = `${UI.you}: "${result.transcribed_text}"`;
+        if (result.transcribed_text.includes('[NOISE]')) {
+            document.getElementById('transcript-display').innerText = UI.noise;
+        } else {
+            document.getElementById('transcript-display').innerText = `${UI.you}: "${result.transcribed_text}"`;
+        }
     } else {
         document.getElementById('transcript-display').innerText = UI.silence;
     }
 
-    let score = (result.score !== undefined && result.score !== null) ? result.score : 0;
-    const btn = document.getElementById('main-btn');
-    if (score >= 80) btn.style.backgroundColor = '#4CAF50'; 
-    else if (score >= 50) btn.style.backgroundColor = '#FFC107'; 
-    else btn.style.backgroundColor = '#f44336'; 
-
     updateUIState('next');
-    document.getElementById('score-num').innerText = score;
 
-    const langCode = '{{ "uk" if lang == "ukr" else "en" }}';
+    // --- SPLASH SCREEN LOGIC ---
+    const splash = document.getElementById('splash-screen');
+    const circlePath = document.getElementById('splash-circle-path');
+    const circle = document.getElementById('splash-circle');
     
-    if (result.feedback && (result.feedback.startsWith('Error:') || result.feedback.startsWith(UI.error_prefix))) {
-         document.getElementById('correction-display').innerText = result.feedback;
-         document.getElementById('correction-display').style.display = 'block';
-    } else {
-        if (result.feedback) await playAudio(result.feedback, langCode);
-        
-        if (result.correction && score < 100) {
-            const corrBox = document.getElementById('correction-display');
-            corrBox.innerText = result.correction;
-            corrBox.style.display = 'block';
-            await new Promise(r => setTimeout(r, 500));
-            // Correction is always German
-            await playAudio(result.correction, 'de');
-        } 
-        // Прибрано блок else if (score === 100) { playAudio("Correct!") }
-        // Тепер звук тільки з result.feedback
-    }
+    // Scores
+    const avg = result.average_score || 0;
+    const p = result.pronunciation_score || 0;
+    const c = result.context_score || 0;
+    const g = result.grammar_score || 0;
+
+    // Color logic
+    let color = '#f44336'; // Red
+    if (avg >= 80) color = '#4CAF50'; // Green
+    else if (avg >= 50) color = '#FFC107'; // Orange
     
+    circlePath.style.stroke = color;
+
+    // Show Splash
+    splash.style.display = 'flex';
+    // Force reflow
+    void splash.offsetWidth;
+    splash.style.opacity = '1';
+
+    // Animate Circle
+    const circumference = 377;
+    const offset = circumference - (avg / 100) * circumference;
     setTimeout(() => {
-        if (isResultState) {
+        circlePath.style.strokeDashoffset = offset;
+    }, 100);
+
+    // Animate Counter
+    animateValue("splash-total", 0, avg, 1500);
+    animateValue("val-pron", 0, p, 1500);
+    animateValue("val-cont", 0, c, 1500);
+    animateValue("val-gram", 0, g, 1500);
+
+    // Animate Bars
+    setTimeout(() => {
+        document.getElementById('bar-pron').style.width = p + '%';
+        document.getElementById('bar-cont').style.width = c + '%';
+        document.getElementById('bar-gram').style.width = g + '%';
+    }, 100);
+
+    // Play Feedback Audio
+    if (result.feedback_audio_url) {
+        const audio = new Audio(result.feedback_audio_url);
+        audio.play();
+    }
+
+    // Correction logic (shown after splash)
+    const corrBox = document.getElementById('correction-display');
+    corrBox.innerText = currentSentence.text_de;
+    corrBox.style.display = 'block';
+
+    // Hide Splash after 5s
+    setTimeout(() => {
+        splash.style.opacity = '0';
+        setTimeout(() => {
+            splash.style.display = 'none';
+            // Reset animations for next time
+            circlePath.style.strokeDashoffset = 377;
+            document.getElementById('bar-pron').style.width = '0%';
+            document.getElementById('bar-cont').style.width = '0%';
+            document.getElementById('bar-gram').style.width = '0%';
+            
+            // Reset button state
             const btn = document.getElementById('main-btn');
-            const scoreDiv = document.getElementById('score-display');
             const icon = document.getElementById('btn-icon');
             btn.style.backgroundColor = 'var(--primary)';
-            scoreDiv.style.display = 'none';
             icon.style.display = 'block';
-            icon.innerText = 'play_arrow'; 
+            icon.innerText = 'play_arrow';
+            icon.classList.add('icon-play');
+        }, 500);
+    }, 5000);
+}
+
+function animateValue(id, start, end, duration) {
+    const obj = document.getElementById(id);
+    let startTimestamp = null;
+    const step = (timestamp) => {
+        if (!startTimestamp) startTimestamp = timestamp;
+        const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+        obj.innerHTML = Math.floor(progress * (end - start) + start);
+        if (progress < 1) {
+            window.requestAnimationFrame(step);
         }
-    }, 3000);
+    };
+    window.requestAnimationFrame(step);
 }
 
 function updateUIState(state) {
     const btn = document.getElementById('main-btn');
     const ring = document.getElementById('visualizer');
     const icon = document.getElementById('btn-icon');
-    const scoreDiv = document.getElementById('score-display');
     
     icon.classList.remove('rotating');
+    icon.classList.remove('icon-play');
 
     if (state === 'listening') {
         btn.style.backgroundColor = '#d32f2f'; 
         icon.style.display = 'block'; icon.innerText = 'stop';
-        ring.style.display = 'block'; scoreDiv.style.display = 'none';
+        ring.style.display = 'block';
     } else if (state === 'processing') {
         btn.style.backgroundColor = '#9E9E9E'; 
         ring.style.display = 'none'; icon.style.display = 'block';
         icon.innerText = 'sync'; icon.classList.add('rotating');
-        scoreDiv.style.display = 'none';
     } else if (state === 'next') {
         ring.style.display = 'none'; icon.style.display = 'none';
-        scoreDiv.style.display = 'block';
     } else {
         // IDLE / RETRY
         btn.style.backgroundColor = 'var(--primary)';
         ring.style.display = 'none'; icon.style.display = 'block';
         icon.innerText = isRetryState ? 'refresh' : 'mic'; 
-        scoreDiv.style.display = 'none';
+        if (isRetryState) icon.classList.remove('icon-play');
     }
 }
 
-async function playAudio(text, lang) {
-    if(!text) return;
-    try {
-        const res = await fetch('/api/tts', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({text: text, lang: lang})
-        });
-        const data = await res.json();
-        const audio = new Audio(data.url);
-        return new Promise(resolve => {
-            audio.onended = resolve; audio.onerror = resolve; audio.play();
-        });
-    } catch(e) { console.error(e); }
+async function playAudioFile(path) {
+    if(!path) return;
+    if (currentAudioObj) { currentAudioObj.pause(); currentAudioObj = null; }
+    
+    currentAudioObj = new Audio('/static/audio/sentences/' + path);
+    return new Promise(resolve => {
+        currentAudioObj.onended = resolve; currentAudioObj.onerror = resolve;
+        currentAudioObj.onpause = resolve; // Handle interruption
+        currentAudioObj.play().catch(e => resolve());
+    });
 }
 
 function playBeep() {
@@ -477,7 +638,6 @@ window.addEventListener('level-updated', async () => {
     isResultState = false;
     isRetryState = false;
     gameStarted = false;
-    sentencesQueue = [];
     currentSentence = null;
     isFetching = false; // Force allow new fetch
     
@@ -485,11 +645,10 @@ window.addEventListener('level-updated', async () => {
     updateUIState('idle');
     document.getElementById('transcript-display').innerText = '';
     document.getElementById('correction-display').style.display = 'none';
-    document.getElementById('score-display').style.display = 'none';
     document.getElementById('task-display').innerText = UI.loading;
     
     // 4. Fetch new sentences & Restore UI
-    await loadSentences(2);
+    await initSession();
     document.getElementById('task-display').innerText = UI.press_start;
 });
 </script>

@@ -184,89 +184,39 @@ def get_tts_audio(text, lang='de'):
     response = tts_client.synthesize_speech(input=s_input, voice=voice, audio_config=audio_config)
     return response.audio_content
 
-def generate_practice_batch(count, level, interface_lang):
-    """Генерує список речень для практики з випадковими темами"""
-    
-    # Використовуємо змінну level. Якщо значення некоректне - фолбек на A2
-    if level not in CEFR_GUIDELINES:
-        level = "A2"
-    level_rules = CEFR_GUIDELINES[level]
-    
-    topics_pool = [
-        "Shopping & Groceries", "Travel by Train", "At the Restaurant", 
-        "Job Interview", "Walking the Dog", "Cooking Dinner", 
-        "Tech Support", "Planning a Holiday", "At the Doctor", 
-        "Meeting Friends", "Hobbies & Sports", "Weather Forecast",
-        "Public Transport", "Renting an Apartment", "Cinema & Movies"
-    ]
-    
-    selected_topics = ", ".join(random.sample(topics_pool, 3))
-
-    prompt = f"""Generate {count} unique, natural German sentences for a learner (Level {level}).
-    Focus on these topics: {selected_topics}.
-    
-    STRICT LINGUISTIC REQUIREMENTS FOR LEVEL {level}:
-    {level_rules}
-    
-    INSTRUCTIONS:
-    1. Sentences must be grammatically correct and sound natural.
-    2. "source" field must be the translation in {interface_lang}.
-    
-    Output JSON ONLY (A list of objects):
-    [
-        {{
-            "de": "German sentence",
-            "source": "Translation in {interface_lang}"
-        }}
-    ]
-    """
-    
-    try:
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                temperature=0.85
-            )
-        )
-        cleaned = clean_json_response(response.text)
-        data = json.loads(cleaned)
-        # Ensure list (generate_practice_batch expects a list)
-        if isinstance(data, dict):
-            return [data]
-        return data
-    except Exception as e:
-        print(f"Batch Gen Error: {e}")
-        fallback_text = "Hello, how are you?" if "English" in interface_lang else "Привіт, як справи?"
-        return [{"de": "Hallo, wie geht es dir?", "source": fallback_text}]
-    
 def evaluate_audio_with_gemini(original_text, audio_bytes, interface_lang, mime_type='audio/webm'):
     """Оцінює аудіо-файл через Gemini. Відновлено гнучку логіку вчителя."""
     feedback_lang = "Ukrainian" if interface_lang == 'uk' else "English"
     
-    # Використовуємо твій оригінальний підхід, але додаємо суворе правило щодо мови фідбеку
     prompt = f"""
-    You are a German teacher. Listen to the user's audio.
-    Task: The user is trying to translate this sentence into German: "{original_text}".
+    Role: Strict Goethe-Institut Examiner.
+    Task: Evaluate the user's spoken German.
     
-    INSTRUCTIONS:
-    1. Transcribe EXACTLY what the user said in German.
-    2. Compare it to the correct German translation of "{original_text}".
-    3. Evaluate grammar, vocabulary, and pronunciation.
-    4. If the audio is silent or unintelligible, set score to 0.
+    REFERENCE GERMAN SENTENCE: "{original_text}"
     
-    STRICT FORMATTING RULES:
-    - The "feedback" field MUST be in {feedback_lang} ONLY. 
-    - NEVER use German in the "feedback" field.
-    - Keep feedback encouraging and short (max 5 words).
+    AUDIO ANALYSIS RULES:
+    1. **Transcription**: Transcribe EXACTLY what is heard in the audio.
+       - If the audio contains coughing, tapping, silence, or non-speech sounds -> Output "[NOISE]" and set ALL scores to 1.
+       - If the user speaks a different language -> Set scores to 1.
+       - **CRITICAL**: Do NOT hallucinate the Reference Sentence if it is not present in the audio. If the audio is unclear, transcribe what you hear (e.g., "mumble", "noise"), do not guess the sentence.
     
-    Output JSON:
+    2. **Scoring** (1-100):
+       - Be highly critical. 100 is for native-level perfection only.
+       - **Pronunciation**: Deduct heavily for strong accents or unclear phonemes.
+       - **Context/Accuracy**: Compare the spoken text to the REFERENCE sentence. 
+         * ACCEPT valid synonyms (e.g. 'günstig' instead of 'billig/niedrig'), alternative word orders, or phrasing IF the meaning remains correct and natural.
+         * Do NOT penalize if the user uses a different but correct way to express the same idea.
+         * Deduct points only if the meaning is changed, wrong, or words are missing.
+       - **Grammar**: Deduct for wrong articles, endings, or structure.
+       - If the user says nothing relevant -> Score 1.
+    
+    Output JSON ONLY:
     {{
-        "transcribed_text": "What user actually said",
-        "score": 0-100 (integer),
-        "feedback": "Short, encouraging feedback in {feedback_lang}",
-        "correction": "Correct German version"
+        "transcribed_text": "Verbatim transcription or [NOISE]",
+        "pronunciation_score": 1-100 (integer),
+        "context_score": 1-100 (integer),
+        "grammar_score": 1-100 (integer),
+        "correction": "Correct German version (if needed, else null)"
     }}
     """
     
@@ -284,9 +234,7 @@ def evaluate_audio_with_gemini(original_text, audio_bytes, interface_lang, mime_
             ],
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
-                # Піднімаємо температуру до 0.2, щоб повернути "людяність" оцінці,
-                # але не дати моделі сильно галюцинувати.
-                temperature=0.2 
+                temperature=0.0 
             )
         )
         data = json.loads(clean_json_response(response.text))
@@ -303,8 +251,9 @@ def evaluate_audio_with_gemini(original_text, audio_bytes, interface_lang, mime_
             err_msg = "Evaluation error"
             
         return {
-            "score": 0, 
-            "feedback": err_msg, 
+            "pronunciation_score": 0,
+            "context_score": 0,
+            "grammar_score": 0,
             "correction": None, 
             "transcribed_text": ""
         }
