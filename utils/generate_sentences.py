@@ -1,6 +1,4 @@
-# python generate_sentences.py A2 100
-
-
+# python generate_sentences.py A1 100
 
 import os
 import sys
@@ -24,161 +22,236 @@ load_dotenv(os.path.join(BASE_DIR, '.env'))
 
 API_KEY = os.getenv("GEMINI_API_KEY")
 if not API_KEY:
-    print("Error: GOOGLE_API_KEY not found in .env file")
+    print("Error: GEMINI_API_KEY not found in .env file")
     sys.exit(1)
 
 client = genai.Client(api_key=API_KEY)
 
 # --- КОНФІГУРАЦІЯ CEFR (Локальна копія для редагування) ---
+# Оновлено з розлогими інструкціями для максимальної різноманітності словникового запасу на всіх рівнях,
+# особливо A1: детальні вимоги до словника, заборони на повтори, приклади слів/конструкцій.
+# Для кожного рівня — акцент на широкому охопленні лексики (кольори, числа, предмети, частини тіла, одяг тощо),
+# щоб уникнути вузького ядра і примітивізму. Інструкції розгорнуті для моделі.
 CEFR_GUIDELINES = {
-    "A1": "Sentences strictly 4-7 words (never under 4). Only Präsens. Maximize variety: 30-50 percent of sentences NOT starting with 'Ich' (use 'Das ist...', 'Es ist...', 'Mein/e... ist...', 'Wo...?'. 'Wie...?'. 'Heute ist...', 'Am...'). Always include in batches: questions (yes/no + wh-), negations (nicht/kein/keine), sein + Adj/Ort. Mix subjects (Ich/Du/Er/Sie/Es/Wir/Das/Mein Name). Topics: introductions, family/pets, home, hobbies, food, weather, routine, shopping, birthdays. Natural like Goethe A1 model sentences or textbooks (Netzwerk/Schritte).",
-    "A2": "Sentences 6-11 words (avoid under 6 or over 12). Use Präsens + Perfekt (haben/sein dominant, especially sein for motion like fahren, gehen). Include connectors: und, aber, oder, weil (at least 20-40% with weil for reasons). Separable verbs (aufstehen, einkaufen, ausgehen, mitkommen). Full Akkusativ, introduce Dativ (mit, zu, von, bei, aus). Modal verbs in Präsens: können, wollen, müssen, sollen, mögen. Time expressions: gestern, morgen, oft, manchmal, jeden Tag/Morgen, am Wochenende. Vary starts: Am..., Gestern..., Ich habe/bin..., Manchmal..., Weil..., Mit... . Topics: daily routine, past weekend/activities, weather/seasons, food/preferences, simple reasons, hobbies/sport, shopping, travel basics. Natural, like Goethe A2 model sentences or textbooks (Netzwerk, Schritte) – everyday dialogues feel.",
-    "B1": "Sentences 8-13 words (avoid under 8 or over 14). Mandatory subordinate clauses: weil, dass, wenn, obwohl (at least 40-60 percent include one). Dominant: Perfekt for past experiences, Präteritum for war/hatte/modals (konnte, wollte, musste). Basic Konjunktiv II: würde + Infinitiv for wishes; hätte/wäre/konnte for simple unreal/conditions/dreams. Introduce Futur I sparingly (werden + Infinitiv) for plans (10-20% max). Avoid or minimize Plusquamperfekt (only very simple like 'hatte vergessen' if needed – no complex comparisons). Comparative/superlative (besser als). Simple opinions: ich finde, dass...; ich träume davon, dass.... Vary starts: Obwohl..., Weil..., Wenn..., Ich habe..., Gestern.... Topics: experiences, reasons, opinions, dreams, simple future plans, everyday + light abstract. Natural, not overloaded – like Goethe B1 model sentences (focus on weil/dass/obwohl/wenn, basic Konjunktiv II, no heavy past-in-past).",
-    "B2": "Sentences strictly 9-14 words (enforce: no less than 9, no more than 14). Vary syntax in batches of 5–10: include Passive (werden), relative clause (der/die/das/wo/wer), multi-part connector (zwar...aber, sowohl...als auch, entweder...oder, nicht nur...sondern auch) – one or two per sentence max. Use Plusquamperfekt simply (hatte + Partizip II). Konjunktiv II for hypotheticals. Futur I for plans/trends. Include occasional idioms/fixed expressions (es ist üblich, mit sich bringen, in der Lage sein). Topics: technology, culture, city life, environment, work, pros/cons. Natural, repeatable, exam-like (Goethe/telc B2 style) – clear, pronounceable, not overloaded.",
-    "C1": "Sentences 12-18 words (strictly no less than 12, no more than 18). Use sophisticated structures: nominalization (die Tatsache, dass…; die Notwendigkeit; aufgrund eines Fehlers), complex subordinate clauses (In Anbetracht der Tatsache, dass…; Um…zu…, ist es unabdingbar, dass…). Include Konjunktiv I in reported speech or formal contexts (sei, habe). Full Passive and Zustandspassiv (wurde befreit, war befreit worden). Advanced connectors for cohesion and logic (insofern, folglich, zwar…dennoch, angesichts, aufgrund, infolge). Nuanced/fixed expressions (nicht verwunderlich, es gelingt, unabdingbar, sich Zeit nehmen). Topics: society, culture, work processes, environment, technology impacts, abstract pros/cons. Flow logical and cohesive, natural like advanced German texts or Goethe C1 models – sophisticated but not overly rhetorical yet.",
-    "C2": "Sentences 14-20 words (strictly no more than 22, no less than 14). Mastery level: long, nuanced sentences with rhetorical devices (rhetorische Fragen, Ironie, Kontrastkonstruktionen, litotes, euphemism, hyperbole). Subtext and implicit criticism of society, trends, human nature. Use all tenses/moods fluently and stylistically (Konjunktiv I/II advanced, Futur II for assumptions, Plusquamperfekt narrative). Highly specific, academic, literary or journalistic vocabulary (grassierend, höhlt aus, wohlklingend, Zurschaustellung, Selbstoptimierungswelle, Muße, Kontemplation, unerschütterlich, keineswegs). Multi-part connectors (nicht nur … sondern auch, zwar … doch, mehr … als, allzu oft). Topics: social inequality, self-optimization culture, spirituality vs. reality, charity hypocrisy, human-animal relations, modern alienation. Flow elegant, cohesive, with critical depth – like high-level opinion articles, essays or literary commentary in German media (Zeit, FAZ Feuilleton, Philosophie Magazin)."
+ "A1": """
+Sentences strictly 4-7 words (never under 4). Only Präsens.
+
+Maximize structural variety: 40–60% sentences NOT starting with 'Ich'
+(use 'Das ist...', 'Es ist...', 'Mein/e... ist...', 'Der/Die/Das...', 
+'Wo ist...?', 'Wie heißt...?', 'Hast du...?', 'Heute ist...', 'Am Morgen...').
+Always include in every batch: many wh-questions (Wo?, Wie?, Was?, Welche?, 
+Wie viel?, Wie spät?, Woher?, Wohin?), yes/no questions, negations (nicht/kein/keine), 
+sein + Adj/Ort, haben + concrete nouns.
+
+Mix subjects strongly: Ich, Du, Er/Sie/Es, Wir, Das Auto, Die Jacke, 
+Mein Bruder, Der Apfel, Die Lampe etc.
+
+Topics: introductions, family/pets, home, hobbies, food, weather, routine, 
+shopping, birthdays.
+
+Natural, vivid, concrete, beginner-friendly like Goethe A1 model sentences 
+or textbooks (Netzwerk A1, Schritte International A1, Menschen A1).
+
+MANDATORY wide basic vocabulary coverage:
+- Colors: rot, blau, grün, gelb, weiß, schwarz, orange, rosa, violett, braun
+- Numbers: eins bis zwanzig (use in context: zwei Äpfel, drei Bücher, zehn Finger)
+- Time of day: morgens, mittags, abends, nachts, um acht Uhr, halb neun
+- Body parts: Kopf, Hand, Fuß, Auge, Nase, Mund, Arm, Bein, Haar, Finger
+- Clothes: Hose, Shirt, Schuhe, Jacke, Hut, Rock, Pullover, Socken, Schal
+- Fruits/vegetables: Apfel, Banane, Orange, Birne, Tomate, Karotte, Salat, Gurke
+- Furniture/home items: Tisch, Stuhl, Bett, Sofa, Lampe, Fenster, Tür, Spiegel
+- Rooms: Küche, Bad, Schlafzimmer, Wohnzimmer, Garten, Balkon
+- Everyday objects: Buch, Stift, Telefon, Tasche, Schlüssel, Brille, Heft
+- Animals: Hund, Katze, Vogel, Fisch, Pferd, Hase, Löwe, Elefant
+- Nature: Baum, Blume, Sonne, Mond, Himmel, Wolke, Regen, Schnee, Wind
+
+At least 50% sentences must use concrete nouns OTHER THAN Brot, Kaffee, Bus, 
+Hund, Mutter, Fußball, Geschenk, Wetter, Pizza, Suppe.
+
+ULTRA-STRICT REPETITION RULES:
+- Any single noun/verb/adjective (except articles, prepositions, conjunctions) 
+  → max 1 appearance per 25 sentences, max 2 per 100 sentences.
+- Zero tolerance for overusing: kaufe, Brot, Milch, Eier, Tomate, Geburtstag, 
+  Katze, Freunde, Schwester, Mutter, spielen Fußball, lesen Buch, Sonne scheint, 
+  Auto rot/schnell, Küche hell/groß, Bus fährt, Ampel rot/grün.
+
+In every 50 sentences:
+- at least 6–8 wh-questions (Wo ist...?, Welche Farbe hat...?, Wie viele...?, 
+  Was machst du...?, Wie spät ist es?, Woher kommst du?, Wohin gehst du?)
+- at least 5–7 sentences with body parts (mein Kopf schmerzt, deine Hände sind warm)
+- at least 4–6 sentences with animals (Vogel fliegt hoch, Fisch schwimmt im Wasser)
+- more numbers in context (drei rote Bälle, fünf Stühle, zwanzig Euro)
+
+Force multi-element descriptions in 20–25% of sentences:
+'ein großer roter Ball liegt unter dem Tisch', 
+'meine neue blaue Jacke hängt im Schrank', 
+'zwei gelbe Bananen und drei Äpfel auf dem Küchentisch'.
+
+Vary verbs strongly: essen, trinken, gehen, fahren, laufen, sitzen, stehen, liegen, 
+schlafen, lesen, schreiben, spielen, malen, singen, tanzen, schwimmen, springen, 
+lachen, weinen, rufen, suchen, finden.
+
+Style: lively, concrete, visual, like real A1 flashcards or textbook drills — 
+maximum lexical variety, no predictable patterns or boring loops, 
+full coverage of basic 500–650 A1 words.
+""",
+    "A2": """
+Sentences 6-11 words (avoid under 6 or over 12). Use Präsens + Perfekt (haben/sein dominant, especially sein for motion like fahren, gehen). 
+Include connectors: und, aber, oder, weil (at least 20-40% with weil for reasons). Separable verbs (aufstehen, einkaufen, ausgehen, mitkommen). 
+Full Akkusativ, introduce Dativ (mit, zu, von, bei, aus). Modal verbs in Präsens: können, wollen, müssen, sollen, mögen. 
+Time expressions: gestern, morgen, oft, manchmal, jeden Tag/Morgen, am Wochenende. 
+Vary starts: Am..., Gestern..., Ich habe/bin..., Manchmal..., Weil..., Mit... . 
+Topics: daily routine, past weekend/activities, weather/seasons, food/preferences, simple reasons, hobbies/sport, shopping, travel basics. 
+Natural, like Goethe A2 model sentences or textbooks (Netzwerk, Schritte) – everyday dialogues feel.
+Use wide vocabulary: expand on A1 with more actions (laufen, springen, singen, malen, tanzen), places (Schule, Arbeit, Park, Laden, Museum, Kino), 
+people descriptions (jung, alt, freundlich, traurig, glücklich, müde), food/drinks (Wasser, Saft, Tee, Pizza, Salat, Kuchen, Eis), 
+transport (Auto, Fahrrad, Zug, Flugzeug, Schiff), hobbies (Musik hören, Filme schauen, Bücher lesen, Sport treiben). 
+Avoid repetition of basic words — include varied nouns/adjectives in every sentence.
+""",
+    "B1": """
+Sentences 8-13 words (avoid under 8 or over 14). Mandatory subordinate clauses: weil, dass, wenn, obwohl (at least 40-60% include one). 
+Dominant: Perfekt for past experiences, Präteritum for war/hatte/modals (konnte, wollte, musste). 
+Basic Konjunktiv II: würde + Infinitiv for wishes; hätte/wäre/konnte for simple unreal/conditions/dreams. 
+Introduce Futur I sparingly (werden + Infinitiv) for plans (10-20% max). Avoid or minimize Plusquamperfekt (only very simple like 'hatte vergessen' if needed – no complex comparisons). 
+Comparative/superlative (besser als). Simple opinions: ich finde, dass...; ich träume davon, dass.... 
+Vary starts: Obwohl..., Weil..., Wenn..., Ich habe..., Gestern.... 
+Topics: experiences, reasons, opinions, dreams, simple future plans, everyday + light abstract. 
+Natural, not overloaded – like Goethe B1 model sentences (focus on weil/dass/obwohl/wenn, basic Konjunktiv II, no heavy past-in-past).
+Use wide vocabulary: emotions (freudig, traurig, wütend, ängstlich, überrascht), abstract concepts (Glück, Freiheit, Erfolg, Misserfolg), 
+work/school terms (Arbeit, Schule, Lehrer, Schüler, Prüfung, Job), travel (Reise, Hotel, Flughafen, Pass, Koffer), 
+health (Arzt, Krankheit, Medizin, Sport, Ernährung). Include varied nouns/adjectives/verbs to cover full B1 vocabulary (1000+ words).
+""",
+    "B2": """
+Sentences strictly 9-14 words (enforce: no less than 9, no more than 14). Vary syntax in batches of 5–10: include Passive (werden), relative clause (der/die/das/wo/wer), multi-part connector (zwar...aber, sowohl...als auch, entweder...oder, nicht nur...sondern auch) – one or two per sentence max. 
+Use Plusquamperfekt simply (hatte + Partizip II). Konjunktiv II for hypotheticals. Futur I for plans/trends. 
+Include occasional idioms/fixed expressions (es ist üblich, mit sich bringen, in der Lage sein). 
+Topics: technology, culture, city life, environment, work, pros/cons. 
+Natural, repeatable, exam-like (Goethe/telc B2 style) – clear, pronounceable, not overloaded.
+Use wide vocabulary: technology terms (Internet, Smartphone, App, Computer, Software, Hardware), environment (Umweltschutz, Klimawandel, Recycling, Nachhaltigkeit, Verschmutzung), 
+culture (Tradition, Festival, Kunst, Musik, Literatur, Film), work (Karriere, Bewerbung, Meeting, Chef, Kollege), 
+abstract pros/cons (Vorteil, Nachteil, Chance, Risiko). Ensure full coverage of B2 vocabulary (2000+ words) with varied terms in each sentence.
+""",
+    "C1": """
+Sentences 12-18 words (strictly no less than 12, no more than 18). Use sophisticated structures: nominalization (die Tatsache, dass…; die Notwendigkeit; aufgrund eines Fehlers), complex subordinate clauses (In Anbetracht der Tatsache, dass…; Um…zu…, ist es unabdingbar, dass…). 
+Include Konjunktiv I in reported speech or formal contexts (sei, habe). Full Passive and Zustandspassiv (wurde befreit, war befreit worden). 
+Advanced connectors for cohesion and logic (insofern, folglich, zwar…dennoch, angesichts, aufgrund, infolge). 
+Nuanced/fixed expressions (nicht verwunderlich, es gelingt, unabdingbar, sich Zeit nehmen). 
+Topics: society, culture, work processes, environment, technology impacts, abstract pros/cons. 
+Flow logical and cohesive, natural like advanced German texts or Goethe C1 models – sophisticated but not overly rhetorical yet.
+Use wide, nuanced vocabulary: society (Gesellschaft, Ungleichheit, Integration, Diskriminierung, Demokratie, Diktatur), 
+culture (Kulturalität, Identität, Globalisierung, Multikulturalismus, Tradition vs. Moderne), 
+work (Produktivität, Motivation, Burnout, Work-Life-Balance, Karriereleiter), 
+environment (Nachhaltigkeit, Klimakrise, Biodiversität, Ressourcenschonung, Ökologie). 
+Ensure broad lexical coverage with specific, advanced terms in every sentence for full C1 vocabulary depth (3000+ words).
+""",
+    "C2": """
+Sentences 14-20 words (strictly no more than 22, no less than 14). Mastery level: long, nuanced sentences with rhetorical devices (rhetorische Fragen, Ironie, Kontrastkonstruktionen, litotes, euphemism, hyperbole). 
+Subtext and implicit criticism of society, trends, human nature. Use all tenses/moods fluently and stylistically (Konjunktiv I/II advanced, Futur II for assumptions, Plusquamperfekt narrative). 
+Highly specific, academic, literary or journalistic vocabulary (grassierend, höhlt aus, wohlklingend, Zurschaustellung, Selbstoptimierungswelle, Muße, Kontemplation, unerschütterlich, keineswegs). 
+Multi-part connectors (nicht nur … sondern auch, zwar … doch, mehr … als, allzu oft). 
+Topics: social inequality, self-optimization culture, spirituality vs. reality, charity hypocrisy, human-animal relations, modern alienation. 
+Flow elegant, cohesive, with critical depth – like high-level opinion articles, essays or literary commentary in German media (Zeit, FAZ Feuilleton, Philosophie Magazin).
+Use extremely wide, precise vocabulary: philosophical terms (Existentialismus, Nihilismus, Hedonismus, Stoizismus), 
+journalistic (Polarisierung, Populismus, Medienmanipulation, Fake News, Narrative), 
+literary (Metapher, Allegorie, Ironie, Satire, Paradoxon), 
+social critique (Kapitalismus, Konsumgesellschaft, Alienation, Authentizität, Empathie). 
+Cover maximum lexical range with stylistic variety, academic depth, and implicit meanings in each sentence for full C2 mastery (5000+ words).
+"""
 }
 
 # --- СПИСОК ТЕМ (100+) ---
+# Розширений список з ще більшою кількістю конкретних тем для нижніх рівнів, щоб охопити максимум словникового запасу: більше підтем для іменників, кольорів, предметів тощо.
 BASE_TOPICS = [
-    # A1 — concrete, personal, here-and-now
-    "Daily Routine",
-    "Family & Relationships",
-    "Friendship",
-    "Pets & Animals",
-    "Food & Cooking",
-    "Fast Food",
-    "Shopping & Groceries",
-    "Gifts & Presents",
-    "Birthdays",
-    "Weather & Seasons",
-    "Hobbies & Free Time",
-    "Housing & Furniture",
-    "City Life",
-    "Public Transport",
-    "Travel & Transport",
-    "Restaurants & Cafes",
-    "Coffee Culture",
-    "Cleaning & Chores",
-    "Sleep & Dreams",
-    "Weekend Activities",
+    # A1 — розлогі, широкі, конкретні теми для максимального охоплення лексики
+    "Colors and Everyday Objects (rot, blau, grün, gelb, weiß, schwarz, orange, rosa, violett, braun)",
+    "Clothes and Accessories (Hose, Shirt, Schuhe, Jacke, Hut, Rock, Pullover, Socken, Handschuhe, Schal, Tasche, Gürtel)",
+    "Body Parts and Descriptions (Kopf, Hand, Fuß, Auge, Nase, Mund, Arm, Bein, Haar, Finger, Rücken, Bauch)",
+    "Numbers and Counting Things (eins, zwei, drei, vier, fünf, sechs, sieben, acht, neun, zehn, elf, zwölf, dreizehn, vierzehn, fünfzehn, sechzehn, siebzehn, achtzehn, neunzehn, zwanzig)",
+    "Time of Day and Clocks (morgens, mittags, abends, nachts, um acht Uhr, halb neun, Viertel nach zehn, Uhrzeit, Wecker)",
+    "Fruits and Vegetables Variety (Apfel, Banane, Orange, Birne, Tomate, Karotte, Salat, Kartoffel, Zwiebel, Gurke, Traube, Erdbeere, Kirsche, Zitrone)",
+    "Drinks and Beverages (not only coffee: Wasser, Saft, Tee, Milch, Limonade, Cola, Wein, Bier, Kakao, Smoothie)",
+    "School Supplies and Office Items (Buch, Stift, Heft, Radiergummi, Lineal, Schere, Kleber, Mappe, Rucksack, Computer)",
+    "Furniture and Home Items (Tisch, Stuhl, Bett, Sofa, Lampe, Fenster, Tür, Spiegel, Regal, Uhr, Kühlschrank, Herd)",
+    "Rooms in the House and Apartment (Küche, Bad, Schlafzimmer, Wohnzimmer, Garten, Balkon, Flur, Keller, Dachboden, Garage)",
+    "Daily Routine Items and Tools (Uhr, Telefon, Buch, Stift, Schlüssel, Brille, Computer, Fernseher, Radio, Spielzeug, Bürste, Zahnpasta)",
+    "Simple Descriptions of People and Appearance (jung, alt, groß, klein, dick, dünn, blond, brunett, langhaarig, kurze Haare, freundlich, traurig)",
+    "Different Animals and Pets (Hund, Katze, Vogel, Fisch, Pferd, Kuh, Schaf, Maus, Elefant, Giraffe, Löwe, Tiger, Affe, Hase)",
+    "Nature Elements and Outdoors (Baum, Blume, Sonne, Mond, Stern, Himmel, Wolke, Regen, Schnee, Wind, Fluss, See, Berg, Wald)",
+    "City Objects and Places (Ampel, Bank, Laden, Park, Straße, Haus, Brücke, Turm, Platz, Kirche, Schule, Krankenhaus)",
+    "Transport Variety and Vehicles (Auto, Fahrrad, Zug, Flugzeug, Schiff, Bus, U-Bahn, Taxi, Motorrad, Roller, Boot)",
+    "Weather Adjectives and Seasons (sonnig, regnerisch, windig, schneereich, heiß, kalt, warm, kühl, Frühling, Sommer, Herbst, Winter)",
+    "Family Members and Relatives (Vater, Mutter, Bruder, Schwester, Oma, Opa, Onkel, Tante, Cousin, Cousine, Baby, Kind)",
+    "Friends Descriptions and Activities (bester Freund, neue Freundin, zusammen spielen, besuchen, lachen, helfen, teilen, streiten, versöhnen)",
+    "Simple Shopping Items in Supermarket (Milch, Eier, Käse, Wurst, Obst, Gemüse, Süßigkeiten, Getränke, Brot, Butter, Joghurt, Honig)",
+    "Birthdays and Party Items (Geburtstag, Kuchen, Kerzen, Geschenke, Ballons, Party, Einladung, Musik, Tanzen, Feiern)",
+    "Hobbies besides Sports (Malen, Singen, Tanzen, Lesen, Zeichnen, Basteln, Sammeln, Fotografieren, Kochen, Gärtnern)",
+    "Daily Routine", "Family & Relationships", "Friendship", "Pets & Animals",
+    "Food & Cooking", "Fast Food", "Shopping & Groceries", "Gifts & Presents",
+    "Birthdays", "Weather & Seasons", "Hobbies & Free Time", "Housing & Furniture",
+    "City Life", "Public Transport", "Travel & Transport", "Restaurants & Cafes",
+    "Coffee Culture", "Cleaning & Chores", "Sleep & Dreams", "Weekend Activities",
 
-    # A2 — extended daily life
-    "Work & Career",
-    "Education & School",
-    "Health & Fitness",
-    "Sports & Games",
-    "Running",
-    "Team Sports",
-    "Movies & TV Series",
-    "Music & Concerts",
-    "Books & Literature",
-    "Online Shopping",
-    "Grocery Prices",
-    "Food Delivery",
-    "Hotels & Accommodation",
-    "Driving & Cars",
-    "Bicycles & Cycling",
-    "Swimming & Water Sports",
-    "Holidays & Vacations",
-    "Baking",
-    "Vegetarianism",
+    # A2 — extended daily life with more variety
+    "Work & Career", "Education & School", "Health & Fitness", "Sports & Games",
+    "Running", "Team Sports", "Movies & TV Series", "Music & Concerts",
+    "Books & Literature", "Online Shopping", "Grocery Prices", "Food Delivery",
+    "Hotels & Accommodation", "Driving & Cars", "Bicycles & Cycling",
+    "Swimming & Water Sports", "Holidays & Vacations", "Baking", "Vegetarianism",
+    "Cooking Recipes", "Healthy Eating", "Fitness Routines", "Travel Planning",
+    "Weekend Trips", "Family Outings", "School Subjects", "Work Meetings",
+    "Job Interviews", "Career Goals",
 
-    # B1 — experience, plans, opinions
-    "Childhood Memories",
-    "Future Plans",
-    "Dreams & Ambitions",
-    "Learning Languages",
-    "Technology & Internet",
-    "Social Media",
-    "Mobile Apps",
-    "Photography",
-    "Gardening",
-    "Home Improvement",
-    "Stress & Relaxation",
-    "Meditation",
-    "Yoga",
-    "Gym & Workout",
-    "Board Games",
-    "Video Games",
-    "Fashion & Clothing",
-    "Writing",
-    "Journaling",
+    # B1 — experience, plans, opinions with broader terms
+    "Childhood Memories", "Future Plans", "Dreams & Ambitions", "Learning Languages",
+    "Technology & Internet", "Social Media", "Mobile Apps", "Photography",
+    "Gardening", "Home Improvement", "Stress & Relaxation", "Meditation",
+    "Yoga", "Gym & Workout", "Board Games", "Video Games", "Fashion & Clothing",
+    "Writing", "Journaling", "Personal Goals", "Life Experiences", "Travel Stories",
+    "Cultural Events", "Opinion Sharing", "Debates on Topics", "Environmental Awareness",
 
-    # B2 — abstraction, society, systems
-    "Money & Finance",
-    "Productivity",
-    "Time Management",
-    "Leadership",
-    "Teamwork",
-    "Communication Skills",
-    "Public Speaking",
-    "News & Media",
-    "Advertising",
-    "Celebrities",
-    "Influencers",
-    "Privacy & Security",
-    "Smartphones",
-    "Laptops & Computers",
-    "Artificial Intelligence",
-    "Robots",
-    "Virtual Reality",
-    "Recycling",
-    "Climate Change",
-    "Nature & Environment",
-    "Design",
-    "Architecture",
-    "Psychology & Emotions",
-    "Conflict & Resolution",
-    "Cultural Differences",
+    # B2 — abstraction, society, systems with detailed subtopics
+    "Money & Finance", "Productivity", "Time Management", "Leadership",
+    "Teamwork", "Communication Skills", "Public Speaking", "News & Media",
+    "Advertising", "Celebrities", "Influencers", "Privacy & Security",
+    "Smartphones", "Laptops & Computers", "Artificial Intelligence", "Robots",
+    "Virtual Reality", "Recycling", "Climate Change", "Nature & Environment",
+    "Design", "Architecture", "Psychology & Emotions", "Conflict & Resolution",
+    "Cultural Differences", "Global Economy", "Social Trends", "Innovation Ideas",
+    "Ethical Dilemmas", "Media Influence", "Digital Ethics",
 
-    # C1/C2 — abstract, global, ethical
-    "Politics & Society",
-    "History & Culture",
-    "Traditions & Festivals",
-    "Philosophy",
-    "Religion & Spirituality",
-    "Science & Innovation",
-    "Space & Universe",
-    "Global Issues",
-    "Poverty & Wealth",
-    "Equality",
-    "Justice",
-    "Law & Order",
-    "Crime & Punishment",
-    "Safety",
-    "Emergency Services",
-    "Healthcare System",
-    "Volunteering",
-    "Charity",
-    "Art & Museums",
-    "Countryside Life",
-    "Painting & Drawing",
-    "DIY & Crafts",
-    "Architecture"
+    # C1/C2 — abstract, global, ethical with wide coverage
+    "Politics & Society", "History & Culture", "Traditions & Festivals",
+    "Philosophy", "Religion & Spirituality", "Science & Innovation",
+    "Space & Universe", "Global Issues", "Poverty & Wealth", "Equality",
+    "Justice", "Law & Order", "Crime & Punishment", "Safety",
+    "Emergency Services", "Healthcare System", "Volunteering", "Charity",
+    "Art & Museums", "Countryside Life", "Painting & Drawing", "DIY & Crafts",
+    "Architecture", "Social Inequality Debates", "Self-Improvement Philosophies",
+    "Cultural Globalization", "Environmental Policies", "Technological Ethics",
+    "Human Rights", "Mental Health Awareness", "Economic Theories", "Literary Analysis"
 ]
 
 LEVEL_RULES = {
     "A1": {
-        "allowed_topics": BASE_TOPICS[:20],
+        "allowed_topics": BASE_TOPICS[:60],  # розширено для максимальної лексичної ширини
         "abstraction": "none",
         "sentence_length": "short",
         "grammar": ["present", "basic verbs"]
     },
     "A2": {
-        "allowed_topics": BASE_TOPICS[:39],
+        "allowed_topics": BASE_TOPICS[:80],
         "abstraction": "low",
         "sentence_length": "short-medium",
         "grammar": ["past", "modal verbs"]
     },
     "B1": {
-        "allowed_topics": BASE_TOPICS[:58],
+        "allowed_topics": BASE_TOPICS[:100],
         "abstraction": "medium",
         "sentence_length": "medium",
         "grammar": ["subordinate clauses"]
     },
     "B2": {
-        "allowed_topics": BASE_TOPICS[:83],
+        "allowed_topics": BASE_TOPICS[:120],
         "abstraction": "high",
         "sentence_length": "long",
         "grammar": ["passive", "Konjunktiv II"]
@@ -196,8 +269,6 @@ LEVEL_RULES = {
         "grammar": ["stylistic variation", "rhetoric"]
     }
 }
-
-
 
 def clean_json_response(text):
     """Очищає відповідь від Markdown блоків."""
@@ -229,6 +300,10 @@ def generate_batch(level, count, topics_subset):
     1. Sentences must be grammatically correct and sound natural.
     2. Provide translations in Ukrainian (uk) and English (en).
     3. Output must be a valid JSON list of objects.
+
+    Extra for A1: Prioritize lexical diversity over repetition. Track used words and force new ones: use different nouns/adjectives/verbs/colors/numbers/objects in EVERY sentence. 
+    No more than 1–2 'Ich kaufe...', 'meine Schwester/mutter/freundin' per 50 sentences. 
+    Force variety in verbs: essen, trinken, gehen, fahren, laufen, sitzen, stehen, liegen, schlafen, lesen, schreiben, malen, singen, tanzen, schwimmen, springen, lachen, weinen.
     
     JSON Format:
     [
@@ -247,7 +322,7 @@ def generate_batch(level, count, topics_subset):
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
-                temperature=1,
+                temperature=1.37 if level.upper() == "A1" else 1.1,
             )
         )
         
@@ -299,7 +374,7 @@ def main():
     print(f"---------------------------")
 
     # 3. Генерація пакетами (щоб не перевантажити контекст і отримати валідний JSON)
-    BATCH_SIZE = 10
+    BATCH_SIZE = 20
     generated_count = 0
     
     # Відкриваємо файл відразу для запису

@@ -18,6 +18,7 @@ __pycache__/
 # Database and generated files
 # Папка 'data' містить базу даних та згенеровані аудіофайли.
 data/
+static/
 
 # OS-specific & IDE configuration
 .DS_Store
