@@ -3,25 +3,42 @@ import uuid
 import hashlib
 import math
 import json
+import threading
+import time
+import random
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, send_from_directory
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from flask_sqlalchemy import SQLAlchemy
+from flask_admin import Admin, AdminIndexView, BaseView, expose, helpers
+from flask_admin.contrib.sqla import ModelView
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
+from datetime import datetime
+from markupsafe import Markup
 
 from database import get_db, init_db
 import services
 import billing
 
 load_dotenv()
+
+# Імпорт твоїх скриптів як модулів
+import utils.generate_sentences as gen_sent_script
+import utils.generate_audio as gen_audio_script
+
 init_db()
 
 app = Flask(__name__)
+# Налаштування SQLAlchemy для Flask-Admin
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(os.getcwd(), 'data', 'app.db')
 # Налаштування для коректного відображення кирилиці в JSON
 app.json.ensure_ascii = False 
 
 app.config['SECRET_KEY'] = os.getenv("SECRET_KEY", "dev-key")
 AUDIO_DIR = "data/audio"
 os.makedirs(AUDIO_DIR, exist_ok=True)
+
+db = SQLAlchemy(app)
 
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -166,7 +183,7 @@ UI_STRINGS = {
 class User(UserMixin):
     def __init__(self, id, email, interface_language='ukr', 
                  library_view_mode='list', library_per_page=20,
-                 vocab_view_mode='list', vocab_per_page=20, level='A2', credits=1000.0):
+                 vocab_view_mode='list', vocab_per_page=20, level='A2', credits=1000.0, is_admin=0):
         self.id = id
         self.email = email
         self.interface_language = interface_language or 'ukr'
@@ -176,6 +193,7 @@ class User(UserMixin):
         self.vocab_per_page = vocab_per_page
         self.level = level
         self.credits = credits
+        self.is_admin = is_admin
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -191,9 +209,361 @@ def load_user(user_id):
             vpp = u['vocab_per_page'] if 'vocab_per_page' in keys and u['vocab_per_page'] else 20
             lvl = u['level'] if 'level' in keys and u['level'] else 'A2'
             crd = u['credits'] if 'credits' in keys and u['credits'] is not None else 1000.0
+            is_adm = u['is_admin'] if 'is_admin' in keys and u['is_admin'] else 0
             
-            return User(u['id'], u['email'], lang, lvm, lpp, vvm, vpp, lvl, crd)
+            return User(u['id'], u['email'], lang, lvm, lpp, vvm, vpp, lvl, crd, is_adm)
     return None
+
+# --- ADMIN MODELS (SQLAlchemy) ---
+
+class UserModel(db.Model):
+    __tablename__ = 'users'
+    id = db.Column(db.String, primary_key=True)
+    email = db.Column(db.String, unique=True, nullable=False)
+    password_hash = db.Column(db.String, nullable=False)
+    interface_language = db.Column(db.String, default='ukr')
+    level = db.Column(db.String, default='A2')
+    credits = db.Column(db.Float, default=1000.0)
+    is_admin = db.Column(db.Integer, default=0)
+
+class SentenceModel(db.Model):
+    __tablename__ = 'sentences'
+    id = db.Column(db.Integer, primary_key=True)
+    text_de = db.Column(db.String)
+    text_en = db.Column(db.String)
+    text_uk = db.Column(db.String)
+    audio_de = db.Column(db.String)
+    audio_en = db.Column(db.String)
+    audio_uk = db.Column(db.String)
+    level = db.Column(db.String)
+    topic = db.Column(db.String)
+
+class SentenceBatch(db.Model):
+    __tablename__ = 'sentence_batches'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String)
+    level = db.Column(db.String)
+    target_count = db.Column(db.Integer)
+    processed_count = db.Column(db.Integer, default=0)
+    status = db.Column(db.String, default='pending')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class TempSentence(db.Model):
+    __tablename__ = 'temp_sentences'
+    id = db.Column(db.Integer, primary_key=True)
+    batch_id = db.Column(db.Integer, db.ForeignKey('sentence_batches.id'))
+    de = db.Column(db.String)
+    en = db.Column(db.String)
+    uk = db.Column(db.String)
+    topic = db.Column(db.String)
+
+# --- ADMIN VIEWS ---
+
+class MyAdminIndexView(AdminIndexView):
+    @expose('/')
+    def index(self):
+        if not current_user.is_authenticated or not getattr(current_user, 'is_admin', 0):
+            return redirect(url_for('login'))
+        return super(MyAdminIndexView, self).index()
+
+    @expose('/change_password', methods=['GET', 'POST'])
+    def change_password(self):
+        if not current_user.is_authenticated or not getattr(current_user, 'is_admin', 0):
+            return redirect(url_for('login'))
+        
+        if request.method == 'POST':
+            new_pass = request.form.get('new_password')
+            if new_pass:
+                # Оновлюємо через raw SQL для надійності (або через ORM)
+                with get_db() as conn:
+                    conn.execute('UPDATE users SET password_hash = ? WHERE id = ?', 
+                                 (generate_password_hash(new_pass), current_user.id))
+                    conn.commit()
+                flash('Пароль адміністратора змінено!', 'success')
+                return redirect(url_for('admin.index'))
+        
+        return self.render('admin/change_password.html')
+
+class MyModelView(ModelView):
+    def is_accessible(self):
+        return current_user.is_authenticated and getattr(current_user, 'is_admin', 0)
+
+    def inaccessible_callback(self, name, **kwargs):
+        return redirect(url_for('login'))
+
+class SentenceView(MyModelView):
+    list_template = 'admin/sentence_list.html'
+    column_display_actions = False
+    # Новий порядок колонок
+    column_list = ['play', 'text_uk', 'text_en', 'text_de', 'id', 'level', 'topic', 'actions']
+    column_labels = {
+        'play': 'Play', 
+        'text_uk': 'Ukrainian', 
+        'text_en': 'English',
+        'text_de': 'German', 
+        'id': 'ID',
+        'level': 'Level',
+        'topic': 'Topic',
+        'actions': 'Actions'
+    }
+    column_searchable_list = ['text_de', 'text_uk', 'topic']
+    column_filters = ['level', 'topic']
+    page_size = 20
+    # Вказуємо, які колонки можна сортувати
+    column_sortable_list = ['id', 'level', 'topic', 'text_de', 'text_uk', 'text_en']
+
+    def _actions_formatter(view, context, model, name):
+        edit_url = url_for('.edit_view', id=model.id)
+        delete_url = url_for('.delete_view', id=model.id)
+        
+        actions_html = f"""
+            <div style="display: flex; gap: 8px; align-items: center; justify-content: center;">
+                <a href="{edit_url}" class="btn btn-primary action-btn" title="Edit">
+                    <span class="material-symbols-outlined" style="font-size: 18px;">edit</span>
+                </a>
+                <a href="{delete_url}" class="btn btn-danger action-btn" title="Delete">
+                    <span class="material-symbols-outlined" style="font-size: 18px;">delete</span>
+                </a>
+            </div>
+        """
+        return Markup(actions_html)
+
+    def _play_formatter(view, context, model, name):
+        # Формуємо список URL для JS
+        urls = [model.audio_uk, model.audio_en, model.audio_de]
+        # Екрануємо лапки
+        js_args = ", ".join([f"'{u}'" for u in urls if u])
+        return Markup(
+            f'''<button class="play-btn" onclick="playSequence(this, [{js_args}])">▶</button>'''
+        )
+
+    column_formatters = {
+        'play': _play_formatter,
+        'actions': _actions_formatter
+    }
+
+    def after_model_delete(self, model):
+        # Видалення файлів після видалення запису з БД
+        base_static = os.path.join(app.root_path, 'static', 'audio', 'sentences')
+        for path in [model.audio_de, model.audio_en, model.audio_uk]:
+            if path:
+                full_path = os.path.join(base_static, path)
+                if os.path.exists(full_path):
+                    try:
+                        os.remove(full_path)
+                        print(f"Deleted file: {full_path}")
+                    except Exception as e:
+                        print(f"Error deleting file {full_path}: {e}")
+
+class GenerateSentencesView(BaseView):
+    @expose('/')
+    def index(self):
+        if not current_user.is_authenticated or not getattr(current_user, 'is_admin', 0):
+            return redirect(url_for('login'))
+        batches = SentenceBatch.query.order_by(SentenceBatch.created_at.desc()).all()
+        return self.render('admin/gen_sentences.html', batches=batches)
+
+    @expose('/start_text_gen', methods=['POST'])
+    def start_text_gen(self):
+        level = request.form.get('level')
+        count = int(request.form.get('count', 10))
+        
+        name = f"{datetime.now().strftime('%d-%H-%M-%S')}_{level}_{count}"
+        batch = SentenceBatch(name=name, level=level, target_count=count, status='generating_text')
+        db.session.add(batch)
+        db.session.commit()
+        
+        thread = threading.Thread(target=background_text_gen, args=(app, batch.id, level, count))
+        thread.start()
+        
+        return redirect(url_for('.index'))
+
+    @expose('/batch/<int:batch_id>/edit')
+    def edit_batch(self, batch_id):
+        batch = SentenceBatch.query.get_or_404(batch_id)
+        page = request.args.get('page', 1, type=int)
+        per_page = 40
+        pagination = TempSentence.query.filter_by(batch_id=batch_id).paginate(page=page, per_page=per_page)
+        return self.render('admin/batch_edit.html', batch=batch, pagination=pagination)
+
+    @expose('/batch/<int:batch_id>/delete', methods=['POST'])
+    def delete_batch(self, batch_id):
+        batch = SentenceBatch.query.get_or_404(batch_id)
+        TempSentence.query.filter_by(batch_id=batch_id).delete()
+        db.session.delete(batch)
+        db.session.commit()
+        return redirect(url_for('.index'))
+
+    @expose('/batch/<int:batch_id>/apply', methods=['POST'])
+    def apply_batch(self, batch_id):
+        batch = SentenceBatch.query.get_or_404(batch_id)
+        batch.status = 'generating_audio'
+        batch.processed_count = 0
+        db.session.commit()
+        
+        thread = threading.Thread(target=background_audio_gen, args=(app, batch.id))
+        thread.start()
+        
+        return redirect(url_for('.index'))
+
+    @expose('/api/batch_status/<int:batch_id>')
+    def batch_status(self, batch_id):
+        batch = SentenceBatch.query.get(batch_id)
+        if not batch: return jsonify({'error': 'Not found'}), 404
+        return jsonify({
+            'status': batch.status,
+            'processed': batch.processed_count,
+            'total': batch.target_count
+        })
+    
+    @expose('/api/update_temp_sentence', methods=['POST'])
+    def update_temp_sentence(self):
+        data = request.json
+        ts = TempSentence.query.get(data.get('id'))
+        if ts:
+            field = data.get('field')
+            val = data.get('value')
+            if field == 'de': ts.de = val
+            elif field == 'en': ts.en = val
+            elif field == 'uk': ts.uk = val
+            db.session.commit()
+            return jsonify({'ok': True})
+        return jsonify({'error': 'Not found'}), 404
+
+    @expose('/api/delete_temp_sentence', methods=['POST'])
+    def delete_temp_sentence(self):
+        data = request.json
+        ts = TempSentence.query.get(data.get('id'))
+        if ts:
+            db.session.delete(ts)
+            db.session.commit()
+            return jsonify({'ok': True})
+        return jsonify({'error': 'Not found'}), 404
+
+# --- BACKGROUND TASKS ---
+
+def background_text_gen(app_instance, batch_id, level, count):
+    with app_instance.app_context():
+        try:
+            generated = 0
+            # Використовуємо логіку вибору тем з твого скрипта
+            if level in gen_sent_script.LEVEL_RULES:
+                available_topics = gen_sent_script.LEVEL_RULES[level]["allowed_topics"]
+            else:
+                available_topics = gen_sent_script.BASE_TOPICS
+
+            while generated < count:
+                chunk_size = min(20, count - generated)
+                
+                # Вибір тем як у твоєму скрипті
+                if len(available_topics) >= chunk_size:
+                    batch_topics = random.sample(available_topics, chunk_size)
+                else:
+                    batch_topics = random.choices(available_topics, k=chunk_size)
+                
+                # ВИКЛИК ТВОГО СКРИПТА
+                sentences = gen_sent_script.generate_batch(level, chunk_size, batch_topics)
+                
+                for s in sentences:
+                    ts = TempSentence(
+                        batch_id=batch_id,
+                        de=s.get('de'),
+                        en=s.get('en'),
+                        uk=s.get('uk') or s.get('ua'),
+                        topic=s.get('topic', '')
+                    )
+                    db.session.add(ts)
+                
+                generated += len(sentences)
+                batch = SentenceBatch.query.get(batch_id)
+                batch.processed_count = generated
+                db.session.commit()
+                
+            batch = SentenceBatch.query.get(batch_id)
+            batch.status = 'text_ready'
+            db.session.commit()
+        except Exception as e:
+            print(f"BG Text Error: {e}")
+            batch = SentenceBatch.query.get(batch_id)
+            batch.status = 'error'
+            db.session.commit()
+
+def background_audio_gen(app_instance, batch_id):
+    with app_instance.app_context():
+        try:
+            batch = SentenceBatch.query.get(batch_id)
+            sentences = TempSentence.query.filter_by(batch_id=batch_id).all()
+            batch.target_count = len(sentences)
+            
+            last_sent = SentenceModel.query.order_by(SentenceModel.id.desc()).first()
+            start_id = (last_sent.id if last_sent else 0) + 1
+            
+            base_static = os.path.join(app_instance.root_path, 'static', 'audio', 'sentences')
+            
+            for i, s in enumerate(sentences):
+                current_id = start_id + i
+                file_prefix = f"{current_id:04d}"
+                rel_folder = batch.level.lower()
+                
+                path_de = f"{rel_folder}/{file_prefix}_de.mp3"
+                path_en = f"{rel_folder}/{file_prefix}_en.mp3"
+                path_uk = f"{rel_folder}/{file_prefix}_uk.mp3"
+                
+                # ВИКЛИК ТВОГО СКРИПТА
+                gen_audio_script.generate_file(s.de, 'de', os.path.join(base_static, path_de))
+                gen_audio_script.generate_file(s.en, 'en', os.path.join(base_static, path_en))
+                gen_audio_script.generate_file(s.uk, 'uk', os.path.join(base_static, path_uk))
+                
+                new_sent = SentenceModel(id=current_id, text_de=s.de, text_en=s.en, text_uk=s.uk, audio_de=path_de, audio_en=path_en, audio_uk=path_uk, level=batch.level, topic=s.topic)
+                db.session.add(new_sent)
+                
+                batch.processed_count = i + 1
+                if i % 5 == 0: db.session.commit()
+            
+            TempSentence.query.filter_by(batch_id=batch_id).delete()
+            db.session.delete(batch)
+            db.session.commit()
+        except Exception as e:
+            print(f"BG Audio Error: {e}")
+            batch = SentenceBatch.query.get(batch_id)
+            batch.status = 'error'
+            db.session.commit()
+
+# Ініціалізація Адмінки
+admin = Admin(app, name='DE Tutor Admin', index_view=MyAdminIndexView())
+admin.add_view(MyModelView(UserModel, db.session, name='Users'))
+admin.add_view(SentenceView(SentenceModel, db.session, name='Sentences'))
+admin.add_view(GenerateSentencesView(name='Generate Sentences', endpoint='generate'))
+
+# Створення адміна при запуску
+def create_admin_user():
+    with app.app_context():
+        # Перевіряємо чи існує адмін
+        admin_email = "admin@admin.com"
+        existing = UserModel.query.filter_by(email=admin_email).first()
+        if not existing:
+            print("Creating admin user...")
+            uid = str(uuid.uuid4())
+            # Пароль за замовчуванням: admin
+            new_admin = UserModel(
+                id=uid,
+                email=admin_email,
+                password_hash=generate_password_hash("admin"),
+                is_admin=1,
+                level='C2'
+            )
+            db.session.add(new_admin)
+            db.session.commit()
+            print(f"Admin created: {admin_email} / admin")
+        else:
+            # Переконуємось, що він має права адміна
+            if existing.is_admin != 1:
+                existing.is_admin = 1
+                db.session.commit()
+
+# Викликаємо створення адміна одразу при ініціалізації, щоб працювало і з 'flask run'
+with app.app_context():
+    create_admin_user()
 
 @app.context_processor
 def inject_ui():

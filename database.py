@@ -35,6 +35,15 @@ def init_db():
         except sqlite3.OperationalError:
             pass
 
+        # 1.3 Додаємо колонку is_admin
+        try:
+            conn.execute('ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0')
+            conn.commit()
+            print("LOG: Column 'is_admin' added to users table.")
+        except sqlite3.OperationalError as e:
+            # Ігноруємо помилку, якщо колонка вже існує
+            pass 
+
         # Таблиця користувачів
         conn.execute('''CREATE TABLE IF NOT EXISTS users (
             id TEXT PRIMARY KEY,
@@ -42,7 +51,8 @@ def init_db():
             password_hash TEXT NOT NULL,
             interface_language TEXT DEFAULT 'ukr',
             level TEXT DEFAULT 'A2',
-            credits REAL DEFAULT 1000.0
+            credits REAL DEFAULT 1000.0,
+            is_admin INTEGER DEFAULT 0
         )''')
         
         # Таблиця текстів
@@ -107,5 +117,26 @@ def init_db():
             conn.execute('ALTER TABLE vocabulary ADD COLUMN level TEXT')
         except sqlite3.OperationalError:
             pass
+
+        # 5. Таблиці для генератора речень (Admin Tool)
+        conn.execute('''CREATE TABLE IF NOT EXISTS sentence_batches (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            level TEXT,
+            target_count INTEGER,
+            processed_count INTEGER DEFAULT 0,
+            status TEXT DEFAULT 'pending', -- generating_text, text_ready, generating_audio, completed, error
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        conn.execute('''CREATE TABLE IF NOT EXISTS temp_sentences (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            batch_id INTEGER,
+            de TEXT,
+            en TEXT,
+            uk TEXT,
+            topic TEXT,
+            FOREIGN KEY (batch_id) REFERENCES sentence_batches (id) ON DELETE CASCADE
+        )''')
 
         conn.commit()

@@ -1,0 +1,78 @@
+{% extends 'admin/master.html' %}
+
+{% block body %}
+<div class="container-fluid">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h3>Edit Batch: {{ batch.name }}</h3>
+        <div>
+            <a href="{{ url_for('generate.index') }}" class="btn btn-default">Save (Back)</a>
+            <form action="{{ url_for('generate.apply_batch', batch_id=batch.id) }}" method="POST" style="display:inline; margin-left: 10px;">
+                <button type="submit" class="btn btn-success">Apply (Generate Audio)</button>
+            </form>
+        </div>
+    </div>
+
+    <table class="table table-bordered table-hover">
+        <thead>
+            <tr>
+                <th>German</th>
+                <th>English</th>
+                <th>Ukrainian</th>
+                <th>Topic</th>
+                <th style="width: 100px;">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for s in pagination.items %}
+            <tr>
+                <td contenteditable="true" onblur="saveCell({{s.id}}, 'de', this)">{{ s.de }}</td>
+                <td contenteditable="true" onblur="saveCell({{s.id}}, 'en', this)">{{ s.en }}</td>
+                <td contenteditable="true" onblur="saveCell({{s.id}}, 'uk', this)">{{ s.uk }}</td>
+                <td>{{ s.topic }}</td>
+                <td>
+                    <button class="btn btn-xs btn-danger" onclick="deleteRow(this, {{s.id}})">Del</button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <!-- Pagination -->
+    {% if pagination.pages > 1 %}
+    <ul class="pagination">
+        {% for page in pagination.iter_pages() %}
+            {% if page %}
+                <li class="{% if page == pagination.page %}active{% endif %}">
+                    <a href="{{ url_for('generate.edit_batch', batch_id=batch.id, page=page) }}">{{ page }}</a>
+                </li>
+            {% else %}
+                <li class="disabled"><a href="#">...</a></li>
+            {% endif %}
+        {% endfor %}
+    </ul>
+    {% endif %}
+</div>
+
+<script>
+    function saveCell(id, field, el) {
+        fetch('/admin/generate/api/update_temp_sentence', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({id: id, field: field, value: el.innerText})
+        });
+    }
+    
+    function deleteRow(btn, id) {
+        if(!confirm('Delete row?')) return;
+        fetch('/admin/generate/api/delete_temp_sentence', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({id: id})
+        }).then(r => r.json()).then(data => {
+            if(data.ok) {
+                btn.closest('tr').remove();
+            }
+        });
+    }
+</script>
+{% endblock %}
