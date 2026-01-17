@@ -6,60 +6,60 @@ import csv
 import sqlite3
 import random
 from dotenv import load_dotenv
-import azure.cognitiveservices.speech as speechsdk
+from google.cloud import texttospeech
 
 # 1. Налаштування шляхів
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BASE_DIR)
 load_dotenv(os.path.join(BASE_DIR, '.env'))
 
-# 2. Azure конфігурація
-SPEECH_KEY = os.getenv("AZURE_SPEECH_KEY")
-SPEECH_REGION = os.getenv("AZURE_SPEECH_REGION")
-
-if not SPEECH_KEY or not SPEECH_REGION:
-    print("Error: AZURE_SPEECH_KEY or AZURE_SPEECH_REGION not found in .env")
+# 2. Google конфігурація
+if not os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
+    print("Error: GOOGLE_APPLICATION_CREDENTIALS not found in .env")
     sys.exit(1)
 
 # 3. Шляхи до БД та аудіо
 DB_PATH = os.path.join(BASE_DIR, 'data', 'app.db')
 STATIC_AUDIO_DIR = os.path.join(BASE_DIR, 'static', 'audio', 'sentences')
 
-# 4. Голоси
+# 4. Голоси (Gemini / Chirp)
 VOICES = {
-    'uk': ["uk-UA-PolinaNeural", "uk-UA-OstapNeural"],
-    'en': ["en-US-AndrewMultilingualNeural", "en-US-CoraMultilingualNeural"],
-    'de': ["de-DE-SeraphinaMultilingualNeural", "de-DE-ConradNeural"]
+    'uk': ["uk-UA-Chirp3-HD-Leda", "uk-UA-Chirp3-HD-Sadachbia"],
+    'en': ["en-US-Chirp-HD-O", "en-US-Chirp3-HD-Alnilam"],
+    'de': ["de-DE-Chirp3-HD-Alnilam", "de-DE-Chirp3-HD-Leda"]
 }
-
-def get_synthesizer(language, filename):
-    speech_config = speechsdk.SpeechConfig(subscription=SPEECH_KEY, region=SPEECH_REGION)
-    
-    # Вибір голосу 50/50
-    voice_name = random.choice(VOICES[language])
-    speech_config.speech_synthesis_voice_name = voice_name
-    
-    # Формат аудіо (MP3)
-    speech_config.set_speech_synthesis_output_format(
-        speechsdk.SpeechSynthesisOutputFormat.Audio24Khz160KBitRateMonoMp3
-    )
-    
-    audio_config = speechsdk.audio.AudioOutputConfig(filename=filename)
-    return speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=audio_config)
 
 def generate_file(text, lang, filepath):
     # Створюємо папку, якщо немає
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
     
-    synthesizer = get_synthesizer(lang, filepath)
-    result = synthesizer.speak_text_async(text).get()
+    client = texttospeech.TextToSpeechClient()
     
-    if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
+    # Вибір голосу 50/50
+    voice_name = random.choice(VOICES[lang])
+    language_code = voice_name[:5]
+    
+    s_input = texttospeech.SynthesisInput(text=text)
+    
+    voice = texttospeech.VoiceSelectionParams(
+        language_code=language_code,
+        name=voice_name
+    )
+    
+    audio_config = texttospeech.AudioConfig(
+        audio_encoding=texttospeech.AudioEncoding.OGG_OPUS # <--- Змінюємо тут
+    )
+    
+    try:
+        response = client.synthesize_speech(
+            input=s_input, voice=voice, audio_config=audio_config
+        )
+        
+        with open(filepath, "wb") as out:
+            out.write(response.audio_content)
         return True
-    else:
-        print(f"Error synthesizing {lang}: {result.cancellation_details.reason}")
-        if result.cancellation_details.error_details:
-            print(f"Details: {result.cancellation_details.error_details}")
+    except Exception as e:
+        print(f"Error synthesizing {lang} ({voice_name}): {e}")
         return False
 
 def init_db():
@@ -128,9 +128,9 @@ def main():
             rel_folder = level_lower
             
             # Відносні шляхи для БД
-            path_de_rel = f"{rel_folder}/{file_prefix}_de.mp3"
-            path_en_rel = f"{rel_folder}/{file_prefix}_en.mp3"
-            path_uk_rel = f"{rel_folder}/{file_prefix}_uk.mp3"
+            path_de_rel = f"{rel_folder}/{file_prefix}_de.ogg"
+            path_en_rel = f"{rel_folder}/{file_prefix}_en.ogg"
+            path_uk_rel = f"{rel_folder}/{file_prefix}_uk.ogg"
             
             # Абсолютні шляхи для запису
             path_de_abs = os.path.join(STATIC_AUDIO_DIR, path_de_rel)

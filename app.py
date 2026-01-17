@@ -505,9 +505,9 @@ def background_audio_gen(app_instance, batch_id):
                 file_prefix = f"{current_id:04d}"
                 rel_folder = batch.level.lower()
                 
-                path_de = f"{rel_folder}/{file_prefix}_de.mp3"
-                path_en = f"{rel_folder}/{file_prefix}_en.mp3"
-                path_uk = f"{rel_folder}/{file_prefix}_uk.mp3"
+                path_de = f"{rel_folder}/{file_prefix}_de.ogg"
+                path_en = f"{rel_folder}/{file_prefix}_en.ogg"
+                path_uk = f"{rel_folder}/{file_prefix}_uk.ogg"
                 
                 # ВИКЛИК ТВОГО СКРИПТА
                 gen_audio_script.generate_file(s.de, 'de', os.path.join(base_static, path_de))
@@ -961,7 +961,7 @@ def tts():
     lang = request.json.get('lang', 'de')
     
     file_hash = hashlib.md5(f"{text}_{lang}".encode()).hexdigest()
-    filename = f"{file_hash}.mp3"
+    filename = f"{file_hash}.ogg"
     filepath = os.path.join(AUDIO_DIR, filename)
     
     new_bal = current_user.credits
