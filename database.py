@@ -118,6 +118,12 @@ def init_db():
         except sqlite3.OperationalError:
             pass
 
+        # 6. Міграція для улюблених текстів (Favorites)
+        try:
+            conn.execute('ALTER TABLE texts ADD COLUMN is_favorite INTEGER DEFAULT 0')
+        except sqlite3.OperationalError:
+            pass
+
         # 5. Таблиці для генератора речень (Admin Tool)
         conn.execute('''CREATE TABLE IF NOT EXISTS sentence_batches (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

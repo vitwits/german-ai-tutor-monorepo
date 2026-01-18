@@ -748,26 +748,39 @@ def explain_grammar():
 @app.route('/library')
 @login_required
 def library():
-    arg_view = request.args.get('view')
-    arg_per_page = request.args.get('per_page', type=int)
+    # Фіксовані налаштування вигляду
+    view_mode = 'grid'
+    per_page = 18
     
-    view_mode = arg_view if arg_view else current_user.library_view_mode
-    per_page = arg_per_page if arg_per_page else current_user.library_per_page
+    # Фільтри
+    show_fav = request.args.get('fav') == '1'
+    levels_arg = request.args.get('levels')
+    selected_levels = levels_arg.split(',') if levels_arg else []
+    # Валідація рівнів
+    valid_levels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']
+    selected_levels = [l for l in selected_levels if l in valid_levels]
     
-    if (arg_view and arg_view != current_user.library_view_mode) or (arg_per_page and arg_per_page != current_user.library_per_page):
-        with get_db() as conn:
-            conn.execute('UPDATE users SET library_view_mode = ?, library_per_page = ? WHERE id = ?', 
-                         (view_mode, per_page, current_user.id))
-            conn.commit()
-        current_user.library_view_mode = view_mode
-        current_user.library_per_page = per_page
-
     page = request.args.get('page', 1, type=int)
     offset = (page - 1) * per_page
 
+    query_base = 'FROM texts WHERE user_id = ?'
+    params = [current_user.id]
+
+    if show_fav:
+        query_base += ' AND is_favorite = 1'
+
+    if selected_levels:
+        placeholders = ','.join(['?'] * len(selected_levels))
+        query_base += f' AND level IN ({placeholders})'
+        params.extend(selected_levels)
+
+    query_count = f'SELECT COUNT(*) {query_base}'
+    query_rows = f'SELECT * {query_base} ORDER BY rowid DESC LIMIT ? OFFSET ?'
+    
     with get_db() as conn:
-        total_count = conn.execute('SELECT COUNT(*) FROM texts WHERE user_id = ?', (current_user.id,)).fetchone()[0]
-        db_rows = conn.execute('SELECT * FROM texts WHERE user_id = ? ORDER BY rowid DESC LIMIT ? OFFSET ?', (current_user.id, per_page, offset)).fetchall()
+        total_count = conn.execute(query_count, params).fetchone()[0]
+        # params дублюються для count і rows, але для rows треба додати limit/offset
+        db_rows = conn.execute(query_rows, params + [per_page, offset]).fetchall()
 
     total_pages = math.ceil(total_count / per_page)
     texts = []
@@ -784,7 +797,7 @@ def library():
             r['trans_title'] = ""
         texts.append(r)
         
-    return render_template('library.html', texts=texts, page=page, per_page=per_page, total_pages=total_pages, view_mode=view_mode)
+    return render_template('library.html', texts=texts, page=page, per_page=per_page, total_pages=total_pages, view_mode=view_mode, show_fav=show_fav, selected_levels=selected_levels)
 
 @app.route('/view/<tid>')
 @login_required
@@ -888,18 +901,15 @@ def vocab():
     lang = current_user.interface_language
     
     arg_view = request.args.get('view')
-    arg_per_page = request.args.get('per_page', type=int)
     
     view_mode = arg_view if arg_view else current_user.vocab_view_mode
-    per_page = arg_per_page if arg_per_page else current_user.vocab_per_page
+    per_page = 36 # Фіксована кількість, як ви просили раніше
     
-    if (arg_view and arg_view != current_user.vocab_view_mode) or (arg_per_page and arg_per_page != current_user.vocab_per_page):
+    if arg_view and arg_view != current_user.vocab_view_mode:
         with get_db() as conn:
-            conn.execute('UPDATE users SET vocab_view_mode = ?, vocab_per_page = ? WHERE id = ?', 
-                         (view_mode, per_page, current_user.id))
+            conn.execute('UPDATE users SET vocab_view_mode = ? WHERE id = ?', (view_mode, current_user.id))
             conn.commit()
         current_user.vocab_view_mode = view_mode
-        current_user.vocab_per_page = per_page
 
     page = request.args.get('page', 1, type=int)
     offset = (page - 1) * per_page
@@ -945,6 +955,15 @@ def remove_word():
             else:
                 conn.execute('DELETE FROM vocabulary WHERE id = ? AND user_id = ?', (wid, current_user.id))
         
+        conn.commit()
+    return jsonify({"ok": True})
+
+@app.route('/api/toggle_text_fav', methods=['POST'])
+@login_required
+def toggle_text_fav():
+    tid = request.json.get('id')
+    with get_db() as conn:
+        conn.execute('UPDATE texts SET is_favorite = 1 - COALESCE(is_favorite, 0) WHERE id = ? AND user_id = ?', (tid, current_user.id))
         conn.commit()
     return jsonify({"ok": True})
 

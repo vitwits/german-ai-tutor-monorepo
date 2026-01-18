@@ -37,6 +37,31 @@
     .vocab-item:hover {
         background-color: rgba(0,0,0,0.03);
     }
+    .badge-btn {
+        padding: 4px 12px;
+        border-radius: 4px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 28px;
+        height: 30px;
+        border: none;
+        background: transparent;
+        color: var(--on-surface);
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .badge-btn:hover {
+        opacity: 0.7;
+        background: transparent;
+    }
+    .badge-btn .material-symbols-outlined {
+        font-size: 1.4rem;
+    }
+    #trans-btn .material-symbols-outlined {
+        color: var(--primary);
+        font-variation-settings: 'wght' 600;
+    }
 </style>
 
 <div class="card">
@@ -44,12 +69,16 @@
     {% if trans_title %}<h2 style="font-size: 1rem; color: var(--on-surface); opacity: 0.6; margin: 0 0 16px 0; font-weight: 400;">{{ trans_title }}</h2>{% endif %}
     
     <div style="display:flex; align-items:center; gap:12px; margin-bottom:24px; flex-wrap:wrap;">
-        <span style="background:var(--primary); color:var(--on-primary); padding:6px 12px; border-radius:16px; font-size:0.85rem; font-weight:500;">
+        <span class="level-badge lvl-{{ text.level|lower }}" style="font-size: 0.9rem; padding: 4px 12px; margin-right: 8px; border-radius: 4px;">
             {{ text.level }}
         </span>
         
-        <button class="btn-text" onclick="toggleTrans()" id="trans-btn" style="border: 1px solid var(--border);">
+        <button class="badge-btn" onclick="toggleTrans()" id="trans-btn">
             <span class="material-symbols-outlined">translate</span>
+        </button>
+        
+        <button class="badge-btn" onclick="toggleTextFav('{{text.id}}', this)" style="color: {% if text.is_favorite %}#d32f2f{% else %}inherit{% endif %};">
+            <span class="material-symbols-outlined {% if text.is_favorite %}filled{% endif %}" style="{% if text.is_favorite %}color: #d32f2f !important;{% endif %}">favorite</span>
         </button>
 
         <button class="btn-contained" onclick="playAll()" id="play-all-btn" style="margin-left: auto;">
@@ -97,7 +126,7 @@
         </div>
         <div style="display:flex; gap:8px;">
             <button id="fav-btn-{{v.id}}" class="btn-text" onclick="toggleFav('{{v.id}}', this)" style="color: {% if v.is_favorite %}#FFC107{% else %}inherit{% endif %}; padding: 0; min-width: 32px;">
-                <span class="material-symbols-outlined {% if v.is_favorite %}filled{% endif %}">star</span>
+                <span class="material-symbols-outlined star {% if v.is_favorite %}filled{% endif %}">star</span>
             </button>
             <button class="btn-text" onclick="rmWord('{{v.id}}')" style="color:red; padding: 0; min-width: 32px;"><span class="material-symbols-outlined">delete</span></button>
         </div>
@@ -491,6 +520,24 @@ document.addEventListener('click', (e) => {
         pop.style.display = 'none';
     }
 });
+
+async function toggleTextFav(id, btn) {
+    const icon = btn.querySelector('.material-symbols-outlined');
+    const isFav = icon.classList.contains('filled');
+    
+    // Optimistic UI
+    if (isFav) {
+        icon.classList.remove('filled');
+        icon.style.color = '';
+        btn.style.color = 'inherit';
+    } else {
+        icon.classList.add('filled');
+        icon.style.color = '#d32f2f !important';
+        btn.style.color = '#d32f2f';
+    }
+    
+    await fetch('/api/toggle_text_fav', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id: id})});
+}
 </script>
 <style>
 @keyframes spin { 100% { transform: rotate(360deg); } }

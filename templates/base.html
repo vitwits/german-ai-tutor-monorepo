@@ -63,8 +63,12 @@
         /* Клас для заповненої зірочки */
         .material-symbols-outlined.filled {
             font-variation-settings: 'FILL' 1 !important;
+        }
+        /* Специфічний колір для зірочок (словник) */
+        .material-symbols-outlined.filled.star {
             color: #FFC107 !important;
         }
+        
         .dropdown-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; text-decoration: none; color: var(--on-surface); font-size: 0.9rem; transition: background 0.2s; }
         .dropdown-item:hover { background-color: rgba(0,0,0,0.05); }
         body.dark-mode .dropdown-item:hover { background-color: rgba(255,255,255,0.1); }
@@ -86,6 +90,19 @@
         .lvl-b2 { background-color: #1976D2; }
         .lvl-c1 { background-color: #D32F2F; }
         .lvl-c2 { background-color: #311B92; }
+
+        /* --- UNIFIED LEVEL BADGE --- */
+        .level-badge {
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: white;
+            display: inline-block;
+            text-align: center;
+            min-width: 28px;
+            line-height: 1.5;
+        }
 
         /* --- CREDITS INDICATOR --- */
         .credits-pill {
