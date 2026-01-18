@@ -5,6 +5,7 @@
         background: transparent; border: 1px solid var(--border); color: var(--on-surface);
         width: 36px; height: 36px; padding: 0; display: flex; align-items: center; justify-content: center;
         cursor: pointer; border-radius: var(--radius); opacity: 0.6;
+        text-decoration: none !important; /* Fix underline */
     }
     .view-btn.active { background: var(--primary); color: var(--on-primary); border-color: var(--primary); opacity: 1; }
     
@@ -33,28 +34,78 @@
         justify-content: space-between;
         margin-top: auto;
     }
+
+    /* Level Filter Styles */
+    .lvl-filter {
+        width: 32px; height: 32px;
+        display: flex; align-items: center; justify-content: center;
+        border-radius: 6px; font-size: 0.8rem; font-weight: 600;
+        cursor: pointer; border: 1px solid var(--border);
+        background: var(--surface); color: var(--on-surface);
+        opacity: 0.6; transition: all 0.2s;
+        text-decoration: none !important;
+    }
+    .lvl-filter:hover { opacity: 1; transform: translateY(-1px); }
+    .lvl-filter.active { opacity: 1; color: white; border-color: transparent; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+    
+    /* Active colors matching global styles */
+    .lvl-filter.active[data-lvl="A1"] { background-color: #8BC34A; }
+    .lvl-filter.active[data-lvl="A2"] { background-color: #4CAF50; }
+    .lvl-filter.active[data-lvl="B1"] { background-color: #29B6F6; }
+    .lvl-filter.active[data-lvl="B2"] { background-color: #1976D2; }
+    .lvl-filter.active[data-lvl="C1"] { background-color: #D32F2F; }
+    .lvl-filter.active[data-lvl="C2"] { background-color: #311B92; }
+
+    /* Pagination Styles */
+    .page-btn {
+        width: 32px; height: 32px;
+        display: flex; align-items: center; justify-content: center;
+        border-radius: 6px; font-size: 0.85rem; font-weight: 600;
+        cursor: pointer; 
+        background-color: var(--primary); color: var(--on-primary);
+        opacity: 0.3; transition: all 0.2s;
+        text-decoration: none !important;
+        border: none;
+    }
+    .page-btn:hover { opacity: 0.7; transform: translateY(-1px); }
+    .page-btn.active { opacity: 1; transform: scale(1.1); box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+    .page-btn.disabled { opacity: 0.1; cursor: default; transform: none; }
+    
+    .page-dots {
+        display: flex; align-items: center; justify-content: center;
+        width: 20px; height: 32px;
+        font-weight: bold; opacity: 0.5; font-size: 1.2rem;
+        padding-bottom: 4px;
+    }
 </style>
 
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
     <h2 style="margin: 0;">{{ ui.my_texts }}</h2>
     <div style="display: flex; gap: 12px; align-items: center;">
-        <div style="display: flex; gap: 4px;">
-            <a href="?view=list&page=1&per_page={{per_page}}" class="view-btn {% if view_mode == 'list' %}active{% endif %}"><span class="material-symbols-outlined">view_list</span></a>
-            <a href="?view=grid&page=1&per_page={{per_page}}" class="view-btn {% if view_mode == 'grid' %}active{% endif %}"><span class="material-symbols-outlined">grid_view</span></a>
+        <a href="javascript:toggleFavFilter()" class="view-btn {% if show_fav %}active{% endif %}" style="{% if show_fav %}border-color: #d32f2f; background: rgba(211, 47, 47, 0.1); color: #d32f2f;{% endif %}" title="Favorites Filter">
+            <span class="material-symbols-outlined {% if show_fav %}filled{% endif %}" style="{% if show_fav %}color: #d32f2f !important;{% endif %}">favorite</span>
+        </a>
+        <!-- Level Filters -->
+        <div style="display: flex; gap: 4px; margin-right: 8px;">
+            {% for l in ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'] %}
+            <button class="lvl-filter {% if l in selected_levels %}active{% endif %}" 
+                    data-lvl="{{l}}" onclick="toggleLevelFilter('{{l}}')">
+                {{l}}
+            </button>
+            {% endfor %}
         </div>
-        <select onchange="window.location.href='?page=1&view={{view_mode}}&per_page='+this.value" style="padding: 6px 12px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); color: var(--on-surface); cursor: pointer; height: 36px;">
-            <option value="20" {% if per_page == 20 %}selected{% endif %}>20</option>
-            <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
-            <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
-        </select>
+
     </div>
 </div>
 
 <div class="texts-container {{ view_mode }}">
 {% for t in texts %}
 <div class="card" style="{% if view_mode == 'list' %}display: flex; justify-content: space-between; align-items: center;{% endif %}">
-    <div>
-        <span style="background:var(--primary); color:var(--on-primary); padding:4px 10px; border-radius:12px; font-size:0.75rem; font-weight:500;">{{ t.level }}</span>
+    <div style="display: flex; align-items: center; gap: 8px;">
+        <span class="level-badge lvl-{{ t.level|lower }}">{{ t.level }}</span>
+        <button class="btn-text" onclick="toggleTextFav(event, '{{t.id}}', this)" style="padding: 0; min-width: 32px; color: {% if t.is_favorite %}#d32f2f{% else %}var(--on-surface){% endif %}; opacity: {% if t.is_favorite %}1{% else %}0.3{% endif %};">
+            <span class="material-symbols-outlined {% if t.is_favorite %}filled{% endif %}" style="{% if t.is_favorite %}color: #d32f2f !important;{% endif %}">favorite</span>
+        </button>
     </div>
     <div>
         <div style="font-weight: 500; font-size: 1.1rem;">{{ t.display_title }}</div>
@@ -68,24 +119,80 @@
 </div>
 
 {% if total_pages > 1 %}
-<div style="display: flex; justify-content: center; gap: 10px; margin-top: 24px; align-items: center;">
-    {% if page > 1 %}
-    <a href="?page={{ page - 1 }}&per_page={{ per_page }}" class="btn-text" style="min-width: 36px; padding: 0; justify-content: center;"><span class="material-symbols-outlined">chevron_left</span></a>
-    {% else %}
-    <button class="btn-text" disabled style="opacity: 0.3; min-width: 36px; padding: 0; justify-content: center;"><span class="material-symbols-outlined">chevron_left</span></button>
+<div style="display: flex; justify-content: center; gap: 6px; margin-top: 24px; align-items: center;">
+    {# Prev #}
+    <a href="javascript:changePage({{ page - 1 }})" class="page-btn {% if page <= 1 %}disabled{% endif %}" {% if page <= 1 %}style="pointer-events: none;"{% endif %}>
+        <span class="material-symbols-outlined" style="font-size: 18px;">chevron_left</span>
+    </a>
+
+    {# Page 1 #}
+    <a href="javascript:changePage(1)" class="page-btn {% if page == 1 %}active{% endif %}">1</a>
+
+    {# Left Dots #}
+    {% if page > 3 %}
+        <span class="page-dots">...</span>
     {% endif %}
     
-    <span style="font-size: 0.9rem; opacity: 0.7; font-weight: 500;">{{ page }} / {{ total_pages }}</span>
-    
-    {% if page < total_pages %}
-    <a href="?page={{ page + 1 }}&per_page={{ per_page }}" class="btn-text" style="min-width: 36px; padding: 0; justify-content: center;"><span class="material-symbols-outlined">chevron_right</span></a>
-    {% else %}
-    <button class="btn-text" disabled style="opacity: 0.3; min-width: 36px; padding: 0; justify-content: center;"><span class="material-symbols-outlined">chevron_right</span></button>
+    {# Middle Range #}
+    {% set start = page - 1 %}
+    {% set end = page + 1 %}
+    {% if start < 2 %}{% set start = 2 %}{% endif %}
+    {% if end > total_pages - 1 %}{% set end = total_pages - 1 %}{% endif %}
+
+    {% for p in range(start, end + 1) %}
+        <a href="javascript:changePage({{ p }})" class="page-btn {% if p == page %}active{% endif %}">{{ p }}</a>
+    {% endfor %}
+
+    {# Right Dots #}
+    {% if page < total_pages - 2 %}
+        <span class="page-dots">...</span>
     {% endif %}
+    
+    {# Last Page #}
+    {% if total_pages > 1 %}
+        <a href="javascript:changePage({{ total_pages }})" class="page-btn {% if page == total_pages %}active{% endif %}">{{ total_pages }}</a>
+    {% endif %}
+
+    {# Next #}
+    <a href="javascript:changePage({{ page + 1 }})" class="page-btn {% if page >= total_pages %}disabled{% endif %}" {% if page >= total_pages %}style="pointer-events: none;"{% endif %}>
+        <span class="material-symbols-outlined" style="font-size: 18px;">chevron_right</span>
+    </a>
 </div>
 {% endif %}
 
 <script>
+// --- Filter Logic ---
+const currentLevels = {{ selected_levels | tojson }};
+const showFav = {{ 'true' if show_fav else 'false' }};
+
+function buildUrl(page = 1, levels = currentLevels, fav = showFav) {
+    const params = new URLSearchParams();
+    params.set('page', page);
+    if (fav) params.set('fav', '1');
+    if (levels.length > 0) params.set('levels', levels.join(','));
+    return '?' + params.toString();
+}
+
+function toggleLevelFilter(lvl) {
+    const idx = currentLevels.indexOf(lvl);
+    if (idx > -1) {
+        currentLevels.splice(idx, 1);
+    } else {
+        currentLevels.push(lvl);
+    }
+    window.location.href = buildUrl(1, currentLevels, showFav);
+}
+
+function toggleFavFilter() {
+    window.location.href = buildUrl(1, currentLevels, !showFav);
+}
+
+function changePage(newPage) {
+    window.location.href = buildUrl(newPage, currentLevels, showFav);
+}
+
+// --- End Filter Logic ---
+
 async function deleteText(id) {
     // 1. Питаємо підтвердження (Системний попап)
     const confirmed = await sysConfirm(
@@ -156,6 +263,31 @@ async function deleteText(id) {
             window.toast.show('{{ ui.error_generic }}', 'error');
         }
     }, 5000);
+}
+
+async function toggleTextFav(e, id, btn) {
+    if(e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+    
+    const icon = btn.querySelector('.material-symbols-outlined');
+    const isFav = icon.classList.contains('filled');
+    
+    // Optimistic UI update
+    if (isFav) {
+        icon.classList.remove('filled');
+        icon.style.color = '';
+        btn.style.color = 'var(--on-surface)';
+        btn.style.opacity = '0.3';
+    } else {
+        icon.classList.add('filled');
+        icon.style.color = '#d32f2f !important';
+        btn.style.color = '#d32f2f';
+        btn.style.opacity = '1';
+    }
+    
+    await fetch('/api/toggle_text_fav', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id: id})});
 }
 </script>
 {% endblock %}
