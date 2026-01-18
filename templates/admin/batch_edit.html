@@ -21,10 +21,10 @@
     <table class="table table-bordered table-hover">
         <thead>
             <tr>
-                <th>German</th>
-                <th>English</th>
-                <th>Ukrainian</th>
-                <th>Topic</th>
+                <th><input type="checkbox" onclick="toggleCol(this, 0)" title="Select Column"> German</th>
+                <th><input type="checkbox" onclick="toggleCol(this, 1)" title="Select Column"> English</th>
+                <th><input type="checkbox" onclick="toggleCol(this, 2)" title="Select Column"> Ukrainian</th>
+                <th><input type="checkbox" onclick="toggleCol(this, 3)" title="Select Column"> Topic</th>
                 <th style="width: 100px;">Actions</th>
             </tr>
         </thead>
@@ -59,6 +59,22 @@
     {% endif %}
 </div>
 
+<style>
+    table.column-selection-mode td, 
+    table.column-selection-mode th {
+        user-select: none;
+        -webkit-user-select: none;
+        opacity: 0.5;
+    }
+    table.column-selection-mode td.col-selected, 
+    table.column-selection-mode th.col-selected {
+        user-select: text;
+        -webkit-user-select: text;
+        opacity: 1;
+        background-color: rgba(25, 118, 210, 0.1);
+    }
+</style>
+
 <script>
     function saveCell(id, field, el) {
         fetch('/admin/generate/api/update_temp_sentence', {
@@ -79,6 +95,40 @@
                 btn.closest('tr').remove();
             }
         });
+    }
+
+    function toggleCol(cb, idx) {
+        const table = cb.closest('table');
+        const isChecked = cb.checked;
+        
+        // Reset others
+        table.querySelectorAll('thead th input[type="checkbox"]').forEach(c => {
+            if(c !== cb) c.checked = false;
+        });
+        
+        table.classList.remove('column-selection-mode');
+        table.querySelectorAll('.col-selected').forEach(el => el.classList.remove('col-selected'));
+        window.getSelection().removeAllRanges();
+        
+        // Відновлюємо редагування (вмикаємо contenteditable назад для комірок з onblur)
+        table.querySelectorAll('td[onblur]').forEach(td => td.setAttribute('contenteditable', 'true'));
+        
+        if(isChecked) {
+            table.classList.add('column-selection-mode');
+            // Тимчасово вимикаємо редагування, щоб коректно працювало виділення колонок (user-select: none)
+            table.querySelectorAll('td[onblur]').forEach(td => td.setAttribute('contenteditable', 'false'));
+            
+            // Highlight header
+            cb.closest('th').classList.add('col-selected');
+            // Highlight cells
+            table.querySelectorAll('tbody tr').forEach(tr => {
+                if(tr.cells[idx]) tr.cells[idx].classList.add('col-selected');
+            });
+            // Select
+            const range = document.createRange();
+            range.selectNodeContents(table.querySelector('tbody'));
+            window.getSelection().addRange(range);
+        }
     }
 </script>
 {% endblock %}

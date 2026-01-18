@@ -39,6 +39,21 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             text-decoration: none !important;
         }
+        
+        /* Column Selection Styles */
+        table.column-selection-mode td, 
+        table.column-selection-mode th {
+            user-select: none;
+            -webkit-user-select: none;
+            opacity: 0.5;
+        }
+        table.column-selection-mode td.col-selected, 
+        table.column-selection-mode th.col-selected {
+            user-select: text;
+            -webkit-user-select: text;
+            opacity: 1;
+            background-color: rgba(25, 118, 210, 0.1);
+        }
     </style>
 {% endblock %}
 
@@ -143,6 +158,50 @@
             
             // Фінальне очищення
             stopPlayback = false;
+        }
+
+        // --- Column Selection Logic ---
+        document.addEventListener('DOMContentLoaded', function() {
+            const table = document.querySelector('table.table');
+            if (!table) return;
+            
+            const headers = table.querySelectorAll('thead tr th');
+            headers.forEach((th, idx) => {
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.title = 'Select Column';
+                cb.style.marginRight = '5px';
+                cb.onclick = (e) => {
+                    e.stopPropagation(); 
+                    toggleCol(cb, idx);
+                };
+                th.insertBefore(cb, th.firstChild);
+            });
+        });
+
+        function toggleCol(cb, idx) {
+            const table = document.querySelector('table.table');
+            const isChecked = cb.checked;
+            
+            // Reset others
+            table.querySelectorAll('thead th input[type="checkbox"]').forEach(c => {
+                if(c !== cb) c.checked = false;
+            });
+            
+            table.classList.remove('column-selection-mode');
+            table.querySelectorAll('.col-selected').forEach(el => el.classList.remove('col-selected'));
+            window.getSelection().removeAllRanges();
+            
+            if(isChecked) {
+                table.classList.add('column-selection-mode');
+                cb.closest('th').classList.add('col-selected');
+                table.querySelectorAll('tbody tr').forEach(tr => {
+                    if(tr.cells[idx]) tr.cells[idx].classList.add('col-selected');
+                });
+                const range = document.createRange();
+                range.selectNodeContents(table.querySelector('tbody'));
+                window.getSelection().addRange(range);
+            }
         }
     </script>
 {% endblock %}
