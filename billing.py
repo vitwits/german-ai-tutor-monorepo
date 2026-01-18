@@ -15,7 +15,11 @@ PRICING = {
     
     # --- SPEAKING (Speech-to-Text) ---
     'stt_fixed_request': 6.0,      # $0.006 за транзакцію STT (до 15 сек)
-    'speaking_evaluation': 5.0     # Вартість оцінки вимови
+    'speaking_evaluation': 5.0,    # Вартість оцінки вимови
+
+    # --- GENERATION ---
+    'lesson_generation': 2.0,      # Вартість генерації уроку
+    'grammar_explanation': 1.0,    # Вартість пояснення граматики
 }
 
 def calculate_tts_cost(text, provider='google'):

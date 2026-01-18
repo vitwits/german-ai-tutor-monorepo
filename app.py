@@ -653,7 +653,7 @@ def settings():
 @login_required
 def update_level():
     new_level = request.json.get('level')
-    if new_level in ['A1', 'A2', 'B1', 'B2', 'C1']:
+    if new_level in ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']:
         with get_db() as conn:
             conn.execute('UPDATE users SET level = ? WHERE id = ?', (new_level, current_user.id))
             conn.commit()

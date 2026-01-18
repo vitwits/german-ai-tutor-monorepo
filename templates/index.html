@@ -77,26 +77,8 @@
         <input type="text" id="topic" class="form-control control-height" placeholder="{{ ui.topic_placeholder }}" autofocus>
     </div>
 
-    <div class="controls-row" style="flex-wrap: wrap; gap: 20px;">
-        <div class="form-group" style="flex: 0 1 100px;"> 
-            <label class="form-label">{{ ui.level }}</label>
-            <select id="lvl" class="form-control control-height">
-                {% for l in ['A1','A2','B1','B2','C1','C2'] %}
-                <option value="{{l}}" {% if l == 'B1' %}selected{% endif %}>{{l}}</option>
-                {% endfor %}
-            </select>
-        </div>
-
-        <div class="form-group">
-            <label class="form-label">{{ ui.count }}</label>
-            <div class="size-selector">
-                <button type="button" class="size-btn" data-size="S">S</button>
-                <button type="button" class="size-btn active" data-size="M">M</button>
-                <button type="button" class="size-btn" data-size="L">L</button>
-            </div>
-        </div>
-
-        <div class="form-group" style="flex: 1; min-width: 150px;">
+    <div class="controls-row" style="gap: 20px;">
+        <div class="form-group" style="flex: 1;">
             <label class="form-label">{{ ui.style_label }}</label>
             <select id="text_style" class="form-control control-height">
                 <option value="neutral">{{ ui.style_neutral }}</option>
@@ -105,6 +87,14 @@
                 <option value="dialogue_informal">{{ ui.style_dialogue_informal }}</option>
                 <option value="dialogue_formal">{{ ui.style_dialogue_formal }}</option>
             </select>
+        </div>
+        <div class="form-group">
+            <label class="form-label">{{ ui.count }}</label>
+            <div class="size-selector">
+                <button type="button" class="size-btn" data-size="S">S</button>
+                <button type="button" class="size-btn active" data-size="M">M</button>
+                <button type="button" class="size-btn" data-size="L">L</button>
+            </div>
         </div>
     </div>
 
@@ -136,7 +126,9 @@ document.querySelectorAll('.size-btn').forEach(btn => {
 
 async function generate() {
     const topic = document.getElementById('topic').value;
-    const level = document.getElementById('lvl').value;
+    // Отримуємо рівень з глобального перемикача в хедері
+    const levelBtn = document.querySelector('.lvl-tile.active');
+    const level = levelBtn ? levelBtn.innerText.trim() : '{{ current_user.level }}';
     // Отримуємо значення стилю
     const style = document.getElementById('text_style').value;
     
