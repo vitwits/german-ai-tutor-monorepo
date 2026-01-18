@@ -4,9 +4,15 @@
 <div class="container-fluid">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
         <h3>Edit Batch: {{ batch.name }}</h3>
-        <div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <select onchange="window.location.href='?page=1&per_page='+this.value" class="form-control" style="width: auto; display: inline-block; height: 34px; padding: 6px 12px;">
+                <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
+                <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+                <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
+            </select>
+
             <a href="{{ url_for('generate.index') }}" class="btn btn-default">Save (Back)</a>
-            <form action="{{ url_for('generate.apply_batch', batch_id=batch.id) }}" method="POST" style="display:inline; margin-left: 10px;">
+            <form action="{{ url_for('generate.apply_batch', batch_id=batch.id) }}" method="POST" style="display:inline;">
                 <button type="submit" class="btn btn-success">Apply (Generate Audio)</button>
             </form>
         </div>
@@ -43,7 +49,7 @@
         {% for page in pagination.iter_pages() %}
             {% if page %}
                 <li class="{% if page == pagination.page %}active{% endif %}">
-                    <a href="{{ url_for('generate.edit_batch', batch_id=batch.id, page=page) }}">{{ page }}</a>
+                    <a href="{{ url_for('generate.edit_batch', batch_id=batch.id, page=page, per_page=per_page) }}">{{ page }}</a>
                 </li>
             {% else %}
                 <li class="disabled"><a href="#">...</a></li>

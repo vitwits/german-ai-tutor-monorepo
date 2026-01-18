@@ -42,12 +42,31 @@
     </style>
 {% endblock %}
 
+{% block model_menu_bar %}
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <div>{{ super() }}</div>
+        <div>
+            <label style="margin-right: 5px; font-weight: normal;">Per page:</label>
+            <select onchange="setPageSize(this.value)" style="padding: 4px; border-radius: 4px; border: 1px solid #ccc;">
+                {% for size in [50, 100, 200] %}
+                <option value="{{ size }}" {% if page_size == size %}selected{% endif %}>{{ size }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+{% endblock %}
+
 {% block tail %}
     {{ super() }}
     <script>
         let currentAudio = null;
         let currentRow = null;
         let stopPlayback = false; // Глобальний прапорець для зупинки
+
+        function setPageSize(size) {
+            document.cookie = "{{ admin_view.endpoint }}_page_size=" + size + "; path=/";
+            location.reload();
+        }
 
         async function playSequence(btn, urls) {
             // Перевіряємо, чи клікнули ми по кнопці, яка зараз грає (Пауза)

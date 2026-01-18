@@ -316,7 +316,8 @@ class SentenceView(MyModelView):
     }
     column_searchable_list = ['text_de', 'text_uk', 'topic']
     column_filters = ['level', 'topic']
-    page_size = 20
+    page_size = 50
+    can_set_page_size = True
     # Вказуємо, які колонки можна сортувати
     column_sortable_list = ['id', 'level', 'topic', 'text_de', 'text_uk', 'text_en']
 
@@ -390,10 +391,10 @@ class GenerateSentencesView(BaseView):
     def edit_batch(self, batch_id):
         batch = SentenceBatch.query.get_or_404(batch_id)
         page = request.args.get('page', 1, type=int)
-        per_page = 40
+        per_page = request.args.get('per_page', 50, type=int)
         pagination = TempSentence.query.filter_by(batch_id=batch_id).paginate(page=page, per_page=per_page)
-        return self.render('admin/batch_edit.html', batch=batch, pagination=pagination)
-
+        return self.render('admin/batch_edit.html', batch=batch, pagination=pagination, per_page=per_page)
+    
     @expose('/batch/<int:batch_id>/delete', methods=['POST'])
     def delete_batch(self, batch_id):
         batch = SentenceBatch.query.get_or_404(batch_id)
@@ -455,10 +456,7 @@ def background_text_gen(app_instance, batch_id, level, count):
         try:
             generated = 0
             # Використовуємо логіку вибору тем з твого скрипта
-            if level in gen_sent_script.LEVEL_RULES:
-                available_topics = gen_sent_script.LEVEL_RULES[level]["allowed_topics"]
-            else:
-                available_topics = gen_sent_script.BASE_TOPICS
+            available_topics = gen_sent_script.LEVEL_RULES.get(level, gen_sent_script.A2_TOPICS)
 
             while generated < count:
                 chunk_size = min(20, count - generated)

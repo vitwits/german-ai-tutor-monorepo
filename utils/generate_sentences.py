@@ -96,17 +96,63 @@ maximum lexical variety, no predictable patterns or boring loops,
 full coverage of basic 500–650 A1 words.
 """,
     "A2": """
-Sentences 6-11 words (avoid under 6 or over 12). Use Präsens + Perfekt (haben/sein dominant, especially sein for motion like fahren, gehen). 
-Include connectors: und, aber, oder, weil (at least 20-40% with weil for reasons). Separable verbs (aufstehen, einkaufen, ausgehen, mitkommen). 
-Full Akkusativ, introduce Dativ (mit, zu, von, bei, aus). Modal verbs in Präsens: können, wollen, müssen, sollen, mögen. 
-Time expressions: gestern, morgen, oft, manchmal, jeden Tag/Morgen, am Wochenende. 
-Vary starts: Am..., Gestern..., Ich habe/bin..., Manchmal..., Weil..., Mit... . 
-Topics: daily routine, past weekend/activities, weather/seasons, food/preferences, simple reasons, hobbies/sport, shopping, travel basics. 
-Natural, like Goethe A2 model sentences or textbooks (Netzwerk, Schritte) – everyday dialogues feel.
-Use wide vocabulary: expand on A1 with more actions (laufen, springen, singen, malen, tanzen), places (Schule, Arbeit, Park, Laden, Museum, Kino), 
-people descriptions (jung, alt, freundlich, traurig, glücklich, müde), food/drinks (Wasser, Saft, Tee, Pizza, Salat, Kuchen, Eis), 
-transport (Auto, Fahrrad, Zug, Flugzeug, Schiff), hobbies (Musik hören, Filme schauen, Bücher lesen, Sport treiben). 
-Avoid repetition of basic words — include varied nouns/adjectives in every sentence.
+Sentences strictly 6–11 words (never under 6, never over 11).
+
+Grammar:
+- Präsens + Perfekt only (Perfekt dominant for past actions).
+- Use haben / sein correctly (sein for motion and state change: gehen, fahren, kommen, bleiben).
+- Modal verbs in Präsens: können, wollen, müssen, sollen, mögen.
+- Separable verbs required: aufstehen, einkaufen, ankommen, ausgehen, mitkommen, anfangen, zuhören.
+- Akkusativ fully, introduce Dativ with: mit, zu, von, bei, aus, nach.
+
+Sentence structure & connectors:
+- Use connectors actively: und, aber, oder, weil.
+- At least 30–40% of sentences MUST include weil + reason.
+- Vary sentence starts strongly.
+
+START VARIATION RULES (MANDATORY):
+- Max 50% sentences may start with "Ich".
+- At least 30% must start with:
+  Am..., Gestern..., Heute..., Manchmal..., Nach der Arbeit..., 
+  Zu Hause..., Mit..., Weil..., Im Park..., Auf der Straße..., Beim...
+- Avoid repeating the same starter (e.g. "Am Wochenende", "Gestern") more than once per 25 sentences.
+
+ANTI-REPETITION RULES (A2-LEVEL, STRICT):
+- Any concrete noun or main verb → max 1 use per 15 sentences, max 2 per 50.
+- Avoid overused A2 crutches:
+  jeden Morgen, am Wochenende, ich möchte, ich mag, ich arbeite, ich gehe,
+  Kaffee, Freunde, Berlin, Fahrrad, Zug, Supermarkt.
+- Do NOT reuse the same city, food, hobby, or transport item in one batch.
+
+LEXICAL EXPANSION (MANDATORY DOMAINS):
+Include across the batch (not per sentence):
+- Emotions & states: müde, froh, nervös, zufrieden, enttäuscht, stolz, überrascht.
+- Everyday problems: zu spät, kaputt, vergessen, keine Zeit, falsch, schwierig.
+- Reactions & changes: sich freuen, sich ärgern, sich erinnern, sich fühlen, sich entscheiden.
+- Places beyond basics: Museum, Apotheke, Rathaus, Büro, Werkstatt, Sporthalle, Bahnhofshalle.
+- Activities beyond clichés: organisieren, vorbereiten, vergleichen, reparieren, planen, ausprobieren.
+
+TOPICS (A2-appropriate, everyday):
+Daily routine, past weekend, simple travel, shopping experiences, food preferences,
+health & fitness, hobbies, workday situations, small problems, simple reasons.
+
+STYLE & QUALITY:
+- Natural, spoken, everyday German (Goethe A2 / Netzwerk / Schritte style).
+- No textbook loops or mechanical patterns.
+- Sentences must feel like short dialogue lines or diary notes.
+- Prioritize lexical variety over “safe” phrasing.
+
+ABSOLUTE NO-GO:
+- No A1-style object drills (colors, body parts, counting).
+- No abstract B1+ opinions.
+- No repeated sentence skeletons like:
+  "Ich + Verb + gern + Objekt"
+  "Ich bin ... weil ich ..."
+
+Goal:
+High-quality, non-repetitive A2 sentences that expand vocabulary horizontally,
+not just grammatically.
+
 """,
     "B1": """
 Sentences 8-13 words (avoid under 8 or over 14). Mandatory subordinate clauses: weil, dass, wenn, obwohl (at least 40-60% include one). 
@@ -159,10 +205,107 @@ Cover maximum lexical range with stylistic variety, academic depth, and implicit
 """
 }
 
-# --- СПИСОК ТЕМ (100+) ---
-# Розширений список з ще більшою кількістю конкретних тем для нижніх рівнів, щоб охопити максимум словникового запасу: більше підтем для іменників, кольорів, предметів тощо.
-BASE_TOPICS = [
-    # A1 — розлогі, широкі, конкретні теми для максимального охоплення лексики
+A1_TOPICS = [
+    # 🎨 Colors & visual objects
+    "Colors with everyday objects (rot, blau, grün, gelb, schwarz, weiß)",
+    "Describing object colors and size",
+    "Matching colors with things",
+    "Asking about colors (Welche Farbe?)",
+
+    # 🔢 Numbers & quantities
+    "Counting objects from one to twenty",
+    "Asking and answering how many (Wie viele?)",
+    "Prices and simple amounts",
+    "Numbers with everyday items",
+
+    # ⏰ Time & simple schedule
+    "Time of day (morgens, mittags, abends, nachts)",
+    "Clock times (um acht Uhr, halb neun)",
+    "Daily moments with time words",
+    "Asking for the time (Wie spät ist es?)",
+
+    # 👕 Clothes & appearance
+    "Clothes people wear today",
+    "Describing clothes with colors",
+    "Asking about clothes",
+    "Putting on and wearing clothes",
+
+    # 🧍 Body parts
+    "Basic body parts",
+    "Simple body descriptions",
+    "Using body parts with adjectives",
+    "Asking about body parts",
+
+    # 🏠 Home & rooms
+    "Rooms in the house",
+    "Objects in each room",
+    "Describing rooms simply",
+    "Asking where things are (Wo ist?)",
+
+    # 🪑 Furniture & objects
+    "Furniture in the home",
+    "Objects on, under, in places",
+    "Describing position (auf, unter, in)",
+    "Simple location questions",
+
+    # 🍎 Food & drinks
+    "Fruits and vegetables",
+    "Food people eat every day",
+    "Drinks people like",
+    "Asking for food and drinks",
+
+    # 🐶 Animals & nature
+    "Common animals",
+    "Animals and actions",
+    "Nature objects around us",
+    "Weather words and nature",
+
+    # 🚶 Actions & movement
+    "Simple daily actions",
+    "Going and coming",
+    "Sitting, standing, lying",
+    "Finding and looking for things",
+
+    # 👨‍👩‍👧 People & family
+    "Family members",
+    "Talking about people simply",
+    "Introducing people",
+    "Asking names (Wie heißt?)",
+
+    # 🏫 Places & city
+    "Places in the city",
+    "Objects in public places",
+    "Going to places",
+    "Asking where places are",
+
+    # 👜 Everyday objects
+    "Things people carry",
+    "Objects people use daily",
+    "Naming common objects",
+    "Asking what something is (Was ist das?)",
+
+    # 🌦 Weather
+    "Simple weather descriptions",
+    "Weather today",
+    "Weather with seasons",
+
+    # 🎉 Simple events
+    "Birthdays and basic parties",
+    "Giving and receiving gifts",
+    "Simple celebrations",
+
+    # ❓ Questions & negation
+    "Yes and no questions",
+    "Negation with nicht and kein",
+    "Simple answers and reactions",
+
+    # 🗣️ Basic communication
+    "Greetings and farewells",
+    "Polite words",
+    "Simple requests",
+    "Saying thank you and sorry"
+
+    # General vocab
     "Colors and Everyday Objects (rot, blau, grün, gelb, weiß, schwarz, orange, rosa, violett, braun)",
     "Clothes and Accessories (Hose, Shirt, Schuhe, Jacke, Hut, Rock, Pullover, Socken, Handschuhe, Schal, Tasche, Gürtel)",
     "Body Parts and Descriptions (Kopf, Hand, Fuß, Auge, Nase, Mund, Arm, Bein, Haar, Finger, Rücken, Bauch)",
@@ -190,26 +333,182 @@ BASE_TOPICS = [
     "Birthdays", "Weather & Seasons", "Hobbies & Free Time", "Housing & Furniture",
     "City Life", "Public Transport", "Travel & Transport", "Restaurants & Cafes",
     "Coffee Culture", "Cleaning & Chores", "Sleep & Dreams", "Weekend Activities",
+]
 
-    # A2 — extended daily life with more variety
-    "Work & Career", "Education & School", "Health & Fitness", "Sports & Games",
-    "Running", "Team Sports", "Movies & TV Series", "Music & Concerts",
-    "Books & Literature", "Online Shopping", "Grocery Prices", "Food Delivery",
-    "Hotels & Accommodation", "Driving & Cars", "Bicycles & Cycling",
-    "Swimming & Water Sports", "Holidays & Vacations", "Baking", "Vegetarianism",
-    "Cooking Recipes", "Healthy Eating", "Fitness Routines", "Travel Planning",
-    "Weekend Trips", "Family Outings", "School Subjects", "Work Meetings",
-    "Job Interviews", "Career Goals",
 
-    # B1 — experience, plans, opinions with broader terms
-    "Childhood Memories", "Future Plans", "Dreams & Ambitions", "Learning Languages",
-    "Technology & Internet", "Social Media", "Mobile Apps", "Photography",
-    "Gardening", "Home Improvement", "Stress & Relaxation", "Meditation",
-    "Yoga", "Gym & Workout", "Board Games", "Video Games", "Fashion & Clothing",
-    "Writing", "Journaling", "Personal Goals", "Life Experiences", "Travel Stories",
-    "Cultural Events", "Opinion Sharing", "Debates on Topics", "Environmental Awareness",
+A2_TOPICS = [
+    # ⏰ Time & routine with variation
+    "Daily routine with time expressions (jeden Tag, morgens, abends)",
+    "Yesterday and last weekend activities (Perfekt)",
+    "Plans for tomorrow and next week",
+    "Regular habits and exceptions (oft, selten, manchmal)",
+    "Changing routines and new schedules",
 
-    # B2 — abstraction, society, systems with detailed subtopics
+    # 🧠 Reasons & opinions (weil)
+    "Giving reasons with weil",
+    "Explaining simple decisions",
+    "Likes and dislikes with explanations",
+    "Choosing between two options (oder, aber)",
+    "Simple opinions about daily life",
+
+    # 🧳 Travel & movement (sein + Perfekt)
+    "Travel experiences (bin gefahren, bin geflogen)",
+    "Short trips and excursions",
+    "Arriving, leaving, changing transport",
+    "Problems during travel and solutions",
+    "Asking and giving directions",
+
+    # 🛒 Shopping & services
+    "Shopping with prices and quantities",
+    "Comparing products in shops",
+    "Returning or exchanging items",
+    "Ordering food or drinks",
+    "Paying, receipts, and problems",
+
+    # 🏠 Home & everyday problems
+    "Household chores and responsibilities",
+    "Problems at home and simple solutions",
+    "Inviting guests and preparing the home",
+    "Living alone vs with others",
+    "Rules at home or in the apartment",
+
+    # 👨‍👩‍👧 Family & social life
+    "Talking about family members and their routines",
+    "Visiting relatives or friends",
+    "Making invitations and arrangements",
+    "Accepting and refusing politely",
+    "Helping others and asking for help",
+
+    # 💼 Work & school (A2-safe)
+    "A typical workday",
+    "Simple tasks at work or school",
+    "Meetings and schedules",
+    "Talking about colleagues or classmates",
+    "Problems at work or school",
+
+    # 🏥 Health & body
+    "Health problems and symptoms",
+    "Doctor visits and advice",
+    "Feeling better or worse",
+    "Sports and physical activity",
+    "Resting and recovery",
+
+    # 🎨 Free time & hobbies
+    "Hobbies with frequency",
+    "Trying new activities",
+    "Plans for free time",
+    "Indoor vs outdoor activities",
+    "Weather influence on free time",
+
+    # 📱 Technology & communication
+    "Using phones and apps daily",
+    "Online communication with friends",
+    "Problems with technology",
+    "Learning something online",
+    "Digital habits",
+
+    # 🍽️ Food & cooking
+    "Cooking simple meals",
+    "Eating habits during the week",
+    "Trying new food",
+    "Eating out vs eating at home",
+    "Talking about favorite dishes",
+
+    # 🧠 Life situations
+    "Making simple decisions",
+    "Small everyday problems and solutions",
+    "Explaining what went wrong",
+    "Reacting to unexpected situations",
+    "Talking about changes in life"
+]
+
+B1_TOPICS = [
+    # 🧠 Opinions & reasons
+    "Giving opinions with reasons (ich finde, dass …)",
+    "Agreeing and disagreeing politely",
+    "Explaining personal preferences",
+    "Talking about advantages and disadvantages",
+    "Changing opinions over time",
+
+    # 🕰 Past experiences
+    "Important life experiences",
+    "Memorable trips and journeys",
+    "First experiences (first job, first trip)",
+    "Good and bad experiences",
+    "Learning from past mistakes",
+
+    # 🔮 Plans & dreams
+    "Future plans and goals",
+    "Dreams and ambitions",
+    "Plans that may change",
+    "Talking about hopes and fears",
+    "Decisions about the future",
+
+    # 🧑‍💼 Work & education
+    "Work experience and responsibilities",
+    "School and study experiences",
+    "Exams and preparation",
+    "Career choices and changes",
+    "Balancing work and free time",
+
+    # 🌍 Travel & culture
+    "Travel experiences abroad",
+    "Cultural differences",
+    "Living in another country",
+    "Language learning experiences",
+    "Meeting people from other cultures",
+
+    # 🧠 Problems & solutions
+    "Everyday problems and how to solve them",
+    "Unexpected situations",
+    "Giving advice",
+    "Talking about difficulties",
+    "Finding compromises",
+
+    # 💬 Communication & relationships
+    "Friendships and conflicts",
+    "Family relationships",
+    "Misunderstandings and explanations",
+    "Expressing feelings",
+    "Talking about important conversations",
+
+    # 🏥 Health & lifestyle
+    "Health experiences",
+    "Changing habits",
+    "Stress and relaxation",
+    "Sport and motivation",
+    "Work-life balance",
+
+    # 📱 Technology & media
+    "Technology in everyday life",
+    "Social media experiences",
+    "Advantages and disadvantages of smartphones",
+    "Digital communication",
+    "Online learning",
+
+    # 🌱 Society & environment (B1-safe)
+    "Environmental awareness in daily life",
+    "Small actions for the environment",
+    "Living in a city vs countryside",
+    "Social rules and behavior",
+    "Changes in modern life",
+
+    # 🎨 Culture & free time
+    "Cultural events and experiences",
+    "Books, films, and music opinions",
+    "Free time activities",
+    "Trying new hobbies",
+    "Creative activities",
+
+    # 🧠 Reflection & conditionals
+    "What would I do differently (würde)",
+    "If situations and consequences (wenn)",
+    "Imagining different outcomes",
+    "Lessons learned from experience",
+    "Personal development"
+]
+
+B2_TOPICS = [
     "Money & Finance", "Productivity", "Time Management", "Leadership",
     "Teamwork", "Communication Skills", "Public Speaking", "News & Media",
     "Advertising", "Celebrities", "Influencers", "Privacy & Security",
@@ -217,9 +516,10 @@ BASE_TOPICS = [
     "Virtual Reality", "Recycling", "Climate Change", "Nature & Environment",
     "Design", "Architecture", "Psychology & Emotions", "Conflict & Resolution",
     "Cultural Differences", "Global Economy", "Social Trends", "Innovation Ideas",
-    "Ethical Dilemmas", "Media Influence", "Digital Ethics",
+    "Ethical Dilemmas", "Media Influence", "Digital Ethics"
+]
 
-    # C1/C2 — abstract, global, ethical with wide coverage
+C1_TOPICS = [
     "Politics & Society", "History & Culture", "Traditions & Festivals",
     "Philosophy", "Religion & Spirituality", "Science & Innovation",
     "Space & Universe", "Global Issues", "Poverty & Wealth", "Equality",
@@ -231,43 +531,15 @@ BASE_TOPICS = [
     "Human Rights", "Mental Health Awareness", "Economic Theories", "Literary Analysis"
 ]
 
+C2_TOPICS = C1_TOPICS
+
 LEVEL_RULES = {
-    "A1": {
-        "allowed_topics": BASE_TOPICS[:60],  # розширено для максимальної лексичної ширини
-        "abstraction": "none",
-        "sentence_length": "short",
-        "grammar": ["present", "basic verbs"]
-    },
-    "A2": {
-        "allowed_topics": BASE_TOPICS[:80],
-        "abstraction": "low",
-        "sentence_length": "short-medium",
-        "grammar": ["past", "modal verbs"]
-    },
-    "B1": {
-        "allowed_topics": BASE_TOPICS[:100],
-        "abstraction": "medium",
-        "sentence_length": "medium",
-        "grammar": ["subordinate clauses"]
-    },
-    "B2": {
-        "allowed_topics": BASE_TOPICS[:120],
-        "abstraction": "high",
-        "sentence_length": "long",
-        "grammar": ["passive", "Konjunktiv II"]
-    },
-    "C1": {
-        "allowed_topics": BASE_TOPICS,
-        "abstraction": "very high",
-        "sentence_length": "long",
-        "grammar": ["nominalization", "complex syntax"]
-    },
-    "C2": {
-        "allowed_topics": BASE_TOPICS,
-        "abstraction": "free",
-        "sentence_length": "very long",
-        "grammar": ["stylistic variation", "rhetoric"]
-    }
+    "A1": A1_TOPICS,
+    "A2": A2_TOPICS,
+    "B1": B1_TOPICS,
+    "B2": B2_TOPICS,
+    "C1": C1_TOPICS,
+    "C2": C2_TOPICS
 }
 
 def clean_json_response(text):
@@ -358,10 +630,7 @@ def main():
         print(f"Warning: Level {level} not found in guidelines. Using default rules or generic prompt.")
 
     # Визначаємо доступні теми для рівня
-    if level in LEVEL_RULES:
-        available_topics = LEVEL_RULES[level]["allowed_topics"]
-    else:
-        available_topics = BASE_TOPICS
+    available_topics = LEVEL_RULES.get(level, A2_TOPICS)
 
     # 2. Підготовка файлу
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
