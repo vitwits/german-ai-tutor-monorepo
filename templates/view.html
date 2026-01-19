@@ -399,9 +399,15 @@ function showResultsView(score, total) {
 async function switchTab(tab) {
     // Якщо квіз активний і ми намагаємось піти з нього
     if (quizActive && tab !== 'quiz') {
-        const confirmed = await sysConfirm('{{ ui.abort_confirm_title }}', '{{ ui.abort_confirm_msg }}', '{{ ui.exit_btn }}', '{{ ui.btn_cancel }}', true);
+        const confirmed = await sysConfirm(
+            '{{ ui.abort_confirm_title }}', 
+            '{{ ui.abort_confirm_msg }}', 
+            '{{ ui.exit_btn }}', 
+            '{{ ui.btn_cancel }}', 
+            true
+        );
         if (!confirmed) return;
-        quizActive = false; // Just set the flag
+        _resetQuizProgress();
     }
 
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -535,7 +541,7 @@ async function abortQuiz() {
         true
     );
     if (confirmed) {
-        quizActive = false;
+        _resetQuizProgress();
         switchTab('vocab');
     }
 }
@@ -545,6 +551,14 @@ function resetQuizState() {
     quizScore = 0;
     quizActive = true;
     renderQuestion();
+}
+
+function _resetQuizProgress() {
+    currentQIndex = 0;
+    quizScore = 0;
+    quizActive = false;
+    isChecked = false;
+    selectedOptionIndex = null;
 }
 
 function showSplash() {
