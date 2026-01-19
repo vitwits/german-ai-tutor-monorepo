@@ -90,12 +90,12 @@
     <div class="de-line" id="sent-{{ loop.index0 }}" data-index="{{ loop.index0 }}" data-text="{{ s.de }}" style="padding:8px 0; {% if not loop.last %}border-bottom:1px solid var(--border);{% endif %}">
         <div style="display:flex; justify-content: space-between; align-items: center;">
             <div style="display:flex; align-items:center; gap:12px; flex: 1;">
-                <button class="btn-text" onclick="playAudio({{ s.de | tojson | forceescape }})" style="height:32px; width:32px; padding:0; min-width:32px;">
+                <button class="btn-text" onclick="playAudio({{ s.de | tojson | forceescape }}, this)" style="opacity:{{ '1' if s.has_audio else '0.5' }}; height:32px; width:32px; padding:0; min-width:32px;">
                     <span class="material-symbols-outlined" style="font-size:20px; color:var(--primary)">volume_up</span>
                 </button>
                 <span class="de-text" style="font-size:1.1rem; font-weight:400; line-height:1.6;">{{ s.de_html | safe }}</span>
             </div>
-            <button class="btn-text" onclick="explainGrammar(this, '{{text.id}}', {{loop.index0}})" title="{{ ui.grammar_tooltip }}" style="color: var(--primary); opacity: 0.7;">
+            <button class="btn-text" onclick="explainGrammar(this, '{{text.id}}', {{loop.index0}})" title="{{ ui.grammar_tooltip }}" style="color: var(--primary); opacity: {{ '1' if s.has_grammar else '0.5' }};">
                 <span class="material-symbols-outlined">quiz</span>
             </button>
         </div>
@@ -113,7 +113,7 @@
     {% for v in vocab %}
     <div class="vocab-item" onclick="handleRowClick(event, '{{v.id}}')" style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border:1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); cursor: pointer;">
         <div style="display:flex; align-items:center; gap:12px;">
-            <button class="btn-text" onclick="playAudio({{ v.display | tojson | forceescape }})" style="padding:0; min-width:unset; color:var(--primary); opacity:0.6;">
+            <button class="btn-text" onclick="playAudio({{ v.display | tojson | forceescape }}, this)" style="padding:0; min-width:unset; color:var(--primary); opacity:{{ '1' if v.has_audio else '0.5' }};">
                 <span class="material-symbols-outlined" style="font-size:18px;">volume_up</span>
             </button>
             <div>
@@ -150,7 +150,7 @@ let currentAudio = null;
 let isPlayingAll = false;
 
 // 1. ПРОГРАВАННЯ АУДІО
-async function playAudio(text) {
+async function playAudio(text, btn = null) {
     if (currentAudio) {
         currentAudio.pause();
         currentAudio.src = "";
@@ -165,6 +165,9 @@ async function playAudio(text) {
         if (!response.ok) return;
 
         const data = await response.json();
+        
+        if (btn) btn.style.opacity = '1';
+
         currentAudio = new Audio(data.url);
         
         // Повертаємо проміс для playAll
@@ -202,8 +205,10 @@ async function playAll() {
         
         parent.style.backgroundColor = "var(--secondary)";
         
+        const btn = parent.querySelector('button[onclick^="playAudio"]');
+
         // Чекаємо поки дограє речення
-        await playAudio(line.innerText);
+        await playAudio(line.innerText, btn);
         
         parent.style.backgroundColor = "";
         // Пауза між реченнями
@@ -462,6 +467,7 @@ async function explainGrammar(btn, textId, sentIdx) {
             let formatted = data.explanation.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
             formatted = formatted.replace(/\n/g, '<br>');
             box.innerHTML = formatted;
+            btn.style.opacity = '1';
         } catch (e) {
             box.innerHTML = "{{ ui.grammar_explanation_error }}";
         }

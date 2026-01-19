@@ -38,6 +38,13 @@ app.config['SECRET_KEY'] = os.getenv("SECRET_KEY", "dev-key")
 AUDIO_DIR = "data/audio"
 os.makedirs(AUDIO_DIR, exist_ok=True)
 
+def has_audio_cache(text, lang='de'):
+    if not text: return False
+    file_hash = hashlib.md5(f"{text.strip()}_{lang}".encode()).hexdigest()
+    filename = f"{file_hash}.ogg"
+    filepath = os.path.join(AUDIO_DIR, filename)
+    return os.path.exists(filepath)
+
 db = SQLAlchemy(app)
 
 login_manager = LoginManager()
@@ -807,6 +814,12 @@ def view_text(tid):
         if not t: return "404", 404
         vocab_rows = [dict(row) for row in conn.execute('SELECT * FROM vocabulary WHERE user_id = ? AND text_id = ?', (current_user.id, tid)).fetchall()]
         
+        # Pre-fetch grammar cache indices
+        grammar_indices = set()
+        g_rows = conn.execute('SELECT sentence_index FROM grammar_explanations WHERE text_id = ? AND language = ?', (tid, current_user.interface_language)).fetchall()
+        for r in g_rows:
+            grammar_indices.add(r['sentence_index'])
+        
     sentences = json.loads(t['content_json'])
     
     lang_key = 'ua' if current_user.interface_language == 'ukr' else 'en'
@@ -823,6 +836,10 @@ def view_text(tid):
 
     for i, s in enumerate(sentences):
         original_text = s['de']
+        
+        s['has_audio'] = has_audio_cache(s['de'])
+        s['has_grammar'] = i in grammar_indices
+        
         my_words = [v for v in vocab_rows if v['sentence_index'] == i]
         my_words.sort(key=lambda x: x['start_index'], reverse=True)
         
@@ -841,6 +858,9 @@ def view_text(tid):
         
         built_str = original_text[0:last_idx] + built_str
         s['de_html'] = built_str
+        
+    for v in vocab_rows:
+        v['has_audio'] = has_audio_cache(v['display'])
         
     return render_template('view.html', text=t, sentences=sentences, vocab=vocab_rows, display_title=display_title, trans_title=trans_title)
 
@@ -923,6 +943,7 @@ def vocab():
     for row in db_words:
         w = dict(row)
         w['display_trans'] = w['ua'] if lang == 'ukr' else w['en']
+        w['has_audio'] = has_audio_cache(w['display'])
         words.append(w)
         
     return render_template('vocab.html', words=words, page=page, per_page=per_page, total_pages=total_pages, view_mode=view_mode)
