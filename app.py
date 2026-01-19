@@ -122,6 +122,21 @@ UI_STRINGS = {
         'score_context': 'Точність',
         'score_grammar': 'Граматика',
         'speaking_noise': '(Шум або нерозбірливо)',
+        'quiz_tab': 'Квіз',
+        'vocab_tab': 'Словник уроку',
+        'check_btn': 'Спробувати',
+        'next_btn': 'Далі',
+        'done_btn': 'Готово',
+        'finish_btn': 'Перевірити',
+        'retry_btn': 'Спробувати ще',
+        'quiz_completed': 'Квіз завершено!',
+        'your_score': 'Твій результат',
+        'restart_confirm_title': 'Почати спочатку?',
+        'restart_confirm_msg': 'Поточний прогрес буде втрачено. Ви впевнені?',
+        'abort_confirm_title': 'Завершити квіз?',
+        'abort_confirm_msg': 'Прогрес не буде збережено. Вийти?',
+        'abort_btn': 'Завершити',
+        'exit_btn': 'Вийти',
     },
     'eng': {
         'settings': 'Settings',
@@ -192,6 +207,21 @@ UI_STRINGS = {
         'score_context': 'Accuracy',
         'score_grammar': 'Grammar',
         'speaking_noise': '(Noise or unclear)',
+        'quiz_tab': 'Quiz',
+        'vocab_tab': 'Lesson Vocabulary',
+        'check_btn': 'Try',
+        'next_btn': 'Next',
+        'finish_btn': 'Check',
+        'retry_btn': 'Retry',
+        'done_btn': 'Done',
+        'quiz_completed': 'Quiz Completed!',
+        'your_score': 'Your Score',
+        'restart_confirm_title': 'Restart Quiz?',
+        'restart_confirm_msg': 'Current progress will be lost. Are you sure?',
+        'abort_confirm_title': 'Exit Quiz?',
+        'abort_confirm_msg': 'Progress will be lost. Exit?',
+        'abort_btn': 'Finish',
+        'exit_btn': 'Exit',
     }
 }
 
@@ -252,6 +282,7 @@ class SentenceModel(db.Model):
     audio_uk = db.Column(db.String)
     level = db.Column(db.String)
     topic = db.Column(db.String)
+    # quiz_json is handled via raw SQL in migrations, but ideally should be here too if using ORM fully
 
 class SentenceBatch(db.Model):
     __tablename__ = 'sentence_batches'
@@ -681,8 +712,8 @@ def generate():
     title_json = json.dumps({'de': data.get('title_de', req['topic']), 'ukr': data['title_ua'], 'eng': data['title_en']})
     tid = str(uuid.uuid4())
     with get_db() as conn:
-        conn.execute('INSERT INTO texts (id, user_id, title, level, content_json) VALUES (?,?,?,?,?)',
-                     (tid, current_user.id, title_json, req['level'], json.dumps(data['sentences'])))
+        conn.execute('INSERT INTO texts (id, user_id, title, level, content_json, quiz_json) VALUES (?,?,?,?,?,?)',
+                     (tid, current_user.id, title_json, req['level'], json.dumps(data['sentences']), json.dumps(data.get('quiz', []))))
         conn.commit()
     return jsonify({"id": tid, "credits": new_bal})
 
@@ -841,7 +872,7 @@ def view_text(tid):
         s['has_grammar'] = i in grammar_indices
         
         my_words = [v for v in vocab_rows if v['sentence_index'] == i]
-        my_words.sort(key=lambda x: x['start_index'], reverse=True)
+        my_words.sort(key=lambda x: x.get('start_index') or 0, reverse=True)
         
         last_idx = len(original_text)
         built_str = ""
@@ -861,8 +892,42 @@ def view_text(tid):
         
     for v in vocab_rows:
         v['has_audio'] = has_audio_cache(v['display'])
+
+    # Load Quiz Data
+    quiz_data = []
+    if t['quiz_json']:
+        try:
+            quiz_data = json.loads(t['quiz_json'])
+        except: pass
         
-    return render_template('view.html', text=t, sentences=sentences, vocab=vocab_rows, display_title=display_title, trans_title=trans_title)
+    # Load last quiz result
+    last_quiz_result = None
+    res = conn.execute(
+        'SELECT score, total_questions FROM quiz_results WHERE user_id = ? AND text_id = ? ORDER BY created_at DESC LIMIT 1',
+        (current_user.id, tid)
+    ).fetchone()
+    if res:
+        last_quiz_result = dict(res)
+        
+    return render_template('view.html', text=t, sentences=sentences, vocab=vocab_rows, display_title=display_title, trans_title=trans_title, quiz_data=quiz_data, last_quiz_result=last_quiz_result)
+
+@app.route('/api/save_quiz_result', methods=['POST'])
+@login_required
+def save_quiz_result():
+    req = request.json
+    with get_db() as conn:
+        # Перевіряємо, чи є вже результат для цього тексту
+        cur = conn.execute('SELECT id FROM quiz_results WHERE user_id = ? AND text_id = ?', (current_user.id, req['text_id']))
+        row = cur.fetchone()
+        
+        if row:
+            conn.execute('UPDATE quiz_results SET score = ?, total_questions = ?, created_at = CURRENT_TIMESTAMP WHERE id = ?',
+                         (req['score'], req['total'], row['id']))
+        else:
+            conn.execute('INSERT INTO quiz_results (user_id, text_id, score, total_questions) VALUES (?, ?, ?, ?)',
+                         (current_user.id, req['text_id'], req['score'], req['total']))
+        conn.commit()
+    return jsonify({"ok": True})
 
 @app.route('/api/quick_translate', methods=['POST'])
 @login_required

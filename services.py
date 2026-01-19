@@ -99,6 +99,12 @@ def generate_german_text(topic, count, level, style='neutral'):
     !ABSOLUTE MAXIMUM: No sentence should ever exceed 22 words, even for C2!
     NO CLUTTER: Do not use multiple complex grammatical structures in a single sentence. Spread them across the text.
     NATURAL FLOW: The text must sound like it was written by a human teacher, not a grammar-obsessed robot.
+
+    ADDITIONALLY GENERATE A QUIZ:
+    - Create exactly 4 multiple-choice questions based on the text.
+    - Language: German (questions and options).
+    - Level: Same as text.
+    - Format: 4 options per question, 1 correct answer. No duplicates.
     
     Return ONLY JSON:
     {{
@@ -110,7 +116,14 @@ def generate_german_text(topic, count, level, style='neutral'):
               "de": "German sentence adhering to rules.", 
               "ua": "Ukrainian translation", 
               "en": "English translation"
-          }} 
+          }}
+      ],
+      "quiz": [
+          {{
+              "question": "Question in German?",
+              "options": ["Option A", "Option B", "Option C", "Option D"],
+              "correct_index": 0  // Index of the correct option (0-3)
+          }}
       ]
     }}"""
     

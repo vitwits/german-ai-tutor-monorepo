@@ -124,6 +124,24 @@ def init_db():
         except sqlite3.OperationalError:
             pass
 
+        # 7. Міграція для квізів (Quiz)
+        try:
+            conn.execute('ALTER TABLE texts ADD COLUMN quiz_json TEXT')
+        except sqlite3.OperationalError:
+            pass
+
+        # Таблиця результатів квізів
+        conn.execute('''CREATE TABLE IF NOT EXISTS quiz_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            text_id TEXT NOT NULL,
+            score INTEGER,
+            total_questions INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (id),
+            FOREIGN KEY (text_id) REFERENCES texts (id)
+        )''')
+
         # 5. Таблиці для генератора речень (Admin Tool)
         conn.execute('''CREATE TABLE IF NOT EXISTS sentence_batches (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
