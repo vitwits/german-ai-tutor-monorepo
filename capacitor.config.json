@@ -1,0 +1,14 @@
+{
+  "appId": "com.germanaitutor.app",
+  "appName": "German AI Tutor",
+  "webDir": "static",
+  "server": {
+    "url": "http://127.0.0.1:5000",
+    "cleartext": true
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 0
+    }
+  }
+}

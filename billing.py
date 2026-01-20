@@ -5,7 +5,7 @@ from database import get_db
 # 1 Credit = $0.001 (0.1 cent)
 
 PRICING = {
-    # --- ТЕКСТ (Gemini Flash 2.0) ---
+    # --- ТЕКСТ (Gemini Flash 2.5 lite) ---
     'ai_request_fixed': 0.1,      # Мінімальна плата за звернення до AI
     'translation_per_char': 0.001, # $1 за 1M символів
     

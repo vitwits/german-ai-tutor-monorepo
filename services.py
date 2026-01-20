@@ -129,7 +129,7 @@ def generate_german_text(topic, count, level, style='neutral'):
     
     try:
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash-lite",
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
@@ -165,8 +165,8 @@ def get_tts_audio(text, lang='de'):
             
             speech_config = speechsdk.SpeechConfig(subscription=speech_key, region=service_region)
             speech_config.speech_synthesis_voice_name = "uk-UA-PolinaNeural"
-            # Встановлюємо формат MP3, щоб відповідати розширенню файлу в app.py
-            speech_config.set_speech_synthesis_output_format(speechsdk.SpeechSynthesisOutputFormat.Audio24Khz160KBitRateMonoMp3)
+            # Встановлюємо формат OGG, щоб відповідати розширенню файлу в app.py
+            speech_config.set_speech_synthesis_output_format(speechsdk.SpeechSynthesisOutputFormat.Ogg24Khz16BitMonoOpus)
             
             synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=None)
             result = synthesizer.speak_text_async(text).get()
@@ -192,7 +192,7 @@ def get_tts_audio(text, lang='de'):
 
     s_input = texttospeech.SynthesisInput(text=text)
     voice = texttospeech.VoiceSelectionParams(language_code=language_code, name=name)
-    audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
+    audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.OGG_OPUS)
     
     response = tts_client.synthesize_speech(input=s_input, voice=voice, audio_config=audio_config)
     return response.audio_content
@@ -323,7 +323,7 @@ def translate_word(text, ctx):
     
     try:
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash-lite",
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json"
@@ -344,7 +344,7 @@ def explain_grammar_text(prompt_text):
     """
     try:
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash-lite",
             contents=prompt_text
         )
         return response.text

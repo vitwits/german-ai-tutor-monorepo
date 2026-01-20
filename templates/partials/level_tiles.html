@@ -1,0 +1,10 @@
+{% for l in ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'] %}
+<button class="lvl-tile lvl-{{l.lower()}} {% if current_user.level == l %}active{% endif %}" 
+        hx-post="/api/update_level" 
+        hx-vals='{"level": "{{l}}"}'
+        hx-target="#level-container"
+        hx-swap="innerHTML"
+        id="lvl-{{l}}">
+    {{l}}
+</button>
+{% endfor %}

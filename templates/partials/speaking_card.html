@@ -1,0 +1,11 @@
+<div class="task-text" id="task-display" 
+     data-audio-src="/static/audio/sentences/{{ audio_src }}"
+     data-audio-de="/static/audio/sentences/{{ sentence.audio_de }}"
+     data-original-text="{{ sentence.text_de }}"
+     style="opacity: 0; transition: opacity 0.3s;">
+    {{ source_text }}
+</div>
+
+<script>
+    setTimeout(() => { document.getElementById('task-display').style.opacity = 1; }, 100);
+</script>

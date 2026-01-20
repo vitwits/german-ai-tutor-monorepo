@@ -6,7 +6,7 @@ import json
 import threading
 import time
 import random
-from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, send_from_directory
+from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, send_from_directory, Response
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from flask_sqlalchemy import SQLAlchemy
 from flask_admin import Admin, AdminIndexView, BaseView, expose, helpers
@@ -15,6 +15,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
 from datetime import datetime
 from markupsafe import Markup
+from flask_cors import CORS
 
 from database import get_db, init_db
 import services
@@ -29,6 +30,7 @@ import utils.generate_audio as gen_audio_script
 init_db()
 
 app = Flask(__name__)
+CORS(app) # Enable CORS for Capacitor/Mobile clients
 # Налаштування SQLAlchemy для Flask-Admin
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(os.getcwd(), 'data', 'app.db')
 # Налаштування для коректного відображення кирилиці в JSON
@@ -44,6 +46,10 @@ def has_audio_cache(text, lang='de'):
     filename = f"{file_hash}.ogg"
     filepath = os.path.join(AUDIO_DIR, filename)
     return os.path.exists(filepath)
+
+def is_htmx():
+    """Check if the request is triggered by HTMX"""
+    return request.headers.get('HX-Request') == 'true'
 
 db = SQLAlchemy(app)
 
@@ -688,33 +694,66 @@ def settings():
 @app.route('/api/update_level', methods=['POST'])
 @login_required
 def update_level():
-    new_level = request.json.get('level')
+    data = request.get_json(silent=True) or request.form
+    new_level = data.get('level')
     if new_level in ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']:
         with get_db() as conn:
             conn.execute('UPDATE users SET level = ? WHERE id = ?', (new_level, current_user.id))
             conn.commit()
         current_user.level = new_level
+        
+        if is_htmx():
+            return render_template('partials/level_tiles.html')
         return jsonify({"ok": True})
     return jsonify({"error": "Invalid level"}), 400
 
 @app.route('/api/generate', methods=['POST'])
 @login_required
 def generate():
-    req = request.json
+    # Support both JSON and Form Data
+    req = request.json if request.is_json else request.form
+    
+    topic = req.get('topic')
+    level = req.get('level', current_user.level)
+    style = req.get('style', 'neutral')
+    
+    # Logic to determine count based on size (S/M/L) if 'count' is not provided directly
+    count = req.get('count')
+    if not count:
+        size = req.get('size', 'M')
+        # Map: Level -> Size -> Count
+        sentence_map = {
+            'A1': {'S': 5, 'M': 8, 'L': 12},
+            'A2': {'S': 6, 'M': 8, 'L': 11},
+            'B1': {'S': 5, 'M': 7, 'L': 10},
+            'B2': {'S': 5, 'M': 7, 'L': 10},
+            'C1': {'S': 6, 'M': 8, 'L': 9},
+            'C2': {'S': 6, 'M': 7, 'L': 8}
+        }
+        # Fallback to A2/M if something is wrong
+        count = sentence_map.get(level, sentence_map['A2']).get(size, 8)
+    else:
+        count = int(count)
     
     # BILLING: Списання за генерацію уроку
     new_bal = billing.deduct_credits(current_user.id, billing.PRICING['lesson_generation'])
     current_user.credits = new_bal # Оновлюємо сесію
 
     # Передаємо параметр style
-    data = services.generate_german_text(req['topic'], req['count'], req['level'], req.get('style', 'neutral'))
+    data = services.generate_german_text(topic, count, level, style)
     
-    title_json = json.dumps({'de': data.get('title_de', req['topic']), 'ukr': data['title_ua'], 'eng': data['title_en']})
+    title_json = json.dumps({'de': data.get('title_de', topic), 'ukr': data['title_ua'], 'eng': data['title_en']})
     tid = str(uuid.uuid4())
     with get_db() as conn:
         conn.execute('INSERT INTO texts (id, user_id, title, level, content_json, quiz_json) VALUES (?,?,?,?,?,?)',
-                     (tid, current_user.id, title_json, req['level'], json.dumps(data['sentences']), json.dumps(data.get('quiz', []))))
+                     (tid, current_user.id, title_json, level, json.dumps(data['sentences']), json.dumps(data.get('quiz', []))))
         conn.commit()
+        
+    if is_htmx():
+        resp = Response()
+        resp.headers['HX-Redirect'] = f'/view/{tid}'
+        return resp
+        
     return jsonify({"id": tid, "credits": new_bal})
 
 @app.route('/api/explain_grammar', methods=['POST'])
@@ -835,6 +874,9 @@ def library():
             r['trans_title'] = ""
         texts.append(r)
         
+    if is_htmx() and request.headers.get('HX-Target') == 'library-container':
+        return render_template('partials/library_list.html', texts=texts, page=page, per_page=per_page, total_pages=total_pages, view_mode=view_mode, show_fav=show_fav, selected_levels=selected_levels)
+
     return render_template('library.html', texts=texts, page=page, per_page=per_page, total_pages=total_pages, view_mode=view_mode, show_fav=show_fav, selected_levels=selected_levels)
 
 @app.route('/view/<tid>')
@@ -998,10 +1040,24 @@ def vocab():
 
     page = request.args.get('page', 1, type=int)
     offset = (page - 1) * per_page
+    
+    # Search logic
+    q = request.args.get('q', '').strip()
+    
+    query_base = 'FROM vocabulary WHERE user_id = ? AND is_favorite = 1'
+    params = [current_user.id]
+    
+    if q:
+        query_base += ' AND (display LIKE ? OR ua LIKE ? OR en LIKE ?)'
+        search_term = f'%{q}%'
+        params.extend([search_term, search_term, search_term])
+        
+    query_count = f'SELECT COUNT(*) {query_base}'
+    query_rows = f'SELECT * {query_base} ORDER BY rowid DESC LIMIT ? OFFSET ?'
 
     with get_db() as conn:
-        total_count = conn.execute('SELECT COUNT(*) FROM vocabulary WHERE user_id = ? AND is_favorite = 1', (current_user.id,)).fetchone()[0]
-        db_words = conn.execute('SELECT * FROM vocabulary WHERE user_id = ? AND is_favorite = 1 ORDER BY rowid DESC LIMIT ? OFFSET ?', (current_user.id, per_page, offset)).fetchall()
+        total_count = conn.execute(query_count, params).fetchone()[0]
+        db_words = conn.execute(query_rows, params + [per_page, offset]).fetchall()
     
     total_pages = math.ceil(total_count / per_page)
     words = []
@@ -1011,7 +1067,10 @@ def vocab():
         w['has_audio'] = has_audio_cache(w['display'])
         words.append(w)
         
-    return render_template('vocab.html', words=words, page=page, per_page=per_page, total_pages=total_pages, view_mode=view_mode)
+    if is_htmx() and request.headers.get('HX-Target') == 'vocab-container':
+        return render_template('partials/vocab_list.html', words=words, page=page, per_page=per_page, total_pages=total_pages, view_mode=view_mode, q=q)
+        
+    return render_template('vocab.html', words=words, page=page, per_page=per_page, total_pages=total_pages, view_mode=view_mode, q=q)
 
 @app.route('/api/toggle_fav', methods=['POST'])
 @login_required
@@ -1026,9 +1085,12 @@ def toggle_fav():
 @app.route('/api/remove_word', methods=['POST'])
 @login_required
 def remove_word():
-    req = request.json
+    req = request.json if request.is_json else request.form
     wid = req.get('id')
-    from_vocab = req.get('from_vocab', False) 
+    # Handle boolean from JSON or string from Form
+    from_vocab = req.get('from_vocab')
+    if isinstance(from_vocab, str):
+        from_vocab = from_vocab.lower() == 'true'
     
     with get_db() as conn:
         if from_vocab:
@@ -1042,6 +1104,10 @@ def remove_word():
                 conn.execute('DELETE FROM vocabulary WHERE id = ? AND user_id = ?', (wid, current_user.id))
         
         conn.commit()
+        
+    if is_htmx():
+        return "" # Return empty string to remove element from DOM
+        
     return jsonify({"ok": True})
 
 @app.route('/api/toggle_text_fav', methods=['POST'])
@@ -1056,13 +1122,19 @@ def toggle_text_fav():
 @app.route('/api/delete_text', methods=['POST'])
 @login_required
 def delete_text():
-    tid = request.json.get('id')
+    # Support both JSON (fetch) and Form Data (HTMX)
+    tid = request.json.get('id') if request.is_json else request.form.get('id')
+    
     with get_db() as conn:
         conn.execute('DELETE FROM texts WHERE id = ? AND user_id = ?', (tid, current_user.id))
         conn.execute('UPDATE vocabulary SET text_id = NULL WHERE text_id = ? AND user_id = ? AND is_favorite = 1', (tid, current_user.id))
         conn.execute('DELETE FROM vocabulary WHERE text_id = ? AND user_id = ? AND is_favorite = 0', (tid, current_user.id))
         conn.execute('DELETE FROM grammar_explanations WHERE text_id = ?', (tid,))
         conn.commit()
+        
+    if is_htmx():
+        return "" # Return empty string to remove element from DOM
+        
     return jsonify({"ok": True})
 
 @app.route('/api/tts', methods=['POST'])
@@ -1102,24 +1174,31 @@ def serve_audio(filename):
 def speaking():
     return render_template('speaking.html')
 
-@app.route('/api/get_speaking_session', methods=['POST'])
+@app.route('/speaking/next', methods=['GET'])
 @login_required
-def get_speaking_session():
-    # 1. Отримуємо всі речення для рівня користувача
+def speaking_next():
+    """Returns the next sentence card as HTML partial"""
     with get_db() as conn:
-        rows = conn.execute('SELECT * FROM sentences WHERE level = ?', (current_user.level,)).fetchall()
+        # Get a random sentence for the user's level
+        row = conn.execute('SELECT * FROM sentences WHERE level = ? ORDER BY RANDOM() LIMIT 1', (current_user.level,)).fetchone()
+        if not row:
+            # Fallback
+            row = conn.execute('SELECT * FROM sentences ORDER BY RANDOM() LIMIT 1').fetchone()
+            
+    if not row:
+        return "<div class='task-text'>No sentences found. Please generate content in Admin.</div>"
         
-        # Fallback: якщо немає речень для рівня, спробуємо знайти хоч щось
-        if not rows:
-            rows = conn.execute('SELECT * FROM sentences LIMIT 50').fetchall()
+    sentence = dict(row)
     
-    sentences = [dict(r) for r in rows]
+    # Determine text to display based on interface language
+    lang_key = 'text_uk' if current_user.interface_language == 'ukr' else 'text_en'
+    source_text = sentence.get(lang_key) or sentence.get('text_en')
+    audio_key = 'audio_uk' if current_user.interface_language == 'ukr' else 'audio_en'
     
-    # 2. Перемішуємо список
-    random.shuffle(sentences)
-    
-    # Повертаємо весь список (або можна частинами, якщо їх дуже багато)
-    return jsonify(sentences)
+    return render_template('partials/speaking_card.html', 
+                           sentence=sentence, 
+                           source_text=source_text,
+                           audio_src=sentence.get(audio_key))
 
 @app.route('/api/evaluate_audio', methods=['POST'])
 @login_required
