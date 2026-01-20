@@ -163,4 +163,14 @@ def init_db():
             FOREIGN KEY (batch_id) REFERENCES sentence_batches (id) ON DELETE CASCADE
         )''')
 
+        # 6. Таблиця улюблених речень (User Favorites)
+        conn.execute('''CREATE TABLE IF NOT EXISTS user_favorite_sentences (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            sentence_id INTEGER NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (id),
+            FOREIGN KEY (sentence_id) REFERENCES sentences (id)
+        )''')
+
         conn.commit()

@@ -6,7 +6,7 @@ import json
 import threading
 import time
 import random
-from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, send_from_directory, Response
+from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, send_from_directory, Response, make_response
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from flask_sqlalchemy import SQLAlchemy
 from flask_admin import Admin, AdminIndexView, BaseView, expose, helpers
@@ -143,6 +143,10 @@ UI_STRINGS = {
         'abort_confirm_msg': 'Прогрес не буде збережено. Вийти?',
         'abort_btn': 'Завершити',
         'exit_btn': 'Вийти',
+        'vocab_words': 'Слова',
+        'vocab_sentences': 'Речення',
+        'sentence_added_fav': 'Речення додано в улюблені',
+        'sentence_removed_fav': 'Речення видалено з улюблених',
     },
     'eng': {
         'settings': 'Settings',
@@ -228,6 +232,10 @@ UI_STRINGS = {
         'abort_confirm_msg': 'Progress will be lost. Exit?',
         'abort_btn': 'Finish',
         'exit_btn': 'Exit',
+        'vocab_words': 'Words',
+        'vocab_sentences': 'Sentences',
+        'sentence_added_fav': 'Sentence added to favorites',
+        'sentence_removed_fav': 'Sentence removed from favorites',
     }
 }
 
@@ -876,6 +884,12 @@ def library():
         
     if is_htmx() and request.headers.get('HX-Target') == 'library-container':
         return render_template('partials/library_list.html', texts=texts, page=page, per_page=per_page, total_pages=total_pages, view_mode=view_mode, show_fav=show_fav, selected_levels=selected_levels)
+    if is_htmx():
+        target = request.headers.get('HX-Target')
+        if target == 'library-container':
+            return render_template('partials/library_list.html', texts=texts, page=page, per_page=per_page, total_pages=total_pages, view_mode=view_mode, show_fav=show_fav, selected_levels=selected_levels)
+        if target == 'library-content':
+            return render_template('partials/library_content.html', texts=texts, page=page, per_page=per_page, total_pages=total_pages, view_mode=view_mode, show_fav=show_fav, selected_levels=selected_levels)
 
     return render_template('library.html', texts=texts, page=page, per_page=per_page, total_pages=total_pages, view_mode=view_mode, show_fav=show_fav, selected_levels=selected_levels)
 
@@ -1027,6 +1041,52 @@ def update_word():
 def vocab():
     lang = current_user.interface_language
     
+    # Tab switching: words vs sentences
+    mode = request.args.get('mode', 'words')
+    
+    # --- SENTENCES MODE ---
+    if mode == 'sentences':
+        page = request.args.get('page', 1, type=int)
+        per_page = 20
+        offset = (page - 1) * per_page
+        
+        query_count = '''
+            SELECT COUNT(*) FROM user_favorite_sentences 
+            WHERE user_id = ?
+        '''
+        query_rows = '''
+            SELECT s.*, ufs.id as fav_id, ufs.created_at 
+            FROM user_favorite_sentences ufs
+            JOIN sentences s ON ufs.sentence_id = s.id
+            WHERE ufs.user_id = ?
+            ORDER BY ufs.created_at DESC
+            LIMIT ? OFFSET ?
+        '''
+        
+        with get_db() as conn:
+            total_count = conn.execute(query_count, (current_user.id,)).fetchone()[0]
+            rows = conn.execute(query_rows, (current_user.id, per_page, offset)).fetchall()
+            
+        sentences = []
+        lang_key = 'text_uk' if lang == 'ukr' else 'text_en'
+        audio_key = 'audio_uk' if lang == 'ukr' else 'audio_en'
+        
+        for r in rows:
+            s = dict(r)
+            s['display_trans'] = s.get(lang_key) or s.get('text_en')
+            s['display_audio'] = s.get(audio_key)
+            sentences.append(s)
+            
+        total_pages = math.ceil(total_count / per_page)
+        
+        # Для запитів пагінації повертаємо лише частковий шаблон.
+        if is_htmx() and request.headers.get('HX-Target') == 'vocab-container':
+            return render_template('partials/fav_sentences_list.html', sentences=sentences, page=page, total_pages=total_pages)
+        
+        # Для повного завантаження або перемикання вкладок повертаємо повний шаблон.
+        return render_template('vocab.html', mode='sentences', sentences=sentences, page=page, total_pages=total_pages)
+
+    # --- WORDS MODE (Existing Logic) ---
     arg_view = request.args.get('view')
     
     view_mode = arg_view if arg_view else current_user.vocab_view_mode
@@ -1070,7 +1130,7 @@ def vocab():
     if is_htmx() and request.headers.get('HX-Target') == 'vocab-container':
         return render_template('partials/vocab_list.html', words=words, page=page, per_page=per_page, total_pages=total_pages, view_mode=view_mode, q=q)
         
-    return render_template('vocab.html', words=words, page=page, per_page=per_page, total_pages=total_pages, view_mode=view_mode, q=q)
+    return render_template('vocab.html', mode='words', words=words, page=page, per_page=per_page, total_pages=total_pages, view_mode=view_mode, q=q)
 
 @app.route('/api/toggle_fav', methods=['POST'])
 @login_required
@@ -1137,6 +1197,47 @@ def delete_text():
         
     return jsonify({"ok": True})
 
+@app.route('/api/toggle_sentence_fav', methods=['POST'])
+@login_required
+def toggle_sentence_fav():
+    sid = request.form.get('id')
+    if not sid: return jsonify({"error": "No ID"}), 400
+    
+    msg = ""
+    is_fav = False
+    
+    with get_db() as conn:
+        exists = conn.execute('SELECT id FROM user_favorite_sentences WHERE user_id = ? AND sentence_id = ?', (current_user.id, sid)).fetchone()
+        if exists:
+            conn.execute('DELETE FROM user_favorite_sentences WHERE id = ?', (exists['id'],))
+            msg = UI_STRINGS[current_user.interface_language]['sentence_removed_fav']
+            is_fav = False
+        else:
+            conn.execute('INSERT INTO user_favorite_sentences (user_id, sentence_id) VALUES (?, ?)', (current_user.id, sid))
+            msg = UI_STRINGS[current_user.interface_language]['sentence_added_fav']
+            is_fav = True
+        conn.commit()
+    
+    # Return HTMX trigger to show toast and update UI state
+    resp = jsonify({"ok": True})
+    resp.headers['HX-Trigger'] = json.dumps({"showMessage": {"msg": msg, "type": "success"}, "favToggled": {"id": sid, "state": is_fav}})
+    return resp
+
+@app.route('/api/remove_fav_sentence', methods=['POST'])
+@login_required
+def remove_fav_sentence():
+    fav_id = request.form.get('id')
+    with get_db() as conn:
+        conn.execute('DELETE FROM user_favorite_sentences WHERE id = ? AND user_id = ?', (fav_id, current_user.id))
+        conn.commit()
+    
+    if is_htmx():
+        resp = make_response("")
+        msg = UI_STRINGS[current_user.interface_language]['sentence_removed_fav']
+        resp.headers['HX-Trigger'] = json.dumps({"showMessage": {"msg": msg, "type": "success"}})
+        return resp
+    return jsonify({"ok": True})
+
 @app.route('/api/tts', methods=['POST'])
 @login_required
 def tts():
@@ -1195,10 +1296,23 @@ def speaking_next():
     source_text = sentence.get(lang_key) or sentence.get('text_en')
     audio_key = 'audio_uk' if current_user.interface_language == 'ukr' else 'audio_en'
     
-    return render_template('partials/speaking_card.html', 
+    # Check if favorite
+    is_fav = False
+    with get_db() as conn:
+        if conn.execute('SELECT 1 FROM user_favorite_sentences WHERE user_id = ? AND sentence_id = ?', (current_user.id, sentence['id'])).fetchone():
+            is_fav = True
+
+    resp = make_response(render_template('partials/speaking_card.html', 
                            sentence=sentence, 
                            source_text=source_text,
-                           audio_src=sentence.get(audio_key))
+                           audio_src=sentence.get(audio_key)))
+    
+    # Send ID and Fav state to frontend via header
+    resp.headers['HX-Trigger'] = json.dumps({
+        'sentenceLoaded': {'id': sentence['id'], 'isFav': is_fav}
+    })
+    
+    return resp
 
 @app.route('/api/evaluate_audio', methods=['POST'])
 @login_required

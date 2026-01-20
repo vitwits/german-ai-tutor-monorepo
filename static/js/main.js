@@ -18,6 +18,7 @@ var lastVoiceTimestamp = 0;
 var hasUserStartedSpeaking = false;
 var recordStartTime = 0;
 var currentAudioObj = null;
+var currentSentenceId = null; // Store ID for favorites
 
 var NO_SPEECH_TIMEOUT = 5000; 
 var SILENCE_AFTER_SPEECH = 2000; 
@@ -41,11 +42,35 @@ window.handleHtmxAfterLoad = function(evt) {
 };
 document.body.addEventListener('htmx:afterOnLoad', window.handleHtmxAfterLoad);
 
+// Listen for custom event from backend to set sentence ID
+document.body.addEventListener('sentenceLoaded', function(evt) {
+    currentSentenceId = evt.detail.id;
+    const isFav = evt.detail.isFav;
+    
+    const icon = document.getElementById('fav-icon');
+    const btn = document.getElementById('fav-btn');
+    if (icon && btn) {
+        if (isFav) {
+            icon.classList.add('filled');
+            icon.style.color = '#FFC107';
+            btn.style.borderColor = '#FFC107';
+        } else {
+            icon.classList.remove('filled');
+            icon.style.color = '';
+            btn.style.borderColor = '';
+        }
+    }
+});
+
 // Cleanup on navigation (HTMX)
 if (window.handleHtmxBeforeSwap) document.body.removeEventListener('htmx:beforeSwap', window.handleHtmxBeforeSwap);
 window.handleHtmxBeforeSwap = function(evt) {
     // Ignore partial swaps (like the speaking card itself) to preserve state between rounds
     if (evt.detail.target.id === 'speaking-card-container') return;
+    
+    // Ignore Fav button to prevent audio interruption
+    const triggerId = evt.detail.requestConfig && evt.detail.requestConfig.elt ? evt.detail.requestConfig.elt.id : '';
+    if (triggerId === 'fav-btn') return;
 
     stopRecording(false); // Always try to stop recording/streams
     if (silenceCheckInterval) clearInterval(silenceCheckInterval);
@@ -115,6 +140,15 @@ function nextRound() {
     isRetryState = false;
     // Trigger HTMX to load next sentence
     htmx.trigger('#speaking-card-container', 'nextSentence');
+}
+
+function repeatRound() {
+    // Just restart the logic without fetching new sentence
+    isResultState = false;
+    isRetryState = false;
+    roundAborted = false;
+    gameStarted = true;
+    startCurrentRound();
 }
 
 async function startCurrentRound() {
@@ -324,6 +358,12 @@ async function showFeedback(result) {
     }
 
     updateUIState('next');
+    
+    // Show side buttons
+    const repeatBtn = document.getElementById('repeat-btn');
+    const favBtn = document.getElementById('fav-btn');
+    if(repeatBtn) repeatBtn.classList.add('visible');
+    if(favBtn) favBtn.classList.add('visible');
 
     // --- SPLASH SCREEN LOGIC ---
     const splash = document.getElementById('splash-screen');
@@ -458,6 +498,12 @@ function updateUIState(state) {
     const btn = document.getElementById('main-btn');
     const ring = document.getElementById('visualizer');
     const icon = document.getElementById('btn-icon');
+    const repeatBtn = document.getElementById('repeat-btn');
+    const favBtn = document.getElementById('fav-btn');
+    
+    // Hide side buttons when not in result state
+    if(repeatBtn) repeatBtn.classList.remove('visible');
+    if(favBtn) favBtn.classList.remove('visible');
     
     if (!btn || !icon || !ring) return;
     
@@ -535,40 +581,60 @@ function drawVisualizer() {
 
 if (window.handleLevelUpdated) window.removeEventListener('level-updated', window.handleLevelUpdated);
 
-var levelUpdateTimer = null;
-
 window.handleLevelUpdated = async () => {
-    // Debounce: якщо функція викликана повторно протягом 100мс, скасовуємо попередній виклик
-    if (levelUpdateTimer) clearTimeout(levelUpdateTimer);
-
-    levelUpdateTimer = setTimeout(() => {
-        // 1. Hard stop recording if active
-        if (isRecording && mediaRecorder) {
-            mediaRecorder.onstop = null; 
-            mediaRecorder.stop();
-            if(micStream) micStream.getTracks().forEach(track => track.stop());
-        }
-        if (silenceCheckInterval) clearInterval(silenceCheckInterval);
-        
-        // 2. Reset State
-        isRecording = false;
-        isProcessing = false;
-        isResultState = false;
-        isRetryState = false;
-        gameStarted = false;
-        
-        // 3. Reset UI
-        updateUIState('idle');
-        const transDisplay = document.getElementById('transcript-display');
-        if (transDisplay) transDisplay.innerText = '';
-        
-        const corrDisplay = document.getElementById('correction-display');
-        if (corrDisplay) corrDisplay.style.display = 'none';
-        
-        // 4. Trigger HTMX to load new content
-        // Використовуємо htmx.ajax для прямого контролю
-        htmx.ajax('GET', '/speaking/next', {target: '#speaking-card-container', swap: 'innerHTML'});
-    }, 100);
+    // 1. Hard stop recording if active
+    if (isRecording && mediaRecorder) {
+        mediaRecorder.onstop = null; 
+        mediaRecorder.stop();
+        if(micStream) micStream.getTracks().forEach(track => track.stop());
+    }
+    if (silenceCheckInterval) clearInterval(silenceCheckInterval);
+    
+    // 2. Reset State
+    isRecording = false;
+    isProcessing = false;
+    isResultState = false;
+    isRetryState = false;
+    gameStarted = false;
+    
+    // 3. Reset UI
+    updateUIState('idle');
+    const transDisplay = document.getElementById('transcript-display');
+    if (transDisplay) transDisplay.innerText = '';
+    
+    const corrDisplay = document.getElementById('correction-display');
+    if (corrDisplay) corrDisplay.style.display = 'none';
+    
+    // 4. Trigger HTMX to load new content
+    const container = document.getElementById('speaking-card-container');
+    if (container) {
+        // Use setTimeout to avoid conflict with the level-update HTMX swap cycle
+        setTimeout(() => {
+            htmx.ajax('GET', '/speaking/next', {target: '#speaking-card-container', swap: 'innerHTML'});
+        }, 50);
+    }
 };
 
 window.addEventListener('level-updated', window.handleLevelUpdated);
+
+// Handle Toast Trigger from HTMX
+document.body.addEventListener('showMessage', function(evt){
+    window.toast.show(evt.detail.msg, evt.detail.type || 'success');
+});
+
+// Handle Fav Toggle UI update
+document.body.addEventListener('favToggled', function(evt){
+    const icon = document.getElementById('fav-icon');
+    const btn = document.getElementById('fav-btn');
+    if (icon && btn) {
+        if (evt.detail.state) {
+            icon.classList.add('filled');
+            icon.style.color = '#FFC107';
+            btn.style.borderColor = '#FFC107';
+        } else {
+            icon.classList.remove('filled');
+            icon.style.color = '';
+            btn.style.borderColor = '';
+        }
+    }
+});
