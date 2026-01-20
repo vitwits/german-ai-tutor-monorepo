@@ -74,9 +74,9 @@
 {% block tail %}
     {{ super() }}
     <script>
-        let currentAudio = null;
-        let currentRow = null;
-        let stopPlayback = false; // Глобальний прапорець для зупинки
+        var currentAudio = null;
+        var currentRow = null;
+        var stopPlayback = false; // Глобальний прапорець для зупинки
 
         function setPageSize(size) {
             document.cookie = "{{ admin_view.endpoint }}_page_size=" + size + "; path=/";

@@ -47,10 +47,10 @@ source venv/bin/activate
 pip install --upgrade pip setuptools wheel
 
 # Основні пакети
-pip install flask flask-login flask-bcrypt python-dotenv flask-admin flask-sqlalchemy
+pip install flask flask-login flask-bcrypt python-dotenv flask-admin flask-sqlalchemy flask-cors
 
 # Google пакети
-pip install google-generativeai
+pip install google-genai
 pip install google-cloud-texttospeech
 pip install azure-cognitiveservices-speech
 ```

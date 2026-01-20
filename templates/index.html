@@ -24,31 +24,22 @@
         gap: 8px; /* Відступ між кнопками */
     }
 
-    .size-btn {
-        width: 45px; /* Робимо кнопку квадратною (такою ж як висота) */
-        height: 45px;
-        padding: 0;
-        border: 1px solid var(--border); 
-        border-radius: var(--radius);
-        background: var(--bg); 
-        color: var(--on-surface); 
+    /* Radio buttons styled as buttons */
+    .size-selector input[type="radio"] { display: none; }
+    .size-selector label {
+        width: 45px; height: 45px;
+        border: 1px solid var(--border); border-radius: var(--radius);
+        background: var(--bg); color: var(--on-surface);
         cursor: pointer;
-        font-weight: 500; 
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: all 0.2s;
-        flex-shrink: 0; /* Забороняємо кнопкам стискатися */
+        font-weight: 500; display: flex; align-items: center; justify-content: center;
+        transition: all 0.2s; flex-shrink: 0;
     }
-
-    .size-btn.active {
-        background: var(--primary); 
-        color: white; 
+    .size-selector input[type="radio"]:checked + label {
+        background: var(--primary); color: white;
         border-color: var(--primary);
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
-
-    .size-btn:hover:not(.active) { border-color: var(--primary); }
+    .size-selector label:hover { border-color: var(--primary); }
 
     /* Контейнер для рядка з Рівнем та Розміром */
     .controls-row {
@@ -66,7 +57,12 @@
     .rotating { animation: rotate 1.5s linear infinite; display: inline-block; vertical-align: middle; }
 </style>
 
-<div class="card form-container">
+<form class="card form-container" 
+      hx-post="/api/generate" 
+      hx-target="#gen-btn" 
+      hx-indicator="#btn-icon"
+      hx-swap="none">
+      
     <div class="header-section">
         <span class="material-symbols-outlined header-icon">auto_stories</span>
         <h2 style="margin: 0; color: var(--primary); font-weight: 500; letter-spacing: 1px;">{{ ui.generate_new.upper() }}</h2>
@@ -74,13 +70,13 @@
 
     <div class="form-group">
         <label class="form-label">{{ ui.topic }}</label>
-        <input type="text" id="topic" class="form-control control-height" placeholder="{{ ui.topic_placeholder }}" autofocus>
+        <input type="text" name="topic" class="form-control control-height" placeholder="{{ ui.topic_placeholder }}" required autofocus>
     </div>
 
     <div class="controls-row" style="gap: 20px;">
         <div class="form-group" style="flex: 1;">
             <label class="form-label">{{ ui.style_label }}</label>
-            <select id="text_style" class="form-control control-height">
+            <select name="style" class="form-control control-height">
                 <option value="neutral">{{ ui.style_neutral }}</option>
                 <option value="formal">{{ ui.style_formal }}</option>
                 <option value="conversational">{{ ui.style_conversational }}</option>
@@ -91,81 +87,35 @@
         <div class="form-group">
             <label class="form-label">{{ ui.count }}</label>
             <div class="size-selector">
-                <button type="button" class="size-btn" data-size="S">S</button>
-                <button type="button" class="size-btn active" data-size="M">M</button>
-                <button type="button" class="size-btn" data-size="L">L</button>
+                <input type="radio" name="size" id="size-s" value="S">
+                <label for="size-s">S</label>
+                
+                <input type="radio" name="size" id="size-m" value="M" checked>
+                <label for="size-m">M</label>
+                
+                <input type="radio" name="size" id="size-l" value="L">
+                <label for="size-l">L</label>
             </div>
         </div>
     </div>
+    
+    <!-- Hidden input for level, populated from server-side context -->
+    <input type="hidden" name="level" value="{{ current_user.level }}">
 
-    <button class="btn-contained" onclick="generate()" id="gen-btn" style="width: 100%; height: 50px; justify-content: center; font-size: 1rem; margin-top: 20px;">
-        <span class="material-symbols-outlined" id="btn-icon">auto_awesome</span> 
+    <button type="submit" class="btn-contained" id="gen-btn" style="width: 100%; height: 50px; justify-content: center; font-size: 1rem; margin-top: 20px;">
+        <span class="material-symbols-outlined htmx-indicator" id="btn-icon">auto_awesome</span> 
         <span id="btn-text" style="margin-left: 8px;">{{ ui.generate_btn }}</span>
     </button>
-</div>
+</form>
 
-<script>
-const sentenceMap = {
-    'A1': { S: 5, M: 8,  L: 12 }, // Зменшили (було 12 для M — це забагато однотипних речень)
-    'A2': { S: 6, M: 8,  L: 11 }, 
-    'B1': { S: 5, M: 7,  L: 10 }, 
-    'B2': { S: 5, M: 7,  L: 10 }, // Збільшили кількість, але зараз ми обмежимо довжину речення
-    'C1': { S: 6, M: 8,  L: 9  }, 
-    'C2': { S: 6, M: 7,  L: 8  }  
-};
-
-let selectedSize = 'M';
-
-document.querySelectorAll('.size-btn').forEach(btn => {
-    btn.addEventListener('click', function() {
-        document.querySelectorAll('.size-btn').forEach(b => b.classList.remove('active'));
-        this.classList.add('active');
-        selectedSize = this.dataset.size;
-    });
-});
-
-async function generate() {
-    const topic = document.getElementById('topic').value;
-    // Отримуємо рівень з глобального перемикача в хедері
-    const levelBtn = document.querySelector('.lvl-tile.active');
-    const level = levelBtn ? levelBtn.innerText.trim() : '{{ current_user.level }}';
-    // Отримуємо значення стилю
-    const style = document.getElementById('text_style').value;
-    
-    const btn = document.getElementById('gen-btn');
-    const icon = document.getElementById('btn-icon');
-    const text = document.getElementById('btn-text');
-    
-    if (!topic.trim()) {
-        window.toast.show('{{ ui.error_topic_empty if ui.error_topic_empty else "Please enter a topic" }}', 'error');
-        return;
+<style>
+    .htmx-request .htmx-indicator {
+        animation: rotate 1s linear infinite;
+        content: 'sync' !important; /* Change icon to sync */
     }
-
-    const count = sentenceMap[level][selectedSize];
-
-    btn.disabled = true; 
-    icon.innerHTML = 'sync';
-    icon.classList.add('rotating');
-    text.innerHTML = '{{ ui.generating }}';
-    
-    try {
-        const res = await fetch('/api/generate', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            // Передаємо style на сервер
-            body: JSON.stringify({ topic, count, level, style })
-        });
-        
-        if (!res.ok) throw new Error();
-        const data = await res.json();
-        location.href = '/view/' + data.id;
-    } catch (e) { 
-        window.toast.show('{{ ui.error_alert }}', 'error'); 
-        btn.disabled = false; 
-        icon.innerHTML = 'auto_awesome';
-        icon.classList.remove('rotating');
-        text.innerHTML = '{{ ui.generate_btn }}';
+    .htmx-request #btn-text {
+        display: none; /* Hide text during request */
     }
-}
-</script>
+    /* Show loading text via CSS content if needed, or just keep icon */
+</style>
 {% endblock %}

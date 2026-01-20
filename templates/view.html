@@ -358,20 +358,20 @@
 </div>
 
 <script>
-const userLang = '{{ lang }}';
+var userLang = '{{ lang }}';
 // Ініціалізація даних словника для швидкого доступу
-const vocabData = {{ vocab | tojson }};
-const vocabMap = {};
+var vocabData = {{ vocab | tojson }};
+var vocabMap = {};
 vocabData.forEach(v => vocabMap[v.id] = v);
 
 // --- QUIZ LOGIC ---
-const quizData = {{ quiz_data | tojson }};
-let lastQuizResult = {{ last_quiz_result | tojson }};
-let currentQIndex = 0;
-let quizScore = 0;
-let selectedOptionIndex = null;
-let isChecked = false;
-let quizActive = false; // Прапорець активності квізу
+var quizData = {{ quiz_data | tojson }};
+var lastQuizResult = {{ last_quiz_result | tojson }};
+var currentQIndex = 0;
+var quizScore = 0;
+var selectedOptionIndex = null;
+var isChecked = false;
+var quizActive = false; // Прапорець активності квізу
 
 function showResultsView(score, total) {
     document.getElementById('q-content').style.display = 'none';
@@ -565,6 +565,8 @@ function showSplash() {
     const splash = document.getElementById('quiz-splash');
     const circlePath = document.getElementById('splash-circle-path');
     const scoreEl = document.getElementById('splash-score');
+
+    if (!splash || !circlePath || !scoreEl) return;
     
     // Save result
     quizActive = false; // Квіз завершено
@@ -587,25 +589,27 @@ function showSplash() {
         launchConfetti();
     }
     
-    circlePath.style.stroke = color;
+    if (circlePath) circlePath.style.stroke = color;
     
-    splash.style.display = 'flex';
+    if(splash) splash.style.display = 'flex';
     void splash.offsetWidth; // Force reflow
-    splash.style.opacity = '1';
+    if(splash) splash.style.opacity = '1';
     
     // Animate Circle
     const circumference = 434;
-    const offset = circumference - (pct / 100) * circumference;
-    setTimeout(() => { circlePath.style.strokeDashoffset = offset; }, 100);
+    const offset = circumference - ((pct || 0) / 100) * circumference;
+    setTimeout(() => { if(circlePath) circlePath.style.strokeDashoffset = offset; }, 100);
     
-    scoreEl.innerText = pct + '%';
+    if(scoreEl) scoreEl.innerText = pct + '%';
 }
 
 function closeSplash() {
     const splash = document.getElementById('quiz-splash');
-    splash.style.opacity = '0';
+    if (!splash) return;
+
+    if(splash) splash.style.opacity = '0';
     setTimeout(() => { 
-        splash.style.display = 'none'; 
+        if(splash) splash.style.display = 'none'; 
         const confettis = document.querySelectorAll('.confetti');
         confettis.forEach(c => c.remove());
     }, 500);
@@ -643,8 +647,8 @@ window.onbeforeunload = function() {
     }
 };
 
-let currentAudio = null;
-let isPlayingAll = false;
+var currentAudio = null;
+var isPlayingAll = false;
 
 // 1. ПРОГРАВАННЯ АУДІО
 async function playAudio(text, btn = null) {
@@ -682,6 +686,8 @@ async function playAudio(text, btn = null) {
 async function playAll() {
     const btn = document.getElementById('play-all-btn');
     
+    if (!btn) return;
+
     if (isPlayingAll) {
         isPlayingAll = false;
         if (currentAudio) currentAudio.pause();
@@ -695,7 +701,12 @@ async function playAll() {
     const lines = document.querySelectorAll('.de-text');
     
     for (let line of lines) {
-        if (!isPlayingAll) break;
+        // НАДІЙНА ПЕРЕВІРКА: якщо користувач пішов зі сторінки, зупиняємо цикл
+        if (!isPlayingAll || !document.body.contains(btn)) {
+            isPlayingAll = false;
+            if (currentAudio) currentAudio.pause();
+            break;
+        }
         
         const parent = line.closest('.de-line');
         const originalBg = parent.style.backgroundColor;
@@ -707,13 +718,18 @@ async function playAll() {
         // Чекаємо поки дограє речення
         await playAudio(line.innerText, btn);
         
-        parent.style.backgroundColor = "";
+        // Перевіряємо ще раз, чи елемент все ще на сторінці
+        if (document.body.contains(parent)) {
+            parent.style.backgroundColor = "";
+        }
         // Пауза між реченнями
         await new Promise(r => setTimeout(r, 600));
     }
     
     isPlayingAll = false;
-    btn.innerHTML = '<span class="material-symbols-outlined">play_arrow</span> {{ ui.play_all }}';
+    // Перевіряємо, чи кнопка ще існує
+    const finalBtn = document.getElementById('play-all-btn');
+    if(finalBtn) finalBtn.innerHTML = '<span class="material-symbols-outlined">play_arrow</span> {{ ui.play_all }}';
 }
 
 function toggleTrans() {
@@ -774,8 +790,8 @@ function showCtx(sentIdx) {
     }
 }
 
-// 5. ОБРОБКА ВИДІЛЕННЯ (ЗАХИСТ ВІД ДУБЛІКАТІВ)
-document.addEventListener('mouseup', (e) => {
+if (window.handleViewMouseUp) document.removeEventListener('mouseup', window.handleViewMouseUp);
+window.handleViewMouseUp = (e) => {
     // Ігноруємо кліки на вже вивчені слова та кнопки
     if (e.target.closest('button') || e.target.classList.contains('learned')) return;
 
@@ -812,6 +828,9 @@ document.addEventListener('mouseup', (e) => {
     const selText = selection.toString().trim();
     const pop = document.getElementById('pop');
 
+    // Якщо елемента немає (ми на іншій сторінці), нічого не робимо
+    if (!pop) return;
+
     // Знаходимо контейнер речення
     const sentenceDiv = e.target.closest('.de-line');
     
@@ -821,9 +840,9 @@ document.addEventListener('mouseup', (e) => {
     if(selText && selText.length < 50 && sentenceDiv && textSpan && textSpan.contains(selection.anchorNode)) {
         const sentIdx = sentenceDiv.getAttribute('data-index');
         
-        pop.style.display = 'block';
-        pop.style.left = e.pageX + 'px';
-        pop.style.top = (e.pageY - 45) + 'px';
+        if(pop) pop.style.display = 'block';
+        if(pop) pop.style.left = e.pageX + 'px';
+        if(pop) pop.style.top = (e.pageY - 45) + 'px';
         
         pop.onclick = async () => {
             pop.innerHTML = '...';
@@ -855,21 +874,10 @@ document.addEventListener('mouseup', (e) => {
             }
         };
     } else { 
-        pop.style.display = 'none'; 
-        pop.innerHTML = '{{ ui.add_translation }}'; 
+        if(pop) pop.style.display = 'none'; 
+        if(pop) pop.innerHTML = '{{ ui.add_translation }}'; 
     }
-});
-
-// 6. ЛАЙКИ ТА ВИДАЛЕННЯ
-async function toggleFav(id, btn) {
-    const res = await fetch('/api/toggle_fav', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id: id})});
-    if(res.ok) {
-        const icon = btn.querySelector('.material-symbols-outlined');
-        icon.classList.toggle('filled');
-        if (icon.classList.contains('filled')) btn.style.color = "#FFC107";
-        else btn.style.color = "inherit";
-    }
-}
+}; 
 
 function handleRowClick(e, id) {
     // Ігноруємо кліки по інтерактивних елементах (кнопки, посилання)
@@ -976,10 +984,12 @@ async function explainGrammar(btn, textId, sentIdx) {
     box.style.display = 'block';
 }
 
-// 8. КЛІК ПО ВИВЧЕНОМУ СЛОВУ (ПОПАП)
-let hideTimeout;
-document.addEventListener('click', (e) => {
+var hideTimeout;
+if (window.handleViewClick) document.removeEventListener('click', window.handleViewClick);
+window.handleViewClick = (e) => {
     const pop = document.getElementById('learned-pop');
+    
+    if (!pop) return;
     
     // Якщо клік по слову класу .learned
     if (e.target.classList.contains('learned')) {
@@ -1009,7 +1019,7 @@ document.addEventListener('click', (e) => {
             pop.style.transform = 'translate(-50%, -100%)';
             
             e.target.onmouseleave = function() {
-                hideTimeout = setTimeout(() => { pop.style.display = 'none'; }, 1000);
+                hideTimeout = setTimeout(() => { if(pop) pop.style.display = 'none'; }, 1000);
             };
             e.target.onmouseenter = function() {
                 if (hideTimeout) clearTimeout(hideTimeout);
@@ -1022,7 +1032,7 @@ document.addEventListener('click', (e) => {
     if (pop.style.display === 'block' && !e.target.closest('#learned-pop')) {
         pop.style.display = 'none';
     }
-});
+};
 
 async function toggleTextFav(id, btn) {
     const icon = btn.querySelector('.material-symbols-outlined');
@@ -1041,6 +1051,41 @@ async function toggleTextFav(id, btn) {
     
     await fetch('/api/toggle_text_fav', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id: id})});
 }
+
+async function toggleFav(id, btn) {
+    const res = await fetch('/api/toggle_fav', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id: id})});
+    if(res.ok) {
+        const icon = btn.querySelector('.material-symbols-outlined');
+        icon.classList.toggle('filled');
+        if (icon.classList.contains('filled')) btn.style.color = "#FFC107";
+        else btn.style.color = "inherit";
+    }
+}
+
+// --- НАДІЙНЕ ОЧИЩЕННЯ РЕСУРСІВ ПРИ НАВІГАЦІЇ ---
+
+function cleanupViewResources() {
+    // Видаляємо глобальні слухачі, які ми додали
+    if(window.handleViewMouseUp) document.removeEventListener('mouseup', window.handleViewMouseUp);
+    if(window.handleViewClick) document.removeEventListener('click', window.handleViewClick);
+
+    // Очищуємо будь-які заплановані таймаути
+    if (hideTimeout) clearTimeout(hideTimeout);
+
+    // Зупиняємо аудіо, якщо воно грає
+    if (currentAudio) currentAudio.pause();
+    isPlayingAll = false;
+
+    // Видаляємо сам себе, щоб не накопичуватись
+    document.removeEventListener('htmx:before-swap', cleanupViewResources);
+}
+
+// Додаємо слухачі для ЦІЄЇ сторінки
+document.addEventListener('mouseup', window.handleViewMouseUp);
+document.addEventListener('click', window.handleViewClick);
+
+// Додаємо одноразовий "прибиральник", який спрацює перед наступним переходом
+document.addEventListener('htmx:before-swap', cleanupViewResources, { once: true });
 </script>
 <style>
 @keyframes spin { 100% { transform: rotate(360deg); } }

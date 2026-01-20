@@ -1,0 +1,70 @@
+<div class="texts-container {{ view_mode }}">
+    {% for t in texts %}
+    <div class="card" style="{% if view_mode == 'list' %}display: flex; justify-content: space-between; align-items: center;{% endif %}">
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="level-badge lvl-{{ t.level|lower }}">{{ t.level }}</span>
+            <button class="btn-text" onclick="toggleTextFav(event, '{{t.id}}', this)" style="padding: 0; min-width: 32px; color: {% if t.is_favorite %}#d32f2f{% else %}var(--on-surface){% endif %}; opacity: {% if t.is_favorite %}1{% else %}0.3{% endif %};">
+                <span class="material-symbols-outlined {% if t.is_favorite %}filled{% endif %}" style="{% if t.is_favorite %}color: #d32f2f !important;{% endif %}">favorite</span>
+            </button>
+        </div>
+        <div>
+            <div style="font-weight: 500; font-size: 1.1rem;">{{ t.display_title }}</div>
+        </div>
+        <div class="card-actions" style="display: flex; gap: 10px;">
+            <a href="/view/{{t.id}}"><button class="btn-contained">{{ ui.read }}</button></a>
+            
+            <button class="btn-text" style="color: red;" 
+                    hx-post="/api/delete_text" 
+                    hx-vals='{"id": "{{t.id}}"}' 
+                    hx-target="closest .card" 
+                    hx-swap="outerHTML" 
+                    hx-confirm="{{ ui.confirm_delete_text_msg }}">
+                <span class="material-symbols-outlined">delete</span>
+            </button>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{% if total_pages > 1 %}
+<div style="display: flex; justify-content: center; gap: 6px; margin-top: 24px; align-items: center;">
+    {# Helper macro for pagination URL #}
+    {% macro page_url(p) -%}
+        /library?page={{ p }}
+        {%- if show_fav %}&fav=1{% endif -%}
+        {%- if selected_levels %}&levels={{ selected_levels|join(',') }}{% endif -%}
+    {%- endmacro %}
+
+    {# Prev #}
+    <button hx-get="{{ page_url(page - 1) }}" hx-target="#library-container" class="page-btn {% if page <= 1 %}disabled{% endif %}" {% if page <= 1 %}disabled{% endif %}>
+        <span class="material-symbols-outlined" style="font-size: 18px;">chevron_left</span>
+    </button>
+
+    {# Page 1 #}
+    <button hx-get="{{ page_url(1) }}" hx-target="#library-container" class="page-btn {% if page == 1 %}active{% endif %}">1</button>
+
+    {# Left Dots #}
+    {% if page > 3 %}<span class="page-dots">...</span>{% endif %}
+    
+    {# Middle Range #}
+    {% set start = page - 1 if page - 1 > 1 else 2 %}
+    {% set end = page + 1 if page + 1 < total_pages else total_pages - 1 %}
+    
+    {% for p in range(start, end + 1) %}
+        <button hx-get="{{ page_url(p) }}" hx-target="#library-container" class="page-btn {% if p == page %}active{% endif %}">{{ p }}</button>
+    {% endfor %}
+
+    {# Right Dots #}
+    {% if page < total_pages - 2 %}<span class="page-dots">...</span>{% endif %}
+    
+    {# Last Page #}
+    {% if total_pages > 1 %}
+        <button hx-get="{{ page_url(total_pages) }}" hx-target="#library-container" class="page-btn {% if page == total_pages %}active{% endif %}">{{ total_pages }}</button>
+    {% endif %}
+
+    {# Next #}
+    <button hx-get="{{ page_url(page + 1) }}" hx-target="#library-container" class="page-btn {% if page >= total_pages %}disabled{% endif %}" {% if page >= total_pages %}disabled{% endif %}>
+        <span class="material-symbols-outlined" style="font-size: 18px;">chevron_right</span>
+    </button>
+</div>
+{% endif %}
