@@ -884,12 +884,6 @@ def library():
         
     if is_htmx() and request.headers.get('HX-Target') == 'library-container':
         return render_template('partials/library_list.html', texts=texts, page=page, per_page=per_page, total_pages=total_pages, view_mode=view_mode, show_fav=show_fav, selected_levels=selected_levels)
-    if is_htmx():
-        target = request.headers.get('HX-Target')
-        if target == 'library-container':
-            return render_template('partials/library_list.html', texts=texts, page=page, per_page=per_page, total_pages=total_pages, view_mode=view_mode, show_fav=show_fav, selected_levels=selected_levels)
-        if target == 'library-content':
-            return render_template('partials/library_content.html', texts=texts, page=page, per_page=per_page, total_pages=total_pages, view_mode=view_mode, show_fav=show_fav, selected_levels=selected_levels)
 
     return render_template('library.html', texts=texts, page=page, per_page=per_page, total_pages=total_pages, view_mode=view_mode, show_fav=show_fav, selected_levels=selected_levels)
 

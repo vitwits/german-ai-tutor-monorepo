@@ -79,46 +79,6 @@
     }
 </style>
 
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-    <h2 style="margin: 0;">{{ ui.my_texts }}</h2>
-    <div style="display: flex; gap: 12px; align-items: center;">
-        {# Favorites Filter #}
-        {% set fav_url = '/library?fav=' + ('0' if show_fav else '1') %}
-        {% if selected_levels %}{% set fav_url = fav_url + '&levels=' + selected_levels|join(',') %}{% endif %}
-        
-        <button hx-get="{{ fav_url }}" hx-target="#library-container" 
-                class="view-btn {% if show_fav %}active{% endif %}" 
-                style="{% if show_fav %}border-color: #d32f2f; background: rgba(211, 47, 47, 0.1); color: #d32f2f;{% endif %}" 
-                title="Favorites Filter">
-            <span class="material-symbols-outlined {% if show_fav %}filled{% endif %}" style="{% if show_fav %}color: #d32f2f !important;{% endif %}">favorite</span>
-        </button>
-
-        <!-- Level Filters -->
-        <div style="display: flex; gap: 4px; margin-right: 8px;">
-            {% for l in ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'] %}
-                {# Logic to toggle level in the list #}
-                {% set new_levels = [] %}
-                {% if l in selected_levels %}
-                    {% for x in selected_levels %}{% if x != l %}{% set _ = new_levels.append(x) %}{% endif %}{% endfor %}
-                {% else %}
-                    {% for x in selected_levels %}{% set _ = new_levels.append(x) %}{% endfor %}
-                    {% set _ = new_levels.append(l) %}
-                {% endif %}
-                
-                {% set lvl_url = '/library?levels=' + new_levels|join(',') %}
-                {% if show_fav %}{% set lvl_url = lvl_url + '&fav=1' %}{% endif %}
-
-            <button hx-get="{{ lvl_url }}" 
-                    hx-target="#library-container"
-                    class="lvl-filter {% if l in selected_levels %}active{% endif %}" 
-                    data-lvl="{{l}}">
-                {{l}}
-            </button>
-            {% endfor %}
-        </div>
-    </div>
-</div>
-
 <div id="library-container">
     {% include 'partials/library_list.html' %}
 </div>
