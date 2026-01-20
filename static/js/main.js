@@ -44,10 +44,24 @@ document.body.addEventListener('htmx:afterOnLoad', window.handleHtmxAfterLoad);
 // Cleanup on navigation (HTMX)
 if (window.handleHtmxBeforeSwap) document.body.removeEventListener('htmx:beforeSwap', window.handleHtmxBeforeSwap);
 window.handleHtmxBeforeSwap = function(evt) {
-    if (isRecording) {
-        stopRecording(false);
-    }
+    // Ignore partial swaps (like the speaking card itself) to preserve state between rounds
+    if (evt.detail.target.id === 'speaking-card-container') return;
+
+    stopRecording(false); // Always try to stop recording/streams
     if (silenceCheckInterval) clearInterval(silenceCheckInterval);
+    
+    // Stop audio playback if any
+    if (currentAudioObj) {
+        currentAudioObj.pause();
+        currentAudioObj = null;
+    }
+    isPlayingAudio = false;
+
+    // Reset game state so next visit starts fresh
+    gameStarted = false;
+    isResultState = false;
+    isRetryState = false;
+    roundAborted = false;
 };
 document.body.addEventListener('htmx:beforeSwap', window.handleHtmxBeforeSwap);
 
@@ -142,7 +156,16 @@ async function startCurrentRound() {
 
 async function startRecording() {
     try {
+        if (!document.getElementById('visualizer')) return;
+
         micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        
+        // Check if user navigated away during permission prompt
+        if (!document.getElementById('visualizer')) {
+            micStream.getTracks().forEach(track => track.stop());
+            return;
+        }
+
         const options = MediaRecorder.isTypeSupported('audio/webm') ? { mimeType: 'audio/webm' } : {};
         mediaRecorder = new MediaRecorder(micStream, options);
         audioChunks = [];
@@ -154,7 +177,10 @@ async function startRecording() {
         mediaRecorder.shouldUpload = false;
 
         mediaRecorder.onstop = async () => {
-            micStream.getTracks().forEach(track => track.stop());
+            if (micStream) {
+                micStream.getTracks().forEach(track => track.stop());
+                micStream = null;
+            }
             
             if (mediaRecorder.shouldUpload) {
                 const mimeType = mediaRecorder.mimeType || 'audio/webm';
@@ -162,14 +188,18 @@ async function startRecording() {
                 processAudioBlob(audioBlob);
             } else {
                 console.log("Recording cancelled (manual or silence).");
-                updateUIState('idle');
-                document.getElementById('transcript-display').innerText = UI.cancelled;
-                isRetryState = true; 
-                
-                // Change icon to refresh
+
+                // Check if UI elements exist before updating
+                const transDisplay = document.getElementById('transcript-display');
                 const icon = document.getElementById('btn-icon');
-                icon.innerText = 'refresh';
-                icon.classList.remove('icon-play');
+
+                if (transDisplay && icon) {
+                    updateUIState('idle');
+                    transDisplay.innerText = UI.cancelled;
+                    isRetryState = true; 
+                    icon.innerText = 'refresh';
+                    icon.classList.remove('icon-play');
+                }
             }
         };
 
@@ -189,6 +219,12 @@ function stopRecording(upload = true) {
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
         mediaRecorder.shouldUpload = upload;
         mediaRecorder.stop();
+    } else {
+        // Force stop stream if recorder wasn't active
+        if (micStream) {
+            micStream.getTracks().forEach(track => track.stop());
+            micStream = null;
+        }
     }
     if (silenceCheckInterval) clearInterval(silenceCheckInterval);
     isRecording = false;
@@ -203,6 +239,8 @@ async function initAudioAndSilenceDetector(stream) {
     try {
         if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
         if (audioContext.state === 'suspended') await audioContext.resume();
+        
+        if (!isRecording) return;
         
         analyser = audioContext.createAnalyser();
         const src = audioContext.createMediaStreamSource(stream);
@@ -490,39 +528,47 @@ function drawVisualizer() {
     let average = sum / bufferLength;
     const scale = 1 + (average / 150); 
     const ring = document.getElementById('visualizer');
+    if (!ring) return;
     ring.style.transform = `translate(-50%, -50%) scale(${scale})`;
     requestAnimationFrame(drawVisualizer);
 }
 
 if (window.handleLevelUpdated) window.removeEventListener('level-updated', window.handleLevelUpdated);
 
+var levelUpdateTimer = null;
+
 window.handleLevelUpdated = async () => {
-    // 1. Hard stop recording if active
-    if (isRecording && mediaRecorder) {
-        mediaRecorder.onstop = null; 
-        mediaRecorder.stop();
-        if(micStream) micStream.getTracks().forEach(track => track.stop());
-    }
-    if (silenceCheckInterval) clearInterval(silenceCheckInterval);
-    
-    // 2. Reset State
-    isRecording = false;
-    isProcessing = false;
-    isResultState = false;
-    isRetryState = false;
-    gameStarted = false;
-    
-    // 3. Reset UI
-    updateUIState('idle');
-    const transDisplay = document.getElementById('transcript-display');
-    if (transDisplay) transDisplay.innerText = '';
-    
-    const corrDisplay = document.getElementById('correction-display');
-    if (corrDisplay) corrDisplay.style.display = 'none';
-    
-    // 4. Trigger HTMX to load new content
-    const container = document.getElementById('speaking-card-container');
-    if (container) htmx.trigger('#speaking-card-container', 'nextSentence');
+    // Debounce: якщо функція викликана повторно протягом 100мс, скасовуємо попередній виклик
+    if (levelUpdateTimer) clearTimeout(levelUpdateTimer);
+
+    levelUpdateTimer = setTimeout(() => {
+        // 1. Hard stop recording if active
+        if (isRecording && mediaRecorder) {
+            mediaRecorder.onstop = null; 
+            mediaRecorder.stop();
+            if(micStream) micStream.getTracks().forEach(track => track.stop());
+        }
+        if (silenceCheckInterval) clearInterval(silenceCheckInterval);
+        
+        // 2. Reset State
+        isRecording = false;
+        isProcessing = false;
+        isResultState = false;
+        isRetryState = false;
+        gameStarted = false;
+        
+        // 3. Reset UI
+        updateUIState('idle');
+        const transDisplay = document.getElementById('transcript-display');
+        if (transDisplay) transDisplay.innerText = '';
+        
+        const corrDisplay = document.getElementById('correction-display');
+        if (corrDisplay) corrDisplay.style.display = 'none';
+        
+        // 4. Trigger HTMX to load new content
+        // Використовуємо htmx.ajax для прямого контролю
+        htmx.ajax('GET', '/speaking/next', {target: '#speaking-card-container', swap: 'innerHTML'});
+    }, 100);
 };
 
 window.addEventListener('level-updated', window.handleLevelUpdated);
