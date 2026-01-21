@@ -986,7 +986,20 @@ def view_text(tid):
     with get_db() as conn:
         t = conn.execute('SELECT * FROM texts WHERE id = ? AND user_id = ?', (tid, current_user.id)).fetchone()
         if not t: return "404", 404
-        vocab_rows = [dict(row) for row in conn.execute('SELECT * FROM vocabulary WHERE user_id = ? AND text_id = ?', (current_user.id, tid)).fetchall()]
+        
+        # Оновлений запит: перевіряємо, чи є слово улюбленим ГЛОБАЛЬНО (в будь-якому тексті)
+        # Це дозволяє підсвічувати зірочку, навіть якщо в цьому конкретному тексті is_favorite=0
+        vocab_query = '''
+            SELECT v.*, 
+                   (SELECT COUNT(*) FROM vocabulary v2 WHERE v2.user_id = v.user_id AND v2.display = v.display AND v2.is_favorite = 1) > 0 as is_global_fav
+            FROM vocabulary v 
+            WHERE v.user_id = ? AND v.text_id = ?
+        '''
+        vocab_rows = [dict(row) for row in conn.execute(vocab_query, (current_user.id, tid)).fetchall()]
+        
+        # Переписуємо локальний is_favorite на глобальний для коректного відображення в шаблоні
+        for v in vocab_rows:
+            v['is_favorite'] = 1 if v['is_global_fav'] else 0
         
         # Pre-fetch grammar cache indices
         grammar_indices = set()
@@ -1094,7 +1107,6 @@ def quick_translate():
     
     # REUSE LOGIC: Check if user has this word elsewhere to reuse translation
     word_data = None
-    is_fav_inherited = 0
     with get_db() as conn:
         # Prioritize favorite entries (is_favorite DESC), then most recent
         existing = conn.execute('SELECT display, ua, en, level, is_favorite FROM vocabulary WHERE user_id = ? AND origin = ? ORDER BY is_favorite DESC, rowid DESC LIMIT 1', (current_user.id, original_text)).fetchone()
@@ -1105,7 +1117,6 @@ def quick_translate():
                 'en': existing['en'],
                 'level': existing['level']
             }
-            is_fav_inherited = existing['is_favorite'] or 0
 
     # 1. Translate (if not reused)
     if not word_data:
@@ -1204,11 +1215,11 @@ def quick_translate():
     
     with get_db() as conn:
         conn.execute('''INSERT INTO vocabulary 
-                        (id, user_id, text_id, origin, display, ua, en, ctx, sentence_index, start_index, end_index, level, is_favorite) 
-                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                        (id, user_id, text_id, origin, display, ua, en, ctx, sentence_index, start_index, end_index, level) 
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)''',
                      (wid, current_user.id, req.get('tid'), word_to_store_and_highlight,
                       word_data['display'], word_data['ua'], word_data['en'], req['ctx'],
-                      sentence_index, start_index, end_index, word_data.get('level') or word_data.get('Level'), is_fav_inherited))
+                      sentence_index, start_index, end_index, word_data.get('level') or word_data.get('Level')))
         conn.commit()
     return jsonify({"ok": True, "credits": new_bal})
 
@@ -1342,9 +1353,24 @@ def vocab():
 @login_required
 def toggle_fav():
     req = request.json
+    wid = req['id']
     with get_db() as conn:
-        conn.execute('UPDATE vocabulary SET is_favorite = 1 - is_favorite WHERE id = ? AND user_id = ?', 
-                     (req['id'], current_user.id))
+        # 1. Отримуємо display слова, яке клікнули
+        target = conn.execute('SELECT display FROM vocabulary WHERE id = ?', (wid,)).fetchone()
+        if not target: return jsonify({"ok": False})
+        
+        display_val = target['display']
+        
+        # 2. Перевіряємо, чи є вже улюблені слова з таким display (глобально)
+        existing_fav = conn.execute('SELECT 1 FROM vocabulary WHERE user_id = ? AND display = ? AND is_favorite = 1', (current_user.id, display_val)).fetchone()
+        
+        if existing_fav:
+            # Якщо Є -> Вимикаємо ВСІ (щоб прибрати з улюблених або підготувати до перемикання)
+            conn.execute('UPDATE vocabulary SET is_favorite = 0 WHERE user_id = ? AND display = ?', (current_user.id, display_val))
+        else:
+            # Якщо НЕМАЄ -> Вмикаємо ТІЛЬКИ ЦЕЙ (щоб зберегти саме цей контекст)
+            conn.execute('UPDATE vocabulary SET is_favorite = 1 WHERE id = ?', (wid,))
+            
         conn.commit()
     return jsonify({"ok": True})
 
