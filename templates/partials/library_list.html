@@ -54,11 +54,7 @@
             <a href="/view/{{t.id}}"><button class="btn-contained">{{ ui.read }}</button></a>
             
             <button class="btn-text" style="color: red;" 
-                    hx-post="/api/delete_text" 
-                    hx-vals='{"id": "{{t.id}}"}' 
-                    hx-target="closest .card" 
-                    hx-swap="outerHTML" 
-                    hx-confirm="{{ ui.confirm_delete_text_msg }}">
+                    onclick="sysConfirm('{{ ui.confirm_title }}', '{{ ui.confirm_delete_text_msg }}', '{{ ui.btn_delete }}', '{{ ui.btn_cancel }}', true).then(confirmed => { if(confirmed) requestDelete(this, '/api/delete_text', {id: '{{t.id}}'}, '{{ ui.text_deleted }}'); })">
                 <span class="material-symbols-outlined">delete</span>
             </button>
         </div>

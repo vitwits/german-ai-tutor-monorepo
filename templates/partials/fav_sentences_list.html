@@ -146,7 +146,7 @@
     {% for s in sentences %}
     <div class="sentence-card">
         <button class="btn-text" onclick="playSentencePair('{{ s.audio_de }}', '{{ s.display_audio }}', this)" style="color: var(--primary); min-width: 40px; padding: 8px;">
-            <span class="material-symbols-outlined" style="font-size: 28px;">play_circle</span>
+            <span class="material-symbols-outlined" style="font-size: 28px;">volume_up</span>
         </button>
         
         <div class="sent-content">
@@ -155,10 +155,7 @@
         </div>
         
         <button class="btn-text" style="color: #d32f2f; min-width: 40px; opacity: 0.7;"
-                hx-post="/api/remove_fav_sentence"
-                hx-vals='{"id": "{{ s.fav_id }}"}'
-                hx-target="closest .sentence-card"
-                hx-swap="outerHTML">
+                onclick="requestDelete(this, '/api/remove_fav_sentence', {id: '{{ s.fav_id }}'}, '{{ ui.sentence_removed_fav }}')">
             <span class="material-symbols-outlined">delete</span>
         </button>
     </div>

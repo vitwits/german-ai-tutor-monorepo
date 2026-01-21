@@ -15,7 +15,7 @@ from flask_admin.contrib.sqla import ModelView
 from sqlalchemy import func, text
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
-from datetime import datetime
+from datetime import datetime, timedelta
 from markupsafe import Markup
 from flask_cors import CORS
 
@@ -1567,7 +1567,10 @@ def remove_word():
         conn.commit()
         
     if is_htmx():
-        return "" # Return empty string to remove element from DOM
+        resp = make_response("")
+        msg = UI_STRINGS[current_user.interface_language]['word_deleted']
+        resp.headers['HX-Trigger'] = json.dumps({"showMessage": {"msg": msg, "type": "success"}})
+        return resp
         
     return jsonify({"ok": True})
 
@@ -1594,7 +1597,10 @@ def delete_text():
         conn.commit()
         
     if is_htmx():
-        return "" # Return empty string to remove element from DOM
+        resp = make_response("")
+        msg = UI_STRINGS[current_user.interface_language]['text_deleted']
+        resp.headers['HX-Trigger'] = json.dumps({"showMessage": {"msg": msg, "type": "success"}})
+        return resp
         
     return jsonify({"ok": True})
 

@@ -480,8 +480,7 @@
     </style>
 
     <script>
-        if (typeof ToastService === 'undefined') {
-            window.ToastService = class ToastService {
+        window.ToastService = class ToastService {
             constructor() {
                 this.container = document.getElementById('toast-container');
             }
@@ -551,9 +550,83 @@
                 });
             }
         }
-        }
 
         window.toast = new window.ToastService();
+        
+        // --- DELAYED DELETE FUNCTIONALITY ---
+        window.requestDelete = function(btn, url, payload, message) {
+            // Find the item container
+            const item = btn.closest('.vocab-item') || btn.closest('.card') || btn.closest('.sentence-card') || btn.closest('tr');
+            if (!item) return;
+
+            // 1. Visually hide
+            item.style.transition = 'all 0.3s ease';
+            item.style.opacity = '0';
+            item.style.transform = 'scale(0.95)';
+            
+            setTimeout(() => {
+                item.style.display = 'none';
+            }, 300);
+
+            // 2. Flag for cancellation
+            let cancelled = false;
+            const msgText = message || '{{ ui.word_deleted }}';
+
+            // 3. Show Toast with Undo
+            window.toast.show(msgText, "info", () => {
+                // UNDO ACTION
+                cancelled = true;
+                item.style.display = ''; // Restore display
+                // Small delay to allow display to apply before opacity transition
+                requestAnimationFrame(() => {
+                    item.style.opacity = '1';
+                    item.style.transform = 'scale(1)';
+                });
+            }, 5000);
+
+            // 4. Actual Delete Timer
+            setTimeout(() => {
+                if (!cancelled) {
+                    const formData = new FormData();
+                    for (const [key, value] of Object.entries(payload)) {
+                        formData.append(key, value);
+                    }
+                    fetch(url, { method: 'POST', body: formData })
+                        .then(res => { if (res.ok) item.remove(); });
+                }
+            }, 5000);
+        };
+
+        // --- GLOBAL EVENT LISTENERS ---
+        // Prevent duplicate listeners on hx-boost navigation
+        if (!window.htmxListenersInitialized) {
+            window.htmxListenersInitialized = true;
+
+            // 1. Handle HTMX Confirm (Custom Popup)
+            document.body.addEventListener('htmx:confirm', function(evt) {
+                if (!evt.detail.question) return;
+                evt.preventDefault();
+                const msg = evt.detail.question;
+                window.sysConfirm('{{ ui.confirm_title }}', msg, '{{ ui.btn_delete }}', '{{ ui.btn_cancel }}', true)
+                    .then(confirmed => {
+                        if(confirmed) evt.detail.issueRequest(true);
+                    });
+            });
+
+            // 2. Handle Toast Trigger from HTMX (Success messages)
+            document.body.addEventListener('showMessage', function(evt){
+                window.toast.show(evt.detail.msg, evt.detail.type || 'success');
+            });
+        }
+
+        // Handle Flask Flash Messages (e.g. from redirects)
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    window.toast.show({{ message | tojson }}, "{{ 'success' if category == 'message' else category }}");
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
     </script>
 
 </body>

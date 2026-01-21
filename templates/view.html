@@ -214,6 +214,35 @@
     @keyframes fall {
         to { transform: translateY(110vh) rotate(720deg); }
     }
+
+    /* --- CUSTOM SELECTION STYLE --- */
+    ::selection {
+        background: rgba(25, 118, 210, 0.25); /* Brand color with opacity */
+        color: inherit;
+    }
+    /* Dark mode selection */
+    body.dark-mode ::selection {
+        background: rgba(144, 202, 249, 0.3);
+    }
+
+    /* --- POPUP STYLES --- */
+    #pop {
+        position: absolute; display: none; 
+        background: var(--on-surface); color: var(--bg); 
+        padding: 8px 16px; border-radius: 4px; z-index: 2000; 
+        cursor: pointer; font-weight: 500; font-size: 0.8rem;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+
+    /* Mobile Bottom Bar Style */
+    @media (max-width: 768px) {
+        #pop {
+            position: fixed !important; top: auto !important; bottom: 80px !important; left: 50% !important;
+            transform: translateX(-50%); width: auto; min-width: 200px; text-align: center;
+            background: var(--primary) !important; color: var(--on-primary) !important;
+            font-size: 1rem !important; padding: 12px 24px !important; border-radius: 30px !important;
+        }
+    }
 </style>
 
 <div class="card">
@@ -352,7 +381,7 @@
     {% endfor %}
 </div>
 
-<div id="pop" style="position:absolute; display:none; background:var(--on-surface); color:var(--bg); padding:8px 16px; border-radius:4px; z-index:100; cursor:pointer; font-weight:500; font-size:0.8rem;">{{ ui.add_translation }}</div>
+<div id="pop">{{ ui.add_translation }}</div>
 <div id="learned-pop" style="position:absolute; display:none; background:var(--surface); color:var(--on-surface); padding:8px 12px; border-radius:4px; box-shadow:0 4px 12px rgba(0,0,0,0.15); z-index:101; border:1px solid var(--border); min-width:auto; max-width: 250px;">
     <div id="lp-content"></div>
 </div>
@@ -874,8 +903,8 @@ function showCtx(sentIdx) {
 
 if (window.handleViewMouseUp) document.removeEventListener('mouseup', window.handleViewMouseUp);
 window.handleViewMouseUp = (e) => {
-    // Ігноруємо кліки на вже вивчені слова та кнопки
-    if (e.target.closest('button') || e.target.classList.contains('learned')) return;
+    // Ігноруємо кліки на вже вивчені слова, кнопки та сам попап (щоб він не зникав до кліку)
+    if (e.target.closest('button') || e.target.classList.contains('learned') || e.target.closest('#pop')) return;
 
     const selection = window.getSelection();
     
@@ -943,9 +972,22 @@ window.handleViewMouseUp = (e) => {
         const range = selection.getRangeAt(0);
         const startCharIndex = getCharOffset(textSpan, range.startContainer, range.startOffset);
 
-        if(pop) pop.style.display = 'block';
-        if(pop) pop.style.left = e.pageX + 'px';
-        if(pop) pop.style.top = (e.pageY - 45) + 'px';
+        // Calculate position using Range Rect (works for both Mouse and Touch)
+        const rect = range.getBoundingClientRect();
+        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+
+        if(pop) {
+            pop.style.display = 'block';
+            // Only position near text on Desktop (>768px)
+            if (window.innerWidth > 768) {
+                pop.style.left = (rect.left + scrollLeft + (rect.width / 2)) + 'px';
+                pop.style.top = (rect.top + scrollTop - 45) + 'px';
+            } else {
+                // Mobile: Reset inline styles to let CSS handle fixed bottom position
+                pop.style.left = ''; pop.style.top = '';
+            }
+        }
         
         pop.onclick = async () => {
             pop.innerHTML = '...';
@@ -1203,6 +1245,7 @@ function cleanupViewResources() {
 
 // Додаємо слухачі для ЦІЄЇ сторінки
 document.addEventListener('mouseup', window.handleViewMouseUp);
+document.addEventListener('touchend', window.handleViewMouseUp); // Mobile support
 document.addEventListener('click', window.handleViewClick);
 
 // Додаємо одноразовий "прибиральник", який спрацює перед наступним переходом

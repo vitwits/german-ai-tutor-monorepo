@@ -67,10 +67,7 @@
                     <span class="material-symbols-outlined">edit</span>
                 </button>
                 <button class="btn-text" style="color: #D32F2F"
-                        hx-post="/api/remove_word"
-                        hx-vals='{"id": "{{w.id}}", "from_vocab": true}'
-                        hx-target="closest .vocab-item"
-                        hx-swap="outerHTML">
+                        onclick="requestDelete(this, '/api/remove_word', {id: '{{w.id}}', from_vocab: true}, '{{ ui.word_deleted }}')">
                     <span class="material-symbols-outlined">delete</span>
                 </button>
             </div>
@@ -100,10 +97,7 @@
                 <span class="material-symbols-outlined">edit</span>
             </button>
             <button class="btn-text" style="color: #D32F2F; opacity: 0.8;"
-                    hx-post="/api/remove_word"
-                    hx-vals='{"id": "{{w.id}}", "from_vocab": true}'
-                    hx-target="closest .vocab-item"
-                    hx-swap="outerHTML">
+                    onclick="requestDelete(this, '/api/remove_word', {id: '{{w.id}}', from_vocab: true}, '{{ ui.word_deleted }}')">
                 <span class="material-symbols-outlined">delete</span>
             </button>
         </div>

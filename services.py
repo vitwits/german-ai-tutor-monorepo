@@ -272,14 +272,17 @@ def translate_word(text, ctx):
        - NO "die kontinuierliche Innovation (die kontinuierlichen Innovationen)" - ONLY "die kontinuierliche Innovation".
 
     2. SINGLE WORDS (Exactly 1 word):
-       - Only if the input is a single word, provide forms in brackets.
        - **Nouns**: MUST include the correct definite article (der, die, das) in nominative singular, followed by the plural form in brackets. Example: "das Haus (die Häuser)".
        - Pluraletantum: "Leute (Pl.)".
        - Singularetantum: "das Obst (-)".
-
-    3. VERBS & ADJECTIVES (1 word):
-       - Verbs: Infinitive only, no declentions or grammatical forms, only inifinitive verb
-       - Adjectives: Base form (e.g., "stark"), no grammatical forms or declentions, only pure single word.
+       
+    3. SINGLE WORDS - EVERYTHING ELSE (Verbs, Adjectives, Pronouns, Adverbs):
+       - **STRICT RULE**: Provide ONLY the base/infinitive form.
+       - **FORBIDDEN**: Do not include any declensions, comparative forms, or endings in brackets.
+       - **EXAMPLES**: 
+          - "mein" -> "mein" (NOT "mein (meine, meiner)")
+          - "langsam" -> "langsam" (NOT "langsam (langsamer)")
+          - "machen" -> "machen"
 
 
     4. TRANSLATIONS:
