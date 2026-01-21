@@ -43,7 +43,8 @@ window.handleHtmxAfterLoad = function(evt) {
 document.body.addEventListener('htmx:afterOnLoad', window.handleHtmxAfterLoad);
 
 // Listen for custom event from backend to set sentence ID
-document.body.addEventListener('sentenceLoaded', function(evt) {
+if (window.handleSentenceLoaded) document.body.removeEventListener('sentenceLoaded', window.handleSentenceLoaded);
+window.handleSentenceLoaded = function(evt) {
     currentSentenceId = evt.detail.id;
     const isFav = evt.detail.isFav;
     
@@ -60,7 +61,8 @@ document.body.addEventListener('sentenceLoaded', function(evt) {
             btn.style.borderColor = '';
         }
     }
-});
+};
+document.body.addEventListener('sentenceLoaded', window.handleSentenceLoaded);
 
 // Cleanup on navigation (HTMX)
 if (window.handleHtmxBeforeSwap) document.body.removeEventListener('htmx:beforeSwap', window.handleHtmxBeforeSwap);
@@ -618,12 +620,15 @@ window.handleLevelUpdated = async () => {
 window.addEventListener('level-updated', window.handleLevelUpdated);
 
 // Handle Toast Trigger from HTMX
-document.body.addEventListener('showMessage', function(evt){
+if (window.handleShowMessage) document.body.removeEventListener('showMessage', window.handleShowMessage);
+window.handleShowMessage = function(evt){
     window.toast.show(evt.detail.msg, evt.detail.type || 'success');
-});
+};
+document.body.addEventListener('showMessage', window.handleShowMessage);
 
 // Handle Fav Toggle UI update
-document.body.addEventListener('favToggled', function(evt){
+if (window.handleFavToggled) document.body.removeEventListener('favToggled', window.handleFavToggled);
+window.handleFavToggled = function(evt){
     const icon = document.getElementById('fav-icon');
     const btn = document.getElementById('fav-btn');
     if (icon && btn) {
@@ -637,4 +642,5 @@ document.body.addEventListener('favToggled', function(evt){
             btn.style.borderColor = '';
         }
     }
-});
+};
+document.body.addEventListener('favToggled', window.handleFavToggled);
