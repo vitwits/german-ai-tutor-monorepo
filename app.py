@@ -147,6 +147,7 @@ UI_STRINGS = {
         'vocab_sentences': 'Речення',
         'sentence_added_fav': 'Речення додано в улюблені',
         'sentence_removed_fav': 'Речення видалено з улюблених',
+        'selection_limited_toast': 'Переклад не більше 4 слів',
     },
     'eng': {
         'settings': 'Settings',
@@ -236,6 +237,7 @@ UI_STRINGS = {
         'vocab_sentences': 'Sentences',
         'sentence_added_fav': 'Sentence added to favorites',
         'sentence_removed_fav': 'Sentence removed from favorites',
+        'selection_limited_toast': 'Translation up to 4 words',
     }
 }
 
@@ -983,20 +985,30 @@ def save_quiz_result():
 @login_required
 def quick_translate():
     req = request.json
-    
+    original_text = req.get('text', '').strip()
+
+    if not original_text:
+        return jsonify({"error": "Empty text"}), 400
+
+    words = original_text.split()
+    if len(words) > 4:
+        # Повертаємо контрольовану помилку з ключем для UI, щоб фронтенд показав правильний тост
+        return jsonify({"ok": False, "error_key": "selection_limited_toast"})
+
+    text_for_translation = original_text
     # BILLING
-    cost = billing.calculate_translation_cost(req.get('text', ''))
+    cost = billing.calculate_translation_cost(text_for_translation)
     new_bal = billing.deduct_credits(current_user.id, cost)
     current_user.credits = new_bal
 
-    word_data = services.translate_word(req['text'], req['ctx'])
+    word_data = services.translate_word(text_for_translation, req['ctx'])
     wid = str(uuid.uuid4())
     
     full_sentence = req['ctx']
-    word = req['text']
+    word_to_store_and_highlight = text_for_translation # Використовуємо валідний текст
     
-    start_index = full_sentence.find(word)
-    end_index = start_index + len(word)
+    start_index = full_sentence.find(word_to_store_and_highlight)
+    end_index = start_index + len(word_to_store_and_highlight)
     
     sentence_index = req.get('sent_idx', 0)
     
@@ -1004,7 +1016,7 @@ def quick_translate():
         conn.execute('''INSERT INTO vocabulary 
                         (id, user_id, text_id, origin, display, ua, en, ctx, sentence_index, start_index, end_index, level) 
                         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)''',
-                     (wid, current_user.id, req.get('tid'), word, 
+                     (wid, current_user.id, req.get('tid'), word_to_store_and_highlight,
                       word_data['display'], word_data['ua'], word_data['en'], req['ctx'],
                       sentence_index, start_index, end_index, word_data.get('level') or word_data.get('Level')))
         conn.commit()

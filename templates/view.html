@@ -825,7 +825,24 @@ window.handleViewMouseUp = (e) => {
         }
     }
 
-    const selText = selection.toString().trim();
+    // --- НОВА ЛОГІКА ОБРОБКИ ВИДІЛЕННЯ ---
+    let selText = selection.toString().trim();
+    
+    // Вимога 2: Зупинити виділення перед вже вивченим словом.
+    if (selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+        const fragment = range.cloneContents();
+        const firstLearned = fragment.querySelector('.learned');
+        if (firstLearned) {
+            const fullText = selection.toString(); // Використовуємо не обрізану версію для точного індексу
+            const learnedText = firstLearned.textContent;
+            const index = fullText.indexOf(learnedText);
+            if (index !== -1) {
+                selText = fullText.substring(0, index).trim();
+            }
+        }
+    }
+
     const pop = document.getElementById('pop');
 
     // Якщо елемента немає (ми на іншій сторінці), нічого не робимо
@@ -860,12 +877,21 @@ window.handleViewMouseUp = (e) => {
                     })
                 });
                 
-                if (res.ok) {
+                // Спочатку читаємо JSON, щоб перевірити логічний статус ok: true/false
+                let data = {};
+                try { data = await res.json(); } catch(e) {}
+
+                if (res.ok && data.ok) {
                     // Ставимо прапорець для тостера після перезавантаження
                     sessionStorage.setItem('wordAdded', 'true');
                     location.reload();
                 } else {
-                    window.toast.show('{{ ui.error_generic }}', 'error');
+                    // Якщо сервер повернув помилку (наприклад, ліміт слів)
+                    if (data.error_key === 'selection_limited_toast') {
+                        window.toast.show('{{ ui.selection_limited_toast }}', 'warning');
+                    } else {
+                        window.toast.show('{{ ui.error_generic }}', 'error');
+                    }
                     pop.innerHTML = '{{ ui.add_translation }}';
                 }
             } catch (e) {

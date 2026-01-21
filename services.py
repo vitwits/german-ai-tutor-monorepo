@@ -274,10 +274,12 @@ def evaluate_audio_with_gemini(original_text, audio_bytes, interface_lang, mime_
 def translate_word(text, ctx):
     # ПОВНИЙ, ОРИГІНАЛЬНИЙ ПРОМПТ
     prompt = f"""Translate the German word or phrase: "{text}". Context: "{ctx}".
+    The input "{text}" has {len(text.split())} words.
 
     STRICT GRAMMAR RULES (NO EXCEPTIONS):
 
-    0. COLLOQUIALISMS, SLANG, AND CONTRACTIONS (HIGHEST PRIORITY):
+    0. **PRIORITY ORDER**: First, determine if the input is a phrase (2+ words) or a single word (exactly 1 word). Then apply rules.
+    1. COLLOQUIALISMS, SLANG, AND CONTRACTIONS (HIGHEST PRIORITY):
        - IF the input is a spoken contraction (e.g., "hast'e", "hab's", "bist'e", "gib's", "mach's") or slang ("nix", "ne"):
        - **YOU MUST PRESERVE** the colloquial spelling in the 'display' field.
        - DO NOT expand it to standard German (e.g. DO NOT change "hast'e" to "hast du").
@@ -296,7 +298,7 @@ def translate_word(text, ctx):
 
     2. SINGLE WORDS (Exactly 1 word):
        - Only if the input is a single word, provide forms in brackets.
-       - Nouns: "das Haus (die Häuser)".
+       - **Nouns**: MUST include the correct definite article (der, die, das) in nominative singular, followed by the plural form in brackets. Example: "das Haus (die Häuser)".
        - Pluraletantum: "Leute (Pl.)".
        - Singularetantum: "das Obst (-)".
 
