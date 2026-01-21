@@ -233,6 +233,52 @@
 </div>
 
 <script>
+var vocabAudioQueue = [];
+var isPlayingVocab = false;
+
+async function playVocabPair(deText, transText, btn) {
+    // If playing, stop everything.
+    if (isPlayingVocab) {
+        vocabAudioQueue.forEach(audio => audio.pause());
+        vocabAudioQueue = [];
+        isPlayingVocab = false;
+        return;
+    }
+
+    isPlayingVocab = true;
+    if (btn) btn.style.opacity = '0.5';
+
+    try {
+        const res = await fetch('/api/tts_pair', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ de_text: deText, trans_text: transText })
+        });
+        const data = await res.json();
+
+        if (data.urls && data.urls.length > 0) {
+            for (const url of data.urls) {
+                if (!isPlayingVocab) break; // Check for interruption
+                await new Promise(resolve => {
+                    const audio = new Audio(url);
+                    vocabAudioQueue.push(audio);
+                    audio.onended = resolve;
+                    audio.onerror = resolve;
+                    audio.play().catch(resolve);
+                });
+                if (!isPlayingVocab) break;
+                await new Promise(r => setTimeout(r, 300));
+            }
+        }
+    } catch (e) {
+        console.error("TTS Pair Error:", e);
+    } finally {
+        if (btn) btn.style.opacity = '1';
+        isPlayingVocab = false;
+        vocabAudioQueue = [];
+    }
+}
+
 var currentAudio = null;
 async function playAudio(text, btn = null) {
     if (currentAudio) currentAudio.pause();

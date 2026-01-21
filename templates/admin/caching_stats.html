@@ -1,0 +1,75 @@
+{% extends 'admin/master.html' %}
+
+{% block body %}
+<div class="container">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <h3>TTS Caching Statistics</h3>
+            <p class="text-muted">Efficiency of local audio caching vs Google TTS API calls.</p>
+        </div>
+        <div class="btn-group">
+            <a href="?period=today" class="btn btn-default {% if period == 'today' %}active{% endif %}">Today</a>
+            <a href="?period=month" class="btn btn-default {% if period == 'month' %}active{% endif %}">This Month</a>
+            <a href="?period=all" class="btn btn-default {% if period == 'all' %}active{% endif %}">All Time</a>
+        </div>
+    </div>
+    
+    <div class="panel panel-default" style="margin-top: 20px;">
+        <div class="panel-heading">Audio Generation Stats</div>
+        <table class="table table-striped table-bordered table-hover">
+            <thead>
+                <tr>
+                    <th style="vertical-align: middle;">Language</th>
+                    <th style="text-align: center;">Google TTS (API)<br><small class="text-muted">Requests (Tokens)</small></th>
+                    <th style="text-align: center;">Cached<br><small class="text-muted">Requests (Tokens)</small></th>
+                    <th style="text-align: center;">Total<br><small class="text-muted">Requests (Tokens)</small></th>
+                    <th>Cache Efficiency (%)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in stats %}
+                <tr>
+                    <td style="font-weight: bold;">
+                        {% if s.lang_code == 'de' %}🇩🇪{% elif s.lang_code == 'uk' %}🇺🇦{% elif s.lang_code == 'en' %}🇬🇧{% endif %} 
+                        {{ s.lang_name }}
+                    </td>
+                    <td style="text-align: center;">
+                        {{ s.api_req }} <span class="text-muted">({{ "{:,}".format(s.api_chars) }})</span>
+                    </td>
+                    <td style="text-align: center; color: #2e7d32; font-weight: bold;">
+                        {{ s.cache_req }} <span class="text-muted" style="font-weight: normal;">({{ "{:,}".format(s.cache_chars) }})</span>
+                    </td>
+                    <td style="text-align: center;">
+                        {{ s.total_req }} <span class="text-muted">({{ "{:,}".format(s.total_chars) }})</span>
+                    </td>
+                    <td>
+                        <div class="progress" style="margin-bottom: 0; position: relative; background-color: #e0e0e0;">
+                            <div class="progress-bar progress-bar-success" role="progressbar" 
+                                 style="width: {{ s.pct }}%; min-width: 2em;">
+                                {{ s.pct }}%
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+                
+                <!-- TOTAL ROW -->
+                <tr style="background-color: #f5f5f5; font-weight: bold; border-top: 2px solid #ddd;">
+                    <td>TOTAL</td>
+                    <td style="text-align: center;">{{ grand.api_req }} <span class="text-muted">({{ "{:,}".format(grand.api_chars) }})</span></td>
+                    <td style="text-align: center; color: #2e7d32;">{{ grand.cache_req }} <span class="text-muted" style="font-weight: normal;">({{ "{:,}".format(grand.cache_chars) }})</span></td>
+                    <td style="text-align: center;">{{ grand.total_req }} <span class="text-muted">({{ "{:,}".format(grand.total_chars) }})</span></td>
+                    <td>
+                        <div class="progress" style="margin-bottom: 0; position: relative; background-color: #e0e0e0;">
+                            <div class="progress-bar progress-bar-info" role="progressbar" 
+                                 style="width: {{ grand_pct }}%; min-width: 2em;">
+                                {{ grand_pct }}%
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

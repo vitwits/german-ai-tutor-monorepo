@@ -173,4 +173,20 @@ def init_db():
             FOREIGN KEY (sentence_id) REFERENCES sentences (id)
         )''')
 
+        # 7. Таблиця статистики TTS (Caching Stats)
+        conn.execute('''CREATE TABLE IF NOT EXISTS tts_stats (
+            language TEXT PRIMARY KEY,
+            total_requests INTEGER DEFAULT 0,
+            cached_requests INTEGER DEFAULT 0
+        )''')
+        
+        # 8. Таблиця логів TTS (Detailed Caching Stats)
+        conn.execute('''CREATE TABLE IF NOT EXISTS tts_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            language TEXT,
+            chars INTEGER,
+            source TEXT, -- 'cache' or 'api'
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
         conn.commit()

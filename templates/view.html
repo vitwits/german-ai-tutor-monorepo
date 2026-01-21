@@ -242,7 +242,7 @@
     <div class="de-line" id="sent-{{ loop.index0 }}" data-index="{{ loop.index0 }}" data-text="{{ s.de }}" style="padding:8px 0; {% if not loop.last %}border-bottom:1px solid var(--border);{% endif %}">
         <div style="display:flex; justify-content: space-between; align-items: center;">
             <div style="display:flex; align-items:center; gap:12px; flex: 1;">
-                <button class="btn-text" onclick="playAudio({{ s.de | tojson | forceescape }}, this)" style="opacity:{{ '1' if s.has_audio else '0.5' }}; height:32px; width:32px; padding:0; min-width:32px;">
+                <button class="btn-text" onclick="playAudio({{ s.de | tojson | forceescape }}, this)" style="height:32px; width:32px; padding:0; min-width:32px;">
                     <span class="material-symbols-outlined" style="font-size:20px; color:var(--primary)">volume_up</span>
                 </button>
                 <span class="de-text" style="font-size:1.1rem; font-weight:400; line-height:1.6;">{{ s.de_html | safe }}</span>
@@ -331,7 +331,7 @@
     {% for v in vocab %}
     <div class="vocab-item" onclick="handleRowClick(event, '{{v.id}}')" style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border:1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); cursor: pointer;">
         <div style="display:flex; align-items:center; gap:12px;">
-            <button class="btn-text" onclick="playAudio({{ v.display | tojson | forceescape }}, this)" style="padding:0; min-width:unset; color:var(--primary); opacity:{{ '1' if v.has_audio else '0.5' }};">
+            <button class="btn-text" onclick="playVocabPair({{ v.display | tojson | forceescape }}, {{ (v.ua if lang == 'ukr' else v.en) | tojson | forceescape }}, this)" style="padding:0; min-width:unset; color:var(--primary);">
                 <span class="material-symbols-outlined" style="font-size:18px;">volume_up</span>
             </button>
             <div>
@@ -360,6 +360,8 @@
 <script>
 var userLang = '{{ lang }}';
 // Ініціалізація даних словника для швидкого доступу
+var vocabAudioQueue = [];
+var isPlayingVocab = false;
 var vocabData = {{ vocab | tojson }};
 var vocabMap = {};
 vocabData.forEach(v => vocabMap[v.id] = v);
@@ -666,6 +668,50 @@ window.onbeforeunload = function() {
 var currentAudio = null;
 var isPlayingAll = false;
 
+async function playVocabPair(deText, transText, btn) {
+    // If playing, stop everything.
+    if (isPlayingVocab) {
+        vocabAudioQueue.forEach(audio => audio.pause());
+        vocabAudioQueue = [];
+        isPlayingVocab = false;
+        // The 'finally' block will reset the button opacity
+        return;
+    }
+
+    isPlayingVocab = true;
+    if (btn) btn.style.opacity = '0.5';
+
+    try {
+        const res = await fetch('/api/tts_pair', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ de_text: deText, trans_text: transText })
+        });
+        const data = await res.json();
+
+        if (data.urls && data.urls.length > 0) {
+            for (const url of data.urls) {
+                if (!isPlayingVocab) break; // Check for interruption
+                await new Promise(resolve => {
+                    const audio = new Audio(url);
+                    vocabAudioQueue.push(audio);
+                    audio.onended = resolve;
+                    audio.onerror = resolve;
+                    audio.play().catch(resolve);
+                });
+                if (!isPlayingVocab) break;
+                await new Promise(r => setTimeout(r, 300));
+            }
+        }
+    } catch (e) {
+        console.error("TTS Pair Error:", e);
+    } finally {
+        if (btn) btn.style.opacity = '1';
+        isPlayingVocab = false;
+        vocabAudioQueue = [];
+    }
+}
+
 // 1. ПРОГРАВАННЯ АУДІО
 async function playAudio(text, btn = null) {
     if (currentAudio) {
@@ -903,8 +949,16 @@ window.handleViewMouseUp = (e) => {
                     location.reload();
                 } else {
                     // Якщо сервер повернув помилку (наприклад, ліміт слів)
-                    if (data.error_key === 'selection_limited_toast') {
+                    if (data.error_msg) {
+                        window.toast.show(data.error_msg, 'error');
+                    } else if (data.error_key === 'selection_limited_toast') {
                         window.toast.show('{{ ui.selection_limited_toast }}', 'warning');
+                    } else if (data.error_key === 'translation_failed') {
+                        window.toast.show('{{ ui.translation_failed_msg }}', 'error');
+                    } else if (data.error_key === 'audio_failed') {
+                        window.toast.show('{{ ui.audio_failed_msg }}', 'error');
+                    } else if (data.error_key === 'word_exists') {
+                        window.toast.show('{{ ui.word_exists }}', 'warning');
                     } else {
                         window.toast.show('{{ ui.error_generic }}', 'error');
                     }

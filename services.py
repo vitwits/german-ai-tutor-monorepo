@@ -147,38 +147,10 @@ def generate_german_text(topic, count, level, style='neutral'):
 
 def get_tts_audio(text, lang='de'):
     """
-    Генерує аудіо через Google TTS.
+    Generates audio via Google TTS.
     lang: 'de' (German), 'uk' (Ukrainian), 'en' (English)
     """
     if not text: return None
-    
-    # Azure TTS for Ukrainian
-    if lang == 'uk':
-        try:
-            # Використовуємо ключі з Azure
-            speech_key = os.getenv("AZURE_SPEECH_KEY")
-            service_region = os.getenv("AZURE_SPEECH_REGION")
-            
-            if not speech_key or not service_region:
-                print("Azure credentials not found")
-                return None
-            
-            speech_config = speechsdk.SpeechConfig(subscription=speech_key, region=service_region)
-            speech_config.speech_synthesis_voice_name = "uk-UA-PolinaNeural"
-            # Встановлюємо формат OGG, щоб відповідати розширенню файлу в app.py
-            speech_config.set_speech_synthesis_output_format(speechsdk.SpeechSynthesisOutputFormat.Ogg24Khz16BitMonoOpus)
-            
-            synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=None)
-            result = synthesizer.speak_text_async(text).get()
-            
-            if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
-                return result.audio_data
-            else:
-                print(f"Azure TTS Canceled: {result.cancellation_details.reason}")
-                return None
-        except Exception as e:
-            print(f"Azure TTS Error: {e}")
-            return None
 
     tts_client = get_tts_client()
     if not tts_client: return None
@@ -186,6 +158,9 @@ def get_tts_audio(text, lang='de'):
     if lang == 'de':
         language_code = "de-DE"
         name = "de-DE-Standard-B" 
+    elif lang == 'uk':
+        language_code = "uk-UA"
+        name = "uk-UA-Standard-B" # As requested
     else:
         language_code = "en-US"
         name = "en-US-Standard-C"
@@ -303,8 +278,9 @@ def translate_word(text, ctx):
        - Singularetantum: "das Obst (-)".
 
     3. VERBS & ADJECTIVES (1 word):
-       - Verbs: Infinitive only.
-       - Adjectives: Base form (e.g., "stark").
+       - Verbs: Infinitive only, no declentions or grammatical forms, only inifinitive verb
+       - Adjectives: Base form (e.g., "stark"), no grammatical forms or declentions, only pure single word.
+
 
     4. TRANSLATIONS:
        - 1-2 main meanings. Clean text only.

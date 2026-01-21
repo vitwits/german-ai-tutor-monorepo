@@ -4,6 +4,7 @@ import hashlib
 import math
 import json
 import threading
+import re
 import time
 import random
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, send_from_directory, Response, make_response
@@ -11,6 +12,7 @@ from flask_login import LoginManager, UserMixin, login_user, login_required, log
 from flask_sqlalchemy import SQLAlchemy
 from flask_admin import Admin, AdminIndexView, BaseView, expose, helpers
 from flask_admin.contrib.sqla import ModelView
+from sqlalchemy import func
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
 from datetime import datetime
@@ -39,13 +41,6 @@ app.json.ensure_ascii = False
 app.config['SECRET_KEY'] = os.getenv("SECRET_KEY", "dev-key")
 AUDIO_DIR = "data/audio"
 os.makedirs(AUDIO_DIR, exist_ok=True)
-
-def has_audio_cache(text, lang='de'):
-    if not text: return False
-    file_hash = hashlib.md5(f"{text.strip()}_{lang}".encode()).hexdigest()
-    filename = f"{file_hash}.ogg"
-    filepath = os.path.join(AUDIO_DIR, filename)
-    return os.path.exists(filepath)
 
 def is_htmx():
     """Check if the request is triggered by HTMX"""
@@ -150,6 +145,9 @@ UI_STRINGS = {
         'sentence_removed_fav': 'Речення видалено з улюблених',
         'selection_limited_toast': 'Переклад не більше 4 слів',
         'restart_btn': 'Спочатку',
+        'translation_failed_msg': 'Не вдалося отримати переклад',
+        'audio_failed_msg': 'Не вдалося згенерувати аудіо',
+        'word_exists': 'Слово вже є у словнику',
     },
     'eng': {
         'settings': 'Settings',
@@ -242,6 +240,9 @@ UI_STRINGS = {
         'sentence_removed_fav': 'Sentence removed from favorites',
         'selection_limited_toast': 'Translation up to 4 words',
         'restart_btn': 'Restart',
+        'translation_failed_msg': 'Failed to get translation',
+        'audio_failed_msg': 'Failed to generate audio',
+        'word_exists': 'Word already in vocabulary',
     }
 }
 
@@ -322,6 +323,14 @@ class TempSentence(db.Model):
     en = db.Column(db.String)
     uk = db.Column(db.String)
     topic = db.Column(db.String)
+
+class TTSLog(db.Model):
+    __tablename__ = 'tts_logs'
+    id = db.Column(db.Integer, primary_key=True)
+    language = db.Column(db.String)
+    chars = db.Column(db.Integer)
+    source = db.Column(db.String) # 'cache' or 'api'
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 # --- ADMIN VIEWS ---
 
@@ -507,6 +516,83 @@ class GenerateSentencesView(BaseView):
             return jsonify({'ok': True})
         return jsonify({'error': 'Not found'}), 404
 
+class CachingStatsView(BaseView):
+    @expose('/')
+    def index(self):
+        if not current_user.is_authenticated or not getattr(current_user, 'is_admin', 0):
+            return redirect(url_for('login'))
+            
+        period = request.args.get('period', 'all')
+        
+        query = db.session.query(
+            TTSLog.language,
+            TTSLog.source,
+            func.count(TTSLog.id),
+            func.sum(TTSLog.chars)
+        )
+        
+        if period == 'today':
+            start_date = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+            query = query.filter(TTSLog.created_at >= start_date)
+        elif period == 'month':
+            today = datetime.utcnow()
+            start_date = today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            query = query.filter(TTSLog.created_at >= start_date)
+            
+        rows = query.group_by(TTSLog.language, TTSLog.source).all()
+        
+        stats_map = {}
+        for lang, source, count, chars in rows:
+            if lang not in stats_map:
+                stats_map[lang] = {'api_req': 0, 'api_chars': 0, 'cache_req': 0, 'cache_chars': 0}
+            
+            c_val = int(chars) if chars else 0
+            if source == 'api':
+                stats_map[lang]['api_req'] += count
+                stats_map[lang]['api_chars'] += c_val
+            else:
+                stats_map[lang]['cache_req'] += count
+                stats_map[lang]['cache_chars'] += c_val
+        
+        data = []
+        grand = {'api_req': 0, 'api_chars': 0, 'cache_req': 0, 'cache_chars': 0, 'total_req': 0, 'total_chars': 0}
+        
+        lang_map = {'de': 'German', 'en': 'English', 'uk': 'Ukrainian'}
+        
+        for lang in ['de', 'en', 'uk']:
+            s = stats_map.get(lang, {'api_req': 0, 'api_chars': 0, 'cache_req': 0, 'cache_chars': 0})
+            
+            total_req = s['api_req'] + s['cache_req']
+            total_chars = s['api_chars'] + s['cache_chars']
+            pct = 0
+            if total_req > 0:
+                pct = round((s['cache_req'] / total_req) * 100, 1)
+            
+            data.append({
+                'lang_code': lang,
+                'lang_name': lang_map.get(lang, lang.upper()),
+                'api_req': s['api_req'],
+                'api_chars': s['api_chars'],
+                'cache_req': s['cache_req'],
+                'cache_chars': s['cache_chars'],
+                'total_req': total_req,
+                'total_chars': total_chars,
+                'pct': pct
+            })
+            
+            grand['api_req'] += s['api_req']
+            grand['api_chars'] += s['api_chars']
+            grand['cache_req'] += s['cache_req']
+            grand['cache_chars'] += s['cache_chars']
+            grand['total_req'] += total_req
+            grand['total_chars'] += total_chars
+            
+        grand_pct = 0
+        if grand['total_req'] > 0:
+            grand_pct = round((grand['cache_req'] / grand['total_req']) * 100, 1)
+            
+        return self.render('admin/caching_stats.html', stats=data, grand=grand, grand_pct=grand_pct, period=period)
+
 # --- BACKGROUND TASKS ---
 
 def background_text_gen(app_instance, batch_id, level, count):
@@ -598,6 +684,7 @@ admin = Admin(app, name='DE Tutor Admin', index_view=MyAdminIndexView())
 admin.add_view(MyModelView(UserModel, db.session, name='Users'))
 admin.add_view(SentenceView(SentenceModel, db.session, name='Sentences'))
 admin.add_view(GenerateSentencesView(name='Generate Sentences', endpoint='generate'))
+admin.add_view(CachingStatsView(name='Caching', endpoint='caching'))
 
 # Створення адміна при запуску
 def create_admin_user():
@@ -924,7 +1011,6 @@ def view_text(tid):
     for i, s in enumerate(sentences):
         original_text = s['de']
         
-        s['has_audio'] = has_audio_cache(s['de'])
         s['has_grammar'] = i in grammar_indices
         
         my_words = [v for v in vocab_rows if v['sentence_index'] == i]
@@ -946,9 +1032,6 @@ def view_text(tid):
         built_str = original_text[0:last_idx] + built_str
         s['de_html'] = built_str
         
-    for v in vocab_rows:
-        v['has_audio'] = has_audio_cache(v['display'])
-
     # Load Quiz Data
     quiz_data = []
     if t['quiz_json']:
@@ -990,6 +1073,7 @@ def save_quiz_result():
 def quick_translate():
     req = request.json
     original_text = req.get('text', '').strip()
+    text_id = req.get('tid')
 
     if not original_text:
         return jsonify({"error": "Empty text"}), 400
@@ -998,14 +1082,104 @@ def quick_translate():
     if len(words) > 4:
         # Повертаємо контрольовану помилку з ключем для UI, щоб фронтенд показав правильний тост
         return jsonify({"ok": False, "error_key": "selection_limited_toast"})
+        
+    # DUPLICATE CHECK 1: Check by exact selection (origin) to save resources
+    with get_db() as conn:
+        dup = conn.execute('SELECT 1 FROM vocabulary WHERE user_id = ? AND text_id = ? AND origin = ?', (current_user.id, text_id, original_text)).fetchone()
+        if dup:
+            return jsonify({"ok": False, "error_key": "word_exists"})
 
     text_for_translation = original_text
-    # BILLING
+    
+    # REUSE LOGIC: Check if user has this word elsewhere to reuse translation
+    word_data = None
+    is_fav_inherited = 0
+    with get_db() as conn:
+        # Prioritize favorite entries (is_favorite DESC), then most recent
+        existing = conn.execute('SELECT display, ua, en, level, is_favorite FROM vocabulary WHERE user_id = ? AND origin = ? ORDER BY is_favorite DESC, rowid DESC LIMIT 1', (current_user.id, original_text)).fetchone()
+        if existing:
+            word_data = {
+                'display': existing['display'],
+                'ua': existing['ua'],
+                'en': existing['en'],
+                'level': existing['level']
+            }
+            is_fav_inherited = existing['is_favorite'] or 0
+
+    # 1. Translate (if not reused)
+    if not word_data:
+        word_data = services.translate_word(text_for_translation, req['ctx'])
+    
+    # Validate Translation
+    if not word_data or word_data.get('ua') == 'Error' or word_data.get('en') == 'Error':
+        return jsonify({"ok": False, "error_key": "translation_failed"}), 500
+        
+    # --- NEW: Видалення дублікатів з перекладу (наприклад, "моя, моя, моє") ---
+    def remove_duplicate_parts(translation_string):
+        if not translation_string:
+            return ""
+        # Розділяємо рядок, прибираємо зайві пробіли
+        parts = [part.strip() for part in translation_string.split(',')]
+        parts = [p for p in parts if p]
+        
+        # 1. Прибираємо точні дублікати
+        unique_list = []
+        seen = set()
+        for p in parts:
+            if p not in seen:
+                unique_list.append(p)
+                seen.add(p)
+        
+        # 2. Логіка: якщо перше слово співпадає, залишаємо довший варіант
+        final_parts = []
+        for i, p_a in enumerate(unique_list):
+            words_a = p_a.split()
+            if not words_a: continue
+            first_a = words_a[0].lower()
+            
+            is_redundant = False
+            for j, p_b in enumerate(unique_list):
+                if i == j: continue
+                words_b = p_b.split()
+                if not words_b: continue
+                
+                if words_b[0].lower() == first_a and len(words_b) > len(words_a):
+                    is_redundant = True
+                    break
+            
+            if not is_redundant:
+                final_parts.append(p_a)
+                
+        return ', '.join(final_parts)
+
+    word_data['ua'] = remove_duplicate_parts(word_data.get('ua'))
+    word_data['en'] = remove_duplicate_parts(word_data.get('en'))
+
+    # DUPLICATE CHECK 2: Check by canonical form (display) after translation
+    with get_db() as conn:
+        dup_display = conn.execute('SELECT 1 FROM vocabulary WHERE user_id = ? AND text_id = ? AND display = ?', (current_user.id, text_id, word_data['display'])).fetchone()
+        if dup_display:
+            return jsonify({"ok": False, "error_key": "word_exists"})
+
+    # 2. Generate Audio (German)
+    if not get_cached_or_generate_tts(text_for_translation, 'de'):
+        return jsonify({"ok": False, "error_key": "audio_failed"}), 500
+
+    # 3. Generate Audio (Translation)
+    target_lang = 'uk' if current_user.interface_language == 'ukr' else 'en'
+    trans_text = word_data.get('ua') if target_lang == 'uk' else word_data.get('en')
+    
+    if trans_text:
+        parts = [p.strip() for p in re.split(r'[,;]', trans_text) if p.strip()]
+        for part in parts:
+            if not get_cached_or_generate_tts(part, target_lang):
+                return jsonify({"ok": False, "error_key": "audio_failed"}), 500
+
+    # BILLING (Translation cost)
     cost = billing.calculate_translation_cost(text_for_translation)
     new_bal = billing.deduct_credits(current_user.id, cost)
     current_user.credits = new_bal
 
-    word_data = services.translate_word(text_for_translation, req['ctx'])
     wid = str(uuid.uuid4())
     
     full_sentence = req['ctx']
@@ -1018,11 +1192,11 @@ def quick_translate():
     
     with get_db() as conn:
         conn.execute('''INSERT INTO vocabulary 
-                        (id, user_id, text_id, origin, display, ua, en, ctx, sentence_index, start_index, end_index, level) 
-                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)''',
+                        (id, user_id, text_id, origin, display, ua, en, ctx, sentence_index, start_index, end_index, level, is_favorite) 
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)''',
                      (wid, current_user.id, req.get('tid'), word_to_store_and_highlight,
                       word_data['display'], word_data['ua'], word_data['en'], req['ctx'],
-                      sentence_index, start_index, end_index, word_data.get('level') or word_data.get('Level')))
+                      sentence_index, start_index, end_index, word_data.get('level') or word_data.get('Level'), is_fav_inherited))
         conn.commit()
     return jsonify({"ok": True, "credits": new_bal})
 
@@ -1134,7 +1308,6 @@ def vocab():
     for row in db_words:
         w = dict(row)
         w['display_trans'] = w['ua'] if lang == 'ukr' else w['en']
-        w['has_audio'] = has_audio_cache(w['display'])
         words.append(w)
         
     if is_htmx() and request.headers.get('HX-Target') == 'vocab-container':
@@ -1248,33 +1421,97 @@ def remove_fav_sentence():
         return resp
     return jsonify({"ok": True})
 
+def get_cached_or_generate_tts(text, lang):
+    """Helper function to reuse TTS logic. Returns url or None."""
+    if not text: return None
+    
+    # 1. Normalization
+    clean_text = text.lower().strip()
+    
+    # 2. Hashing
+    file_hash = hashlib.md5(clean_text.encode('utf-8')).hexdigest()
+    
+    # 3. Sharding
+    shard = file_hash[:2]
+    
+    # 4. Path Strategy
+    # static/audio/cache/{lang}/{shard}/{file_hash}.ogg
+    base_dir = os.path.join(app.root_path, 'static', 'audio', 'cache')
+    target_dir = os.path.join(base_dir, lang, shard)
+    filename = f"{file_hash}.ogg"
+    filepath = os.path.join(target_dir, filename)
+    
+    web_path = f"/static/audio/cache/{lang}/{shard}/{filename}"
+    
+    char_count = len(text)
+    
+    # --- STATS UPDATE ---
+    if os.path.exists(filepath):
+        try:
+            db.session.add(TTSLog(language=lang, chars=char_count, source='cache'))
+            db.session.commit()
+        except Exception as e:
+            print(f"Log Error: {e}")
+        return web_path
+    
+    # 5. Generate if missing
+    # Use original text for generation to preserve casing/intonation
+    audio_content = services.get_tts_audio(text, lang)
+    
+    if audio_content:
+        # BILLING
+        provider = 'google'
+        cost = billing.calculate_tts_cost(text, provider)
+        new_bal = billing.deduct_credits(current_user.id, cost)
+        current_user.credits = new_bal
+        
+        os.makedirs(target_dir, exist_ok=True)
+        with open(filepath, "wb") as out:
+            out.write(audio_content)
+            
+        try:
+            db.session.add(TTSLog(language=lang, chars=char_count, source='api'))
+            db.session.commit() # Commit stats and billing
+        except Exception as e:
+            print(f"Log Error: {e}")
+        return web_path
+        
+    return None
+
+@app.route('/api/tts_pair', methods=['POST'])
+@login_required
+def tts_pair():
+    de_text = request.json.get('de_text', '').strip()
+    trans_text = request.json.get('trans_text', '').strip()
+    
+    urls = []
+    
+    # 1. German audio
+    de_url = get_cached_or_generate_tts(de_text, 'de')
+    if de_url:
+        urls.append(de_url)
+        
+    # 2. Translation audio
+    if trans_text:
+        trans_parts = [part.strip() for part in re.split(r'[,;]', trans_text) if part.strip()]
+        trans_lang = 'uk' if current_user.interface_language == 'ukr' else 'en'
+        for part in trans_parts:
+            trans_url = get_cached_or_generate_tts(part, trans_lang)
+            if trans_url: urls.append(trans_url)
+    return jsonify({"urls": urls, "credits": current_user.credits})
+
 @app.route('/api/tts', methods=['POST'])
 @login_required
 def tts():
     text = request.json.get('text', '').strip()
     lang = request.json.get('lang', 'de')
     
-    file_hash = hashlib.md5(f"{text}_{lang}".encode()).hexdigest()
-    filename = f"{file_hash}.ogg"
-    filepath = os.path.join(AUDIO_DIR, filename)
+    url = get_cached_or_generate_tts(text, lang)
     
-    new_bal = current_user.credits
-
-    if not os.path.exists(filepath):
-        audio_content = services.get_tts_audio(text, lang)
-        if audio_content:
-            # BILLING: Тільки якщо генеруємо нове аудіо
-            provider = 'azure' if lang == 'uk' else 'google'
-            cost = billing.calculate_tts_cost(text, provider)
-            new_bal = billing.deduct_credits(current_user.id, cost)
-            current_user.credits = new_bal
+    if not url:
+        return jsonify({"error": "TTS failed"}), 500
             
-            with open(filepath, "wb") as out:
-                out.write(audio_content)
-        else:
-            return jsonify({"error": "TTS failed"}), 500
-            
-    return jsonify({"url": f"/audio/{filename}", "credits": new_bal})
+    return jsonify({"url": url, "credits": current_user.credits})
 
 @app.route('/audio/<filename>')
 def serve_audio(filename):
