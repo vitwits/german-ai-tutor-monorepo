@@ -1,6 +1,12 @@
-<div style="display: flex; justify-content: flex-end; align-items: center; margin-bottom: 20px; gap: 12px;">
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; gap: 12px;">
+    <!-- Practice Button -->
+    <button class="btn-contained" onclick="startSession()" style="height: 32px; font-size: 0.85rem; background: var(--secondary); color: #000;">
+        <span class="material-symbols-outlined" style="font-size: 18px;">school</span>
+        {{ ui.check_btn if ui.check_btn else 'Practice' }}
+    </button>
+
     <!-- Level Filters -->
-    <div style="display: flex; gap: 4px;">
+    <div style="display: flex; gap: 4px; margin-left: auto;">
         {% for l in ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'] %}
             {% set new_levels = [] %}
             {% if l in selected_levels %}
@@ -14,6 +20,7 @@
             
             <button hx-get="{{ lvl_url }}" 
                     hx-target="#vocab-container"
+                    hx-push-url="true"
                     class="lvl-filter {% if l in selected_levels %}active{% endif %}" 
                     data-lvl="{{l}}">
                 {{l}}
@@ -80,7 +87,7 @@
         
         <!-- Нижня панель для Grid View -->
         <div class="grid-footer">
-            <button class="btn-text" onclick="playAudio({{ w.display | tojson | forceescape }}, this)" style="color: var(--primary);">
+            <button class="btn-text" onclick="playVocabPair({{ w.display | tojson | forceescape }}, {{ w.display_trans | tojson | forceescape }}, this)" style="color: var(--primary);">
                 <span class="material-symbols-outlined">volume_up</span>
             </button>
             <button class="btn-text" onclick="editWord('{{w.id}}', this)" style="color: var(--on-surface); opacity: 0.7;">

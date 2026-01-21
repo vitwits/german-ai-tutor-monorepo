@@ -83,6 +83,12 @@ def init_db():
             start_index INTEGER,    -- Початок виділення (символ)
             end_index INTEGER,      -- Кінець виділення
             
+            -- SPACED REPETITION FIELDS
+            interval REAL DEFAULT 1.0,
+            ease_factor REAL DEFAULT 2.5,
+            next_review TIMESTAMP,
+            last_reviewed TIMESTAMP,
+            
             FOREIGN KEY (user_id) REFERENCES users (id)
         )''')
 
@@ -127,6 +133,21 @@ def init_db():
         # 7. Міграція для квізів (Quiz)
         try:
             conn.execute('ALTER TABLE texts ADD COLUMN quiz_json TEXT')
+        except sqlite3.OperationalError:
+            pass
+
+        # 9. Міграція для SRS (Spaced Repetition) полів у vocabulary
+        try:
+            conn.execute('ALTER TABLE vocabulary ADD COLUMN interval REAL DEFAULT 1.0')
+            conn.execute('ALTER TABLE vocabulary ADD COLUMN ease_factor REAL DEFAULT 2.5')
+            conn.execute('ALTER TABLE vocabulary ADD COLUMN next_review TIMESTAMP')
+            conn.execute('ALTER TABLE vocabulary ADD COLUMN last_reviewed TIMESTAMP')
+        except sqlite3.OperationalError:
+            pass
+            
+        # 10. Add vocab_session_size to users
+        try:
+            conn.execute('ALTER TABLE users ADD COLUMN vocab_session_size INTEGER DEFAULT 20')
         except sqlite3.OperationalError:
             pass
 

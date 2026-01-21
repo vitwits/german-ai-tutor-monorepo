@@ -12,7 +12,7 @@ from flask_login import LoginManager, UserMixin, login_user, login_required, log
 from flask_sqlalchemy import SQLAlchemy
 from flask_admin import Admin, AdminIndexView, BaseView, expose, helpers
 from flask_admin.contrib.sqla import ModelView
-from sqlalchemy import func
+from sqlalchemy import func, text
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
 from datetime import datetime
@@ -249,7 +249,7 @@ UI_STRINGS = {
 class User(UserMixin):
     def __init__(self, id, email, interface_language='ukr', 
                  library_view_mode='list', library_per_page=20,
-                 vocab_view_mode='list', vocab_per_page=20, level='A2', credits=1000.0, is_admin=0):
+                 vocab_view_mode='list', vocab_per_page=20, level='A2', credits=1000.0, is_admin=0, vocab_session_size=20):
         self.id = id
         self.email = email
         self.interface_language = interface_language or 'ukr'
@@ -260,6 +260,7 @@ class User(UserMixin):
         self.level = level
         self.credits = credits
         self.is_admin = is_admin
+        self.vocab_session_size = vocab_session_size
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -276,8 +277,9 @@ def load_user(user_id):
             lvl = u['level'] if 'level' in keys and u['level'] else 'A2'
             crd = u['credits'] if 'credits' in keys and u['credits'] is not None else 1000.0
             is_adm = u['is_admin'] if 'is_admin' in keys and u['is_admin'] else 0
+            vss = u['vocab_session_size'] if 'vocab_session_size' in keys and u['vocab_session_size'] else 20
             
-            return User(u['id'], u['email'], lang, lvm, lpp, vvm, vpp, lvl, crd, is_adm)
+            return User(u['id'], u['email'], lang, lvm, lpp, vvm, vpp, lvl, crd, is_adm, vss)
     return None
 
 # --- ADMIN MODELS (SQLAlchemy) ---
@@ -780,12 +782,16 @@ def settings():
     next_url = request.args.get('next')
     if request.method == 'POST':
         lang = request.form.get('language')
+        vss = int(request.form.get('vocab_session_size', 20))
+        vss = max(1, min(100, vss))
+        
         if lang in ['ukr', 'eng']:
             with get_db() as conn:
-                conn.execute('UPDATE users SET interface_language = ? WHERE id = ?', (lang, current_user.id))
+                conn.execute('UPDATE users SET interface_language = ?, vocab_session_size = ? WHERE id = ?', (lang, vss, current_user.id))
                 conn.commit()
             # Оновлюємо об'єкт користувача в сесії
             current_user.interface_language = lang
+            current_user.vocab_session_size = vss
             flash('Налаштування збережено' if lang == 'ukr' else 'Settings saved')
             if next_url and next_url != url_for('settings'):
                 return redirect(next_url)
@@ -1174,7 +1180,7 @@ def quick_translate():
             return jsonify({"ok": False, "error_key": "word_exists"})
 
     # 2. Generate Audio (German)
-    if not get_cached_or_generate_tts(text_for_translation, 'de'):
+    if not get_cached_or_generate_tts(text_for_translation, 'de', log_stats=True):
         return jsonify({"ok": False, "error_key": "audio_failed"}), 500
 
     # 3. Generate Audio (Translation)
@@ -1184,7 +1190,7 @@ def quick_translate():
     if trans_text:
         parts = [p.strip() for p in re.split(r'[,;]', trans_text) if p.strip()]
         for part in parts:
-            if not get_cached_or_generate_tts(part, target_lang):
+            if not get_cached_or_generate_tts(part, target_lang, log_stats=True):
                 return jsonify({"ok": False, "error_key": "audio_failed"}), 500
 
     # BILLING (Translation cost)
@@ -1349,6 +1355,92 @@ def vocab():
         
     return render_template('vocab.html', mode='words', words=words, page=page, per_page=per_page, total_pages=total_pages, view_mode=view_mode, q=q, selected_levels=selected_levels)
 
+@app.route('/api/vocab/session', methods=['GET'])
+@login_required
+def vocab_session():
+    levels_arg = request.args.get('levels')
+    limit = request.args.get('limit', 50, type=int)
+    levels = levels_arg.split(',') if levels_arg else []
+    valid_levels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']
+    levels = [l for l in levels if l in valid_levels]
+    
+    query = "SELECT * FROM vocabulary WHERE user_id = ?"
+    params = [current_user.id]
+    
+    if levels:
+        placeholders = ','.join(['?'] * len(levels))
+        query += f" AND level IN ({placeholders})"
+        params.extend(levels)
+    
+    # Сортування: спочатку ті, що вже на часі (next_review < now), потім нові/інші
+    # Використовуємо COALESCE, щоб нові слова (next_review NULL) йшли після прострочених
+    query += f" ORDER BY CASE WHEN next_review IS NULL THEN 1 ELSE 0 END, next_review ASC LIMIT {limit}"
+    
+    with get_db() as conn:
+        rows = conn.execute(query, params).fetchall()
+        
+    cards = []
+    lang = current_user.interface_language
+    target_lang = 'uk' if lang == 'ukr' else 'en'
+    
+    for r in rows:
+        d = dict(r)
+        d['trans'] = d['ua'] if lang == 'ukr' else d['en']
+        
+        # 1. German Audio URL (Cached)
+        d['audio_de_url'] = get_cached_or_generate_tts(d['display'], 'de')
+        
+        # 2. Translation Audio URLs (Cached, split by comma like in dictionary)
+        trans_urls = []
+        if d['trans']:
+            parts = [p.strip() for p in re.split(r'[,;]', d['trans']) if p.strip()]
+            for part in parts:
+                url = get_cached_or_generate_tts(part, target_lang)
+                if url: trans_urls.append(url)
+        d['audio_trans_urls'] = trans_urls
+        
+        cards.append(d)
+        
+    return jsonify(cards)
+
+@app.route('/api/vocab/update_progress', methods=['POST'])
+@login_required
+def vocab_update_progress():
+    req = request.json
+    wid = req.get('id')
+    rating = req.get('rating') # 'easy', 'medium', 'hard'
+    
+    if not wid or not rating: return jsonify({"error": "Invalid data"}), 400
+    
+    with get_db() as conn:
+        row = conn.execute('SELECT interval, ease_factor FROM vocabulary WHERE id = ?', (wid,)).fetchone()
+        if not row: return jsonify({"error": "Not found"}), 404
+        
+        interval = row['interval'] or 1.0
+        ease = row['ease_factor'] or 2.5
+        
+        # SM-2 Logic (Modified per request)
+        if rating == 'easy':
+            interval = interval * ease * 1.3
+            ease += 0.15
+        elif rating == 'medium':
+            interval = interval * ease
+            # ease slightly decreases or stays same
+            ease -= 0.05
+        elif rating == 'hard':
+            interval = 1.0
+            ease = max(1.3, ease - 0.2)
+            
+        # Limits
+        interval = min(90, max(1, interval))
+        
+        next_rev = datetime.utcnow() + timedelta(days=interval)
+        
+        conn.execute('UPDATE vocabulary SET interval = ?, ease_factor = ?, last_reviewed = CURRENT_TIMESTAMP, next_review = ? WHERE id = ?', (interval, ease, next_rev, wid))
+        conn.commit()
+        
+    return jsonify({"ok": True})
+
 @app.route('/api/toggle_fav', methods=['POST'])
 @login_required
 def toggle_fav():
@@ -1470,7 +1562,7 @@ def remove_fav_sentence():
         return resp
     return jsonify({"ok": True})
 
-def get_cached_or_generate_tts(text, lang):
+def get_cached_or_generate_tts(text, lang, log_stats=False):
     """Helper function to reuse TTS logic. Returns url or None."""
     if not text: return None
     
@@ -1496,11 +1588,12 @@ def get_cached_or_generate_tts(text, lang):
     
     # --- STATS UPDATE ---
     if os.path.exists(filepath):
-        try:
-            db.session.add(TTSLog(language=lang, chars=char_count, source='cache'))
-            db.session.commit()
-        except Exception as e:
-            print(f"Log Error: {e}")
+        if log_stats:
+            try:
+                db.session.add(TTSLog(language=lang, chars=char_count, source='cache'))
+                db.session.commit()
+            except Exception as e:
+                print(f"Log Error: {e}")
         return web_path
     
     # 5. Generate if missing
@@ -1519,7 +1612,8 @@ def get_cached_or_generate_tts(text, lang):
             out.write(audio_content)
             
         try:
-            db.session.add(TTSLog(language=lang, chars=char_count, source='api'))
+            if log_stats:
+                db.session.add(TTSLog(language=lang, chars=char_count, source='api'))
             db.session.commit() # Commit stats and billing
         except Exception as e:
             print(f"Log Error: {e}")

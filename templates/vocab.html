@@ -234,6 +234,114 @@
     .vocab-wrapper.list .vocab-item.lvl-strip-b2 { border-left: 10px solid #1976D2; }
     .vocab-wrapper.list .vocab-item.lvl-strip-c1 { border-left: 10px solid #D32F2F; }
     .vocab-wrapper.list .vocab-item.lvl-strip-c2 { border-left: 10px solid #311B92; }
+
+    /* --- FLASHCARD PLAYER OVERLAY --- */
+    #fc-overlay {
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: var(--bg); 
+        z-index: 2000; 
+        display: none;
+        flex-direction: column;
+        align-items: center; justify-content: center;
+    }
+
+    .fc-container {
+        width: 100%; max-width: 600px; height: 100%;
+        display: flex; flex-direction: column; 
+        background: transparent; /* Invisible container */
+        padding: 20px;
+    }
+
+    .fc-close-btn {
+        position: absolute; top: 24px; right: 24px; z-index: 2005;
+        background: none; border: none; color: var(--on-surface); cursor: pointer;
+        padding: 8px;
+    }
+
+    /* Top Toggle */
+    .fc-top-controls { padding: 20px; display: flex; justify-content: center; }
+    .fc-mode-toggle { background: rgba(0,0,0,0.05); border-radius: 20px; padding: 4px; display: flex; }
+    .fc-mode-opt {
+        padding: 8px 20px; border: none; background: transparent; border-radius: 16px;
+        font-weight: 500; cursor: pointer; color: var(--on-surface); opacity: 0.6;
+    }
+    .fc-mode-opt.active {
+        background: var(--surface); box-shadow: 0 2px 8px rgba(0,0,0,0.1); opacity: 1; color: var(--primary);
+    }
+
+    /* Progress Bar */
+    .fc-progress-wrapper { padding: 0 24px; margin-bottom: 10px; text-align: center; }
+    .fc-progress-track {
+        height: 6px; background: rgba(0,0,0,0.1); border-radius: 3px; overflow: hidden; margin-bottom: 4px;
+    }
+    .fc-progress-fill { height: 100%; background: var(--primary); width: 0%; transition: width 0.3s; }
+    .fc-progress-text { font-size: 0.8rem; opacity: 0.6; }
+
+    /* Card */
+    .fc-card-area {
+        flex: 1; display: flex; align-items: center; justify-content: center;
+        perspective: 1000px; padding: 20px; position: relative;
+    }
+    .fc-card {
+        width: 100%; height: 340px; /* Reduced height */
+        position: relative; transform-style: preserve-3d; transition: transform 0.6s;
+        cursor: pointer;
+        background: transparent;
+    }
+    .fc-card.flipped { transform: rotateY(180deg); }
+    .fc-face {
+        position: absolute; width: 100%; height: 100%;
+        backface-visibility: hidden; -webkit-backface-visibility: hidden;
+        background: var(--surface); border-radius: 20px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.1); border: 1px solid var(--border);
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        padding: 20px; text-align: center;
+    }
+    .fc-back { transform: rotateY(180deg); }
+    
+    .fc-word { font-size: 2.5rem; font-weight: 700; color: var(--primary); margin-bottom: 0; }
+    .fc-trans { font-size: 1.5rem; margin-bottom: 16px; color: var(--on-surface); }
+    .fc-ctx { font-style: italic; opacity: 0.8; font-size: 1rem; line-height: 1.5; }
+    .fc-hint { position: absolute; bottom: 20px; opacity: 0.4; font-size: 0.8rem; }
+
+    /* Bottom Controls */
+    .fc-bottom-controls {
+        padding: 24px; min-height: 100px; display: flex; align-items: center; justify-content: center;
+    }
+    .fc-ctrl-row { display: flex; align-items: center; gap: 24px; width: 100%; justify-content: center; }
+    
+    .fc-icon-btn {
+        width: 48px; height: 48px; border-radius: 50%; border: 1px solid var(--border);
+        background: var(--surface); color: var(--on-surface); cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        transition: all 0.2s;
+    }
+    .fc-icon-btn:active { transform: scale(0.95); }
+    .fc-icon-btn.active { color: var(--primary); border-color: var(--primary); background: rgba(25, 118, 210, 0.05); }
+    
+    .fc-play-btn {
+        width: 72px; height: 72px; border-radius: 50%; border: none;
+        background: var(--primary); color: white; cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        box-shadow: 0 4px 12px rgba(25, 118, 210, 0.3);
+        transition: transform 0.1s;
+    }
+    .fc-play-btn:active { transform: scale(0.95); }
+    .fc-play-btn span { font-size: 36px; }
+    
+    .fc-rate-btn {
+        width: 64px; height: 64px; border-radius: 50%; border: none; font-weight: 600; cursor: pointer;
+        font-size: 0.8rem; transition: transform 0.1s; display: flex; flex-direction: column;
+        align-items: center; justify-content: center; gap: 4px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    }
+    .fc-rate-btn:active { transform: scale(0.95); }
+    .fc-rate-btn.hard { background: #ffebee; color: #d32f2f; }
+    .fc-rate-btn.mid { background: #fff8e1; color: #f57c00; }
+    .fc-rate-btn.easy { background: #e8f5e9; color: #388e3c; }
+    
+    .fc-stats-grid { display: flex; gap: 30px; justify-content: center; margin: 30px 0; }
+    .stat-item { display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 1.2rem; font-weight: bold; }
 </style>
 
 
@@ -241,6 +349,90 @@
 <div class="mode-switch">
     <a href="/vocab?mode=words" class="mode-btn {% if mode != 'sentences' %}active{% endif %}">{{ ui.vocab_words }}</a>
     <a href="/vocab?mode=sentences" class="mode-btn {% if mode == 'sentences' %}active{% endif %}">{{ ui.vocab_sentences }}</a>
+</div>
+
+<!-- FLASHCARD PLAYER OVERLAY -->
+<div id="fc-overlay">
+    <button class="fc-close-btn" onclick="fcClose()">
+        <span class="material-symbols-outlined" style="font-size: 32px;">close</span>
+    </button>
+
+    <div class="fc-container">
+        <!-- Header / Toggle -->
+        <div class="fc-top-controls">
+             <div class="fc-mode-toggle">
+                <button class="fc-mode-opt active" id="btn-mode-study" onclick="fcSetMode('study')">Вивчення</button>
+                <button class="fc-mode-opt" id="btn-mode-review" onclick="fcSetMode('review')">Повторення</button>
+             </div>
+        </div>
+
+        <!-- Progress Bar (Review Only) -->
+        <div class="fc-progress-wrapper" id="fc-progress-wrapper" style="display:none;">
+            <div class="fc-progress-track">
+                <div class="fc-progress-fill" id="fc-progress-fill"></div>
+            </div>
+            <div class="fc-progress-text" id="fc-progress-text">0/0</div>
+        </div>
+
+        <!-- Card Area -->
+        <div class="fc-card-area">
+            <div class="fc-card" id="fc-card" onclick="fcHandleCardClick()" style="display: block;">
+                <div class="fc-face fc-front">
+                    <div class="level-badge" id="fc-level" style="position: absolute; top: 20px; left: 20px;">A1</div>
+                    <div class="fc-word" id="fc-front-text">Wort</div>
+                    <div class="fc-hint">Tap to flip</div>
+                </div>
+                <div class="fc-face fc-back">
+                    <div class="fc-trans" id="fc-back-trans">Word</div>
+                    <div class="fc-ctx" id="fc-back-ctx">Context...</div>
+                </div>
+            </div>
+            
+            <!-- Results View -->
+            <div id="fc-results" style="display:none; text-align:center; width:100%;">
+                <h2>Сесію завершено!</h2>
+                <div class="fc-stats-grid">
+                    <div class="stat-item" style="color:#4CAF50"><span class="material-symbols-outlined" style="font-size:32px;">sentiment_very_satisfied</span><span id="stat-easy">0</span></div>
+                    <div class="stat-item" style="color:#FFC107"><span class="material-symbols-outlined" style="font-size:32px;">sentiment_neutral</span><span id="stat-medium">0</span></div>
+                    <div class="stat-item" style="color:#F44336"><span class="material-symbols-outlined" style="font-size:32px;">sentiment_very_dissatisfied</span><span id="stat-hard">0</span></div>
+                </div>
+                <button class="btn-contained" onclick="startSession()" style="margin-top:20px;">Нова сесія</button>
+            </div>
+        </div>
+
+        <!-- Bottom Controls -->
+        <div class="fc-bottom-controls">
+            <!-- Study Controls -->
+            <div id="fc-controls-study" class="fc-ctrl-row">
+                <button class="fc-icon-btn active" onclick="fcToggleAudio()" id="fc-audio-btn-study"><span class="material-symbols-outlined">volume_up</span></button>
+                <button class="fc-play-btn" onclick="fcTogglePlay()" id="fc-play-btn"><span class="material-symbols-outlined">play_arrow</span></button>
+                <button class="fc-icon-btn" onclick="fcShuffle()"><span class="material-symbols-outlined">shuffle</span></button>
+            </div>
+
+            <!-- Review Controls (Pre-flip) -->
+            <div id="fc-controls-review-start" class="fc-ctrl-row" style="display:none;">
+                <button class="fc-icon-btn active" onclick="fcToggleAudio()" id="fc-audio-btn-review"><span class="material-symbols-outlined">volume_up</span></button>
+                <button class="fc-play-btn" onclick="fcTogglePlay()" id="fc-review-play-btn"><span class="material-symbols-outlined">play_arrow</span></button>
+                <button class="fc-icon-btn" onclick="fcShuffle()"><span class="material-symbols-outlined">shuffle</span></button>
+            </div>
+
+            <!-- Review Controls (Post-flip / Rating) -->
+            <div id="fc-controls-review-rate" class="fc-ctrl-row" style="display:none; gap:20px;">
+                <button class="fc-rate-btn hard" onclick="fcRate('hard')">
+                    <span class="material-symbols-outlined">sentiment_very_dissatisfied</span>
+                    Не знаю
+                </button>
+                <button class="fc-rate-btn mid" onclick="fcRate('medium')">
+                    <span class="material-symbols-outlined">sentiment_neutral</span>
+                    Так собі
+                </button>
+                <button class="fc-rate-btn easy" onclick="fcRate('easy')">
+                    <span class="material-symbols-outlined">sentiment_very_satisfied</span>
+                    Знаю
+                </button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <div id="vocab-container">
@@ -456,6 +648,277 @@ function handleCardEnter(card) {
         clearTimeout(card.flipTimeout);
         card.flipTimeout = null;
     }
+}
+
+// --- FLASHCARD LOGIC ---
+var fcQueue = [];
+var fcIndex = 0;
+var fcAudioEnabled = true;
+var fcMode = 'study'; // 'study' (default) or 'review'
+var fcIsPlaying = false; // For Study auto-play
+var fcIsPaused = true;   // For Review session state
+var fcStats = { easy: 0, medium: 0, hard: 0 };
+var fcLoopTimeout = null;
+
+async function startSession() {
+    // Get current filters from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const levels = urlParams.get('levels') || '';
+    const q = urlParams.get('q') || '';
+    
+    // If Study mode, fetch more words for "infinite" feel. If Review, use user setting.
+    const limit = fcMode === 'study' ? 500 : {{ current_user.vocab_session_size }};
+    
+    try {
+        const res = await fetch(`/api/vocab/session?levels=${levels}&q=${q}&limit=${limit}`);
+        const data = await res.json();
+        
+        if (data.length === 0) {
+            window.toast.show('No words found for this filter', 'info');
+            return;
+        }
+        
+        fcQueue = data;
+        fcIndex = 0;
+        fcStats = { easy: 0, medium: 0, hard: 0 };
+        fcIsPlaying = false;
+        fcIsPaused = true;
+        
+        document.getElementById('fc-overlay').style.display = 'flex';
+        document.getElementById('fc-results').style.display = 'none';
+        document.getElementById('fc-card').style.display = 'block';
+        
+        fcUpdateUI();
+        
+    } catch (e) {
+        console.error(e);
+        window.toast.show('Error starting session', 'error');
+    }
+}
+
+function fcRenderCard(flip = false) {
+    if (fcIndex >= fcQueue.length) return;
+    const item = fcQueue[fcIndex];
+    const card = document.getElementById('fc-card');
+    
+    // Reset State
+    if(flip) card.classList.add('flipped');
+    else card.classList.remove('flipped');
+    
+    // Fill Data
+    document.getElementById('fc-front-text').innerText = item.display;
+    document.getElementById('fc-level').innerText = item.level || '?';
+    document.getElementById('fc-level').className = `level-badge lvl-${(item.level||'a1').toLowerCase()}`;
+    
+    document.getElementById('fc-back-trans').innerText = item.trans;
+    
+    // Hide context in Study mode
+    if (fcMode === 'study') {
+        document.getElementById('fc-back-ctx').style.display = 'none';
+    } else {
+        document.getElementById('fc-back-ctx').style.display = 'block';
+        document.getElementById('fc-back-ctx').innerText = item.ctx;
+    }
+    
+    // Update Progress (Review only)
+    if (fcMode === 'review') {
+        document.getElementById('fc-progress-text').innerText = `${fcIndex + 1}/${fcQueue.length}`;
+        document.getElementById('fc-progress-fill').style.width = `${((fcIndex) / fcQueue.length) * 100}%`;
+    }
+}
+
+function fcUpdateUI() {
+    // Toggle Buttons
+    document.getElementById('btn-mode-study').classList.toggle('active', fcMode === 'study');
+    document.getElementById('btn-mode-review').classList.toggle('active', fcMode === 'review');
+    
+    // Progress Bar
+    document.getElementById('fc-progress-wrapper').style.display = fcMode === 'review' ? 'block' : 'none';
+    
+    // Bottom Controls
+    document.getElementById('fc-controls-study').style.display = 'none';
+    document.getElementById('fc-controls-review-start').style.display = 'none';
+    document.getElementById('fc-controls-review-rate').style.display = 'none';
+    
+    const card = document.getElementById('fc-card');
+    const isFlipped = card.classList.contains('flipped');
+
+    if (fcMode === 'study') {
+        document.getElementById('fc-controls-study').style.display = 'flex';
+        // Update Play Icon
+        const icon = document.querySelector('#fc-play-btn span');
+        icon.innerText = fcIsPlaying ? 'pause' : 'play_arrow';
+        
+        if (!fcIsPlaying) fcRenderCard(false); // Show front if stopped
+        
+    } else {
+        // Review Mode
+        if (isFlipped) {
+            document.getElementById('fc-controls-review-rate').style.display = 'flex';
+        } else {
+            document.getElementById('fc-controls-review-start').style.display = 'flex';
+            // Update Play/Pause Icon for Review
+            const icon = document.querySelector('#fc-review-play-btn span');
+            icon.innerText = fcIsPaused ? 'play_arrow' : 'pause';
+        }
+        fcRenderCard(isFlipped);
+    }
+}
+
+function playUrl(url) {
+    return new Promise(resolve => {
+        if (!url) { resolve(); return; }
+        if (currentAudio) currentAudio.pause();
+        currentAudio = new Audio(url);
+        currentAudio.onended = resolve;
+        currentAudio.onerror = resolve;
+        currentAudio.play().catch(resolve);
+    });
+}
+
+function fcSetMode(mode) {
+    if (fcMode === mode) return;
+    fcMode = mode;
+    // Reset session state when switching
+    fcIsPlaying = false;
+    fcIsPaused = true;
+    if(fcLoopTimeout) clearTimeout(fcLoopTimeout);
+    startSession(); // Restart with new mode settings
+}
+
+function fcTogglePlay() {
+    if (fcMode === 'study') {
+        fcIsPlaying = !fcIsPlaying;
+        fcUpdateUI();
+        if (fcIsPlaying) runStudyLoop();
+        else {
+            if(fcLoopTimeout) clearTimeout(fcLoopTimeout);
+            if(currentAudio) currentAudio.pause();
+        }
+    } else {
+        // Review Mode: Start/Pause session
+        fcIsPaused = !fcIsPaused;
+        fcUpdateUI();
+        if (!fcIsPaused) {
+            // If starting, play audio of current card
+            if(fcAudioEnabled && fcQueue[fcIndex].audio_de_url) playUrl(fcQueue[fcIndex].audio_de_url);
+        }
+    }
+}
+
+async function runStudyLoop() {
+    if (!fcIsPlaying) return;
+    
+    // 1. Show Front
+    fcRenderCard(false);
+    const item = fcQueue[fcIndex];
+    
+    // 2. Play Audio (Front)
+    if (fcAudioEnabled && item.audio_de_url) await playUrl(item.audio_de_url);
+    if (!fcIsPlaying) return;
+    
+    // 3. Wait 2s
+    await new Promise(r => fcLoopTimeout = setTimeout(r, 2000)); 
+    if (!fcIsPlaying) return;
+    
+    // 4. Flip
+    document.getElementById('fc-card').classList.add('flipped');
+    
+    // 5. Play Audio (Back - Trans only)
+    if (fcAudioEnabled && item.audio_trans_urls && item.audio_trans_urls.length > 0) {
+        for (const url of item.audio_trans_urls) {
+            if (!fcIsPlaying) break;
+            await playUrl(url);
+        }
+    }
+    if (!fcIsPlaying) return;
+    
+    // 6. Wait 3s (Increased from 2s)
+    await new Promise(r => fcLoopTimeout = setTimeout(r, 3000));
+    if (!fcIsPlaying) return;
+    
+    // 7. Next
+    fcIndex = (fcIndex + 1) % fcQueue.length; // Infinite loop
+    runStudyLoop();
+}
+
+function fcHandleCardClick() {
+    if (fcMode === 'study') return; // No manual flip in study mode (auto)
+    if (fcIsPaused) return; // Must be "Started" to interact
+    
+    // Review Mode: Flip
+    const card = document.getElementById('fc-card');
+    if (!card.classList.contains('flipped')) {
+        card.classList.add('flipped');
+        fcUpdateUI(); // Show rating buttons
+        
+        // Play translation audio sequence
+        if (fcAudioEnabled) {
+            const item = fcQueue[fcIndex];
+            if (item.audio_trans_urls && item.audio_trans_urls.length > 0) {
+                (async () => { for (const url of item.audio_trans_urls) await playUrl(url); })();
+            }
+        }
+    }
+}
+
+async function fcRate(rating) {
+    const item = fcQueue[fcIndex];
+    fcStats[rating]++;
+    
+    // Send update
+    fetch('/api/vocab/update_progress', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({id: item.id, rating: rating})
+    });
+    
+    // Next
+    fcIndex++;
+    if (fcIndex >= fcQueue.length) {
+        // End Session
+        document.getElementById('fc-card').style.display = 'none';
+        document.getElementById('fc-results').style.display = 'block';
+        document.getElementById('stat-easy').innerText = fcStats.easy;
+        document.getElementById('stat-medium').innerText = fcStats.medium;
+        document.getElementById('stat-hard').innerText = fcStats.hard;
+        
+        // Hide controls
+        document.getElementById('fc-controls-review-rate').style.display = 'none';
+        document.getElementById('fc-controls-review-start').style.display = 'none';
+        document.getElementById('fc-progress-wrapper').style.display = 'none';
+    } else {
+        fcRenderCard(false);
+        fcUpdateUI();
+        if (fcAudioEnabled && fcQueue[fcIndex].audio_de_url) playUrl(fcQueue[fcIndex].audio_de_url);
+    }
+}
+
+function fcToggleAudio() {
+    fcAudioEnabled = !fcAudioEnabled;
+    document.getElementById('fc-audio-btn-study').classList.toggle('active', fcAudioEnabled);
+    document.getElementById('fc-audio-btn-review').classList.toggle('active', fcAudioEnabled);
+}
+
+function fcShuffle() {
+    // Fisher-Yates shuffle
+    for (let i = fcQueue.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [fcQueue[i], fcQueue[j]] = [fcQueue[j], fcQueue[i]];
+    }
+    // If in Study mode, reset index to 0 to restart loop with new order
+    if (fcMode === 'study') fcIndex = 0;
+    // If in Review, maybe just shuffle remaining? But prompt says "shuffle all words in list".
+    // Let's just shuffle and rerender current
+    fcRenderCard(false);
+}
+
+function fcClose() {
+    fcIsPlaying = false;
+    fcIsPaused = true;
+    if(fcLoopTimeout) clearTimeout(fcLoopTimeout);
+    if(currentAudio) currentAudio.pause();
+    document.getElementById('fc-overlay').style.display = 'none';
 }
 </script>
 {% endblock %}
