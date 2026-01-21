@@ -12,9 +12,6 @@
         box-shadow: var(--shadow);
         transition: transform 0.2s;
     }
-    .sentence-card:hover {
-        transform: translateY(-2px);
-    }
     .sent-content {
         flex: 1;
     }
@@ -110,6 +107,7 @@
     <canvas id="player-canvas"></canvas>
     <button class="close-player-btn" onclick="closePlayer()">
         <span class="material-symbols-outlined" style="font-size: 32px;">close</span>
+        <div style="font-size: 0.9rem; font-weight: bold; opacity: 0.8; text-align: center; margin-top: 2px;">Esc</div>
     </button>
     
     <div class="player-content">
@@ -138,7 +136,7 @@
 
 <div class="vocab-wrapper list">
 <div class="play-all-container" style="text-align: left;">
-    <button class="btn-rect" onclick="openPlayer()">
+    <button class="btn-contained" onclick="openPlayer()" style="height: 36px; font-size: 0.85rem; background: var(--secondary); color: #000;">
         <span class="material-symbols-outlined">play_arrow</span>
         {{ ui.play_all }}
     </button>
@@ -215,6 +213,7 @@ function closePlayer() {
     stopAudio();
     pIsPlaying = false;
     if(pAnimId) cancelAnimationFrame(pAnimId);
+    if (document.activeElement) document.activeElement.blur(); // Remove focus from trigger button
 }
 
 function stopAudio() {
@@ -344,5 +343,20 @@ function startVisualizer() {
         pAnimId = requestAnimationFrame(animate);
     }
     animate();
+}
+
+// Esc key support
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && document.getElementById('player-splash').style.display === 'flex') {
+        closePlayer();
+    }
+});
+
+// Cleanup on navigation (HTMX)
+if (!window.favSentencesCleanup) {
+    window.favSentencesCleanup = function() {
+        if (typeof closePlayer === 'function') closePlayer();
+    };
+    document.body.addEventListener('htmx:before-swap', window.favSentencesCleanup);
 }
 </script>

@@ -148,6 +148,18 @@ UI_STRINGS = {
         'translation_failed_msg': 'Не вдалося отримати переклад',
         'audio_failed_msg': 'Не вдалося згенерувати аудіо',
         'word_exists': 'Слово вже є у словнику',
+        'fc_tap_to_flip': 'Натисніть, щоб перевернути',
+        'fc_press_space': 'або пробіл',
+        'fc_start_review': 'Почати',
+        'fc_review_mode': 'Повторення',
+        'fc_study_mode': 'Вивчення',
+        'fc_easy': 'Знаю',
+        'fc_medium': 'Так собі',
+        'fc_hard': 'Не знаю',
+        'fc_study_hint': 'Пробіл: Старт / Стоп • Стрілки: Навігація',
+        'fc_esc_hint': 'Esc',
+        'fc_session_complete': 'Сесію завершено!',
+        'fc_new_session': 'Нова сесія',
     },
     'eng': {
         'settings': 'Settings',
@@ -243,6 +255,18 @@ UI_STRINGS = {
         'translation_failed_msg': 'Failed to get translation',
         'audio_failed_msg': 'Failed to generate audio',
         'word_exists': 'Word already in vocabulary',
+        'fc_tap_to_flip': 'Tap to flip',
+        'fc_press_space': 'or press Space',
+        'fc_start_review': 'Start',
+        'fc_review_mode': 'Review',
+        'fc_study_mode': 'Study',
+        'fc_easy': 'Easy',
+        'fc_medium': 'Medium',
+        'fc_hard': 'Hard',
+        'fc_study_hint': 'Space: Start / Stop • Arrows: Navigation',
+        'fc_esc_hint': 'Esc',
+        'fc_session_complete': 'Session complete!',
+        'fc_new_session': 'New Session',
     }
 }
 
@@ -1229,10 +1253,43 @@ def quick_translate():
         conn.commit()
     return jsonify({"ok": True, "credits": new_bal})
 
+@app.route('/partials/vocab/edit_form/<wid>')
+@login_required
+def vocab_edit_form(wid):
+    lang = current_user.interface_language
+    col = 'ua' if lang == 'ukr' else 'en'
+    with get_db() as conn:
+        w = conn.execute(f'SELECT {col} FROM vocabulary WHERE id = ?', (wid,)).fetchone()
+        val = w[col] if w else ""
+    
+    # Return form for HTMX
+    # Also swap the edit buttons to "Save" icon (OOB swap)
+    return f'''
+    <form hx-post="/api/update_word" hx-target="this" hx-swap="outerHTML" style="display:block; width:100%;">
+        <input type="hidden" name="id" value="{wid}">
+        <div style="display:flex; align-items:center; width:100%;">
+            <input type="text" name="translation" value="{val}" maxlength="100" autocomplete="off"
+                   style="flex:1; width:100%; min-width:0; border:none; background:transparent; font:inherit; font-size:1.1rem; outline:none; padding:0; margin:0; color:inherit;"
+                   onkeydown="if(event.key==='Enter'){{ event.preventDefault(); htmx.trigger(this.form, 'submit'); }}"
+                   onblur="htmx.trigger(this.form, 'submit')"
+                   oninput="document.getElementById('cnt-{wid}').innerText = this.value.length + '/100'"
+                   autofocus
+                   onfocus="this.select()">
+            <span id="cnt-{wid}" style="font-size:0.75rem; opacity:0.5; margin-left:8px; white-space:nowrap; flex-shrink:0; user-select:none;">{len(val)}/100</span>
+        </div>
+    </form>
+    <button id="btn-edit-list-{wid}" hx-swap-oob="true" class="btn-text" style="color: var(--primary); opacity: 1;" onclick="document.querySelector('#trans-{wid} form').requestSubmit()">
+        <span class="material-symbols-outlined">check</span>
+    </button>
+    <button id="btn-edit-grid-{wid}" hx-swap-oob="true" class="btn-text" style="color: var(--primary); opacity: 1;" onclick="document.querySelector('#trans-{wid} form').requestSubmit()">
+        <span class="material-symbols-outlined">check</span>
+    </button>
+    '''
+
 @app.route('/api/update_word', methods=['POST'])
 @login_required
 def update_word():
-    req = request.json
+    req = request.json if request.is_json else request.form
     wid = req.get('id')
     new_trans = req.get('translation')
     
@@ -1247,6 +1304,25 @@ def update_word():
     with get_db() as conn:
         conn.execute(f'UPDATE vocabulary SET {col} = ? WHERE id = ? AND user_id = ?', (new_trans, wid, current_user.id))
         conn.commit()
+        
+    if is_htmx():
+        # Return text + button reset (OOB swap)
+        return f'''
+        {new_trans}
+        <button id="btn-edit-list-{wid}" hx-swap-oob="true" class="btn-text" style="color: var(--primary);"
+                hx-get="/partials/vocab/edit_form/{wid}"
+                hx-target="#trans-{wid}"
+                hx-swap="innerHTML">
+            <span class="material-symbols-outlined">edit</span>
+        </button>
+        <button id="btn-edit-grid-{wid}" hx-swap-oob="true" class="btn-text" style="color: var(--on-surface); opacity: 0.7;"
+                hx-get="/partials/vocab/edit_form/{wid}"
+                hx-target="#trans-{wid}"
+                hx-swap="innerHTML">
+            <span class="material-symbols-outlined">edit</span>
+        </button>
+        '''
+        
     return jsonify({"ok": True})
 
 @app.route('/vocab')
@@ -1421,12 +1497,13 @@ def vocab_update_progress():
         
         # SM-2 Logic (Modified per request)
         if rating == 'easy':
-            interval = interval * ease * 1.3
+            # Збільшуємо інтервал значно (наприклад, x1.3 * ease)
+            interval = interval * ease * 1.3 
             ease += 0.15
         elif rating == 'medium':
-            interval = interval * ease
-            # ease slightly decreases or stays same
-            ease -= 0.05
+            # Трохи збільшуємо, але штрафуємо ease
+            interval = interval * (ease - 0.5)
+            ease -= 0.15
         elif rating == 'hard':
             interval = 1.0
             ease = max(1.3, ease - 0.2)

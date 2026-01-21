@@ -50,7 +50,7 @@
                 <button class="btn-text list-audio-btn" onclick="playVocabPair({{ w.display | tojson | forceescape }}, {{ w.display_trans | tojson | forceescape }}, this)" style="padding:0; min-width:unset; color:var(--primary);">
                     <span class="material-symbols-outlined" style="font-size:18px;">volume_up</span>
                 </button>
-                <div>
+                <div style="flex: 1; min-width: 0;">
                     <span class="word-text" style="font-weight: 500; color: var(--primary); font-size: 1.1rem; cursor: pointer; text-decoration: none; text-decoration-style: none;" 
                           onclick="toggleCtx('{{w.id}}')">
                         {{ w.display }}
@@ -60,7 +60,10 @@
             </div>
             
             <div class="list-tools" style="display: flex; gap: 8px;">
-                <button class="btn-text" onclick="editWord('{{w.id}}', this)" style="color: var(--primary)">
+                <button id="btn-edit-list-{{w.id}}" class="btn-text" style="color: var(--primary)"
+                        hx-get="/partials/vocab/edit_form/{{w.id}}"
+                        hx-target="#trans-{{w.id}}"
+                        hx-swap="innerHTML">
                     <span class="material-symbols-outlined">edit</span>
                 </button>
                 <button class="btn-text" style="color: #D32F2F"
@@ -90,7 +93,10 @@
             <button class="btn-text" onclick="playVocabPair({{ w.display | tojson | forceescape }}, {{ w.display_trans | tojson | forceescape }}, this)" style="color: var(--primary);">
                 <span class="material-symbols-outlined">volume_up</span>
             </button>
-            <button class="btn-text" onclick="editWord('{{w.id}}', this)" style="color: var(--on-surface); opacity: 0.7;">
+            <button id="btn-edit-grid-{{w.id}}" class="btn-text" style="color: var(--on-surface); opacity: 0.7;"
+                    hx-get="/partials/vocab/edit_form/{{w.id}}"
+                    hx-target="#trans-{{w.id}}"
+                    hx-swap="innerHTML">
                 <span class="material-symbols-outlined">edit</span>
             </button>
             <button class="btn-text" style="color: #D32F2F; opacity: 0.8;"

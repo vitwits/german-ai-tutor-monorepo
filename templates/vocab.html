@@ -272,14 +272,14 @@
     /* Progress Bar */
     .fc-progress-wrapper { padding: 0 24px; margin-bottom: 10px; text-align: center; }
     .fc-progress-track {
-        height: 6px; background: rgba(0,0,0,0.1); border-radius: 3px; overflow: hidden; margin-bottom: 4px;
+        height: 12px; background: rgba(0,0,0,0.1); border-radius: 6px; overflow: hidden; margin-bottom: 4px;
     }
     .fc-progress-fill { height: 100%; background: var(--primary); width: 0%; transition: width 0.3s; }
     .fc-progress-text { font-size: 0.8rem; opacity: 0.6; }
 
     /* Card */
     .fc-card-area {
-        flex: 1; display: flex; align-items: center; justify-content: center;
+        flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
         perspective: 1000px; padding: 20px; position: relative;
     }
     .fc-card {
@@ -299,9 +299,10 @@
     }
     .fc-back { transform: rotateY(180deg); }
     
-    .fc-word { font-size: 2.5rem; font-weight: 700; color: var(--primary); margin-bottom: 0; }
-    .fc-trans { font-size: 1.5rem; margin-bottom: 16px; color: var(--on-surface); }
-    .fc-ctx { font-style: italic; opacity: 0.8; font-size: 1rem; line-height: 1.5; }
+    .fc-word { font-size: 2.5rem; font-weight: 700; color: var(--on-surface); margin-bottom: 10px; }
+    /* Змінено стиль перекладу та контексту */
+    .fc-trans { font-size: 2rem; margin-bottom: 20px; color: var(--primary); font-weight: 600; }
+    .fc-ctx { font-style: italic; opacity: 0.9; font-size: 1.3rem; line-height: 1.5; color: var(--on-surface); }
     .fc-hint { position: absolute; bottom: 20px; opacity: 0.4; font-size: 0.8rem; }
 
     /* Bottom Controls */
@@ -330,18 +331,38 @@
     .fc-play-btn span { font-size: 36px; }
     
     .fc-rate-btn {
-        width: 64px; height: 64px; border-radius: 50%; border: none; font-weight: 600; cursor: pointer;
-        font-size: 0.8rem; transition: transform 0.1s; display: flex; flex-direction: column;
+        width: 80px; height: 80px; border-radius: 50%; border: none; font-weight: 600; cursor: pointer;
+        font-size: 0.9rem; transition: transform 0.1s; display: flex; flex-direction: column;
         align-items: center; justify-content: center; gap: 4px;
         box-shadow: 0 4px 10px rgba(0,0,0,0.1);
     }
     .fc-rate-btn:active { transform: scale(0.95); }
-    .fc-rate-btn.hard { background: #ffebee; color: #d32f2f; }
-    .fc-rate-btn.mid { background: #fff8e1; color: #f57c00; }
-    .fc-rate-btn.easy { background: #e8f5e9; color: #388e3c; }
+    .fc-rate-btn.hard { background: #FF5252; color: white; }
+    .fc-rate-btn.mid { background: #FFC107; color: #333; }
+    .fc-rate-btn.easy { background: #4CAF50; color: white; }
+    
+    .kb-hint { font-size: 0.7rem; opacity: 0.6; margin-top: 4px; font-weight: normal; }
     
     .fc-stats-grid { display: flex; gap: 30px; justify-content: center; margin: 30px 0; }
     .stat-item { display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 1.2rem; font-weight: bold; }
+
+    /* Start Overlay for Review Mode */
+    .fc-start-overlay {
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        z-index: 10;
+    }
+    .fc-start-btn {
+        width: 120px; height: 120px; border-radius: 50%; background: var(--primary);
+        color: white; border: none; cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        box-shadow: 0 8px 20px rgba(25, 118, 210, 0.4);
+        transition: transform 0.2s;
+    }
+    .fc-start-btn:active { transform: scale(0.95); }
+    .fc-start-btn span { font-size: 64px; }
+
+    .fc-study-hint-text { text-align: center; margin-top: 10px; font-weight: 500; opacity: 0.7; font-size: 0.9rem; color: var(--on-surface); }
 </style>
 
 
@@ -355,14 +376,15 @@
 <div id="fc-overlay">
     <button class="fc-close-btn" onclick="fcClose()">
         <span class="material-symbols-outlined" style="font-size: 32px;">close</span>
+        <div style="font-size: 0.9rem; font-weight: bold; opacity: 0.8; text-align: center; margin-top: 2px;">Esc</div>
     </button>
 
     <div class="fc-container">
         <!-- Header / Toggle -->
         <div class="fc-top-controls">
              <div class="fc-mode-toggle">
-                <button class="fc-mode-opt active" id="btn-mode-study" onclick="fcSetMode('study')">Вивчення</button>
-                <button class="fc-mode-opt" id="btn-mode-review" onclick="fcSetMode('review')">Повторення</button>
+                <button class="fc-mode-opt active" id="btn-mode-study" onclick="fcSetMode('study')">{{ ui.fc_study_mode }}</button>
+                <button class="fc-mode-opt" id="btn-mode-review" onclick="fcSetMode('review')">{{ ui.fc_review_mode }}</button>
              </div>
         </div>
 
@@ -376,11 +398,19 @@
 
         <!-- Card Area -->
         <div class="fc-card-area">
-            <div class="fc-card" id="fc-card" onclick="fcHandleCardClick()" style="display: block;">
+            <!-- Start Button for Review Mode -->
+            <div id="fc-review-start-overlay" class="fc-start-overlay" style="display: none;">
+                <button class="fc-start-btn" onclick="fcStartReview()">
+                    <span class="material-symbols-outlined">play_arrow</span>
+                </button>
+                <div style="margin-top: 24px; opacity: 0.8; font-weight: 500; font-size: 1.2rem;">{{ ui.fc_start_review }}</div>
+            </div>
+
+            <div class="fc-card" id="fc-card" onclick="fcHandleCardClick()" style="display: block;"> <!-- Hidden via JS in review init -->
                 <div class="fc-face fc-front">
                     <div class="level-badge" id="fc-level" style="position: absolute; top: 20px; left: 20px;">A1</div>
                     <div class="fc-word" id="fc-front-text">Wort</div>
-                    <div class="fc-hint">Tap to flip</div>
+                    <div class="fc-hint" id="fc-front-hint">{{ ui.fc_tap_to_flip }} {{ ui.fc_press_space }}</div>
                 </div>
                 <div class="fc-face fc-back">
                     <div class="fc-trans" id="fc-back-trans">Word</div>
@@ -388,15 +418,19 @@
                 </div>
             </div>
             
+            <div id="fc-study-hint-container" class="fc-study-hint-text" style="display: none;">
+                {{ ui.fc_study_hint }}
+            </div>
+
             <!-- Results View -->
             <div id="fc-results" style="display:none; text-align:center; width:100%;">
-                <h2>Сесію завершено!</h2>
+                <h2>{{ ui.fc_session_complete }}</h2>
                 <div class="fc-stats-grid">
                     <div class="stat-item" style="color:#4CAF50"><span class="material-symbols-outlined" style="font-size:32px;">sentiment_very_satisfied</span><span id="stat-easy">0</span></div>
                     <div class="stat-item" style="color:#FFC107"><span class="material-symbols-outlined" style="font-size:32px;">sentiment_neutral</span><span id="stat-medium">0</span></div>
                     <div class="stat-item" style="color:#F44336"><span class="material-symbols-outlined" style="font-size:32px;">sentiment_very_dissatisfied</span><span id="stat-hard">0</span></div>
                 </div>
-                <button class="btn-contained" onclick="startSession()" style="margin-top:20px;">Нова сесія</button>
+                <button class="btn-contained" onclick="startSession()" style="margin-top:20px;">{{ ui.fc_new_session }}</button>
             </div>
         </div>
 
@@ -406,29 +440,32 @@
             <div id="fc-controls-study" class="fc-ctrl-row">
                 <button class="fc-icon-btn active" onclick="fcToggleAudio()" id="fc-audio-btn-study"><span class="material-symbols-outlined">volume_up</span></button>
                 <button class="fc-play-btn" onclick="fcTogglePlay()" id="fc-play-btn"><span class="material-symbols-outlined">play_arrow</span></button>
-                <button class="fc-icon-btn" onclick="fcShuffle()"><span class="material-symbols-outlined">shuffle</span></button>
+                <button class="fc-icon-btn" onclick="fcToggleShuffle()" id="fc-shuffle-btn-study"><span class="material-symbols-outlined">shuffle</span></button>
             </div>
 
             <!-- Review Controls (Pre-flip) -->
             <div id="fc-controls-review-start" class="fc-ctrl-row" style="display:none;">
                 <button class="fc-icon-btn active" onclick="fcToggleAudio()" id="fc-audio-btn-review"><span class="material-symbols-outlined">volume_up</span></button>
-                <button class="fc-play-btn" onclick="fcTogglePlay()" id="fc-review-play-btn"><span class="material-symbols-outlined">play_arrow</span></button>
-                <button class="fc-icon-btn" onclick="fcShuffle()"><span class="material-symbols-outlined">shuffle</span></button>
+                <!-- Removed Play/Pause button for Review Mode as requested -->
+                <button class="fc-icon-btn" onclick="fcToggleShuffle()" id="fc-shuffle-btn-review"><span class="material-symbols-outlined">shuffle</span></button>
             </div>
 
             <!-- Review Controls (Post-flip / Rating) -->
             <div id="fc-controls-review-rate" class="fc-ctrl-row" style="display:none; gap:20px;">
                 <button class="fc-rate-btn hard" onclick="fcRate('hard')">
                     <span class="material-symbols-outlined">sentiment_very_dissatisfied</span>
-                    Не знаю
+                    {{ ui.fc_hard }}
+                    <span class="kb-hint">[1]</span>
                 </button>
                 <button class="fc-rate-btn mid" onclick="fcRate('medium')">
                     <span class="material-symbols-outlined">sentiment_neutral</span>
-                    Так собі
+                    {{ ui.fc_medium }}
+                    <span class="kb-hint">[2]</span>
                 </button>
                 <button class="fc-rate-btn easy" onclick="fcRate('easy')">
                     <span class="material-symbols-outlined">sentiment_very_satisfied</span>
-                    Знаю
+                    {{ ui.fc_easy }}
+                    <span class="kb-hint">[3]</span>
                 </button>
             </div>
         </div>
@@ -531,92 +568,6 @@ async function playSentencePair(path1, path2, btn) {
     currentSentenceAudio = null;
 }
 
-async function editWord(id, btn) {
-    const container = document.getElementById('trans-' + id);
-    // Перевірка, чи ми вже не в режимі редагування
-    if (container.querySelector('input')) return;
-
-    const currentText = container.innerText;
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.value = currentText;
-    input.maxLength = 100;
-    
-    // Стилі для "безшовного" редагування
-    input.style.width = '100%';
-    input.style.border = 'none';
-    input.style.borderBottom = '2px solid var(--primary)'; // Індикатор редагування
-    input.style.background = 'transparent';
-    input.style.color = 'inherit';
-    input.style.font = 'inherit';
-    input.style.outline = 'none';
-    input.style.padding = '0';
-
-    // --- UI: Зміна іконки на збереження ---
-    let iconSpan = null;
-    let originalOnClick = null;
-    
-    if (btn) {
-        iconSpan = btn.querySelector('.material-symbols-outlined');
-        if (iconSpan) iconSpan.innerText = 'check'; // Іконка галочки
-        
-        originalOnClick = btn.onclick;
-        // Запобігаємо втраті фокусу при кліку на кнопку, щоб обробити клік вручну
-        btn.onmousedown = (e) => e.preventDefault();
-        btn.onclick = () => finish(true);
-    }
-
-    container.innerHTML = '';
-    container.appendChild(input);
-    input.focus();
-
-    let isFinished = false;
-
-    const finish = async (shouldSave) => {
-        if (isFinished) return;
-        isFinished = true;
-
-        // Відновлення UI
-        if (btn) {
-            if (iconSpan) iconSpan.innerText = 'edit';
-            btn.onmousedown = null;
-            btn.onclick = originalOnClick;
-        }
-
-        const newText = input.value.trim();
-        
-        if (!shouldSave || !newText || newText === currentText) {
-            container.innerText = currentText;
-            return;
-        }
-        
-        container.innerText = newText;
-        try {
-            await fetch('/api/update_word', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id: id, translation: newText})});
-        } catch (e) {
-            container.innerText = currentText;
-            alert('{{ ui.error_alert }}');
-        }
-    };
-
-    input.onkeydown = (e) => {
-        if (e.key === 'Enter') input.blur(); // Викличе finish(true) через onblur
-        if (e.key === 'Escape') {
-            finish(false);
-        }
-    };
-    input.onblur = () => finish(true);
-}
-
-async function toggleFav(id, btn) {
-    const res = await fetch('/api/toggle_fav', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id: id})});
-    if(res.ok) {
-        const icon = btn.querySelector('.material-symbols-outlined');
-        icon.classList.toggle('filled');
-        btn.style.color = icon.classList.contains('filled') ? "#FFC107" : "var(--border)";
-    }
-}
-
 function toggleCtx(id) {
     const el = document.getElementById('ctx-' + id);
     el.style.display = el.style.display === 'none' ? 'block' : 'none';
@@ -652,11 +603,13 @@ function handleCardEnter(card) {
 
 // --- FLASHCARD LOGIC ---
 var fcQueue = [];
+var fcOriginalQueue = []; // To store original order
 var fcIndex = 0;
 var fcAudioEnabled = true;
+var fcIsRandom = false;
 var fcMode = 'study'; // 'study' (default) or 'review'
 var fcIsPlaying = false; // For Study auto-play
-var fcIsPaused = true;   // For Review session state
+var fcReviewStarted = false; // New state for Review mode
 var fcStats = { easy: 0, medium: 0, hard: 0 };
 var fcLoopTimeout = null;
 
@@ -679,10 +632,12 @@ async function startSession() {
         }
         
         fcQueue = data;
+        fcOriginalQueue = [...data]; // Copy
         fcIndex = 0;
         fcStats = { easy: 0, medium: 0, hard: 0 };
         fcIsPlaying = false;
-        fcIsPaused = true;
+        fcReviewStarted = false;
+        fcIsRandom = false; // Reset random state on new session
         
         document.getElementById('fc-overlay').style.display = 'flex';
         document.getElementById('fc-results').style.display = 'none';
@@ -732,6 +687,9 @@ function fcUpdateUI() {
     document.getElementById('btn-mode-study').classList.toggle('active', fcMode === 'study');
     document.getElementById('btn-mode-review').classList.toggle('active', fcMode === 'review');
     
+    document.getElementById('fc-shuffle-btn-study').classList.toggle('active', fcIsRandom);
+    document.getElementById('fc-shuffle-btn-review').classList.toggle('active', fcIsRandom);
+    
     // Progress Bar
     document.getElementById('fc-progress-wrapper').style.display = fcMode === 'review' ? 'block' : 'none';
     
@@ -740,10 +698,20 @@ function fcUpdateUI() {
     document.getElementById('fc-controls-review-start').style.display = 'none';
     document.getElementById('fc-controls-review-rate').style.display = 'none';
     
+    // Hints visibility
+    document.getElementById('fc-front-hint').style.display = fcMode === 'study' ? 'none' : 'block';
+    document.getElementById('fc-study-hint-container').style.display = fcMode === 'study' ? 'block' : 'none';
+
+    // Start Overlay
+    const showStartOverlay = (fcMode === 'review' && !fcReviewStarted);
+    document.getElementById('fc-review-start-overlay').style.display = showStartOverlay ? 'flex' : 'none';
+    document.getElementById('fc-card').style.display = showStartOverlay ? 'none' : 'block';
+
     const card = document.getElementById('fc-card');
     const isFlipped = card.classList.contains('flipped');
 
     if (fcMode === 'study') {
+        // Study Mode Controls
         document.getElementById('fc-controls-study').style.display = 'flex';
         // Update Play Icon
         const icon = document.querySelector('#fc-play-btn span');
@@ -751,15 +719,12 @@ function fcUpdateUI() {
         
         if (!fcIsPlaying) fcRenderCard(false); // Show front if stopped
         
-    } else {
-        // Review Mode
+    } else if (fcReviewStarted) {
+        // Review Mode (Active)
         if (isFlipped) {
             document.getElementById('fc-controls-review-rate').style.display = 'flex';
         } else {
             document.getElementById('fc-controls-review-start').style.display = 'flex';
-            // Update Play/Pause Icon for Review
-            const icon = document.querySelector('#fc-review-play-btn span');
-            icon.innerText = fcIsPaused ? 'play_arrow' : 'pause';
         }
         fcRenderCard(isFlipped);
     }
@@ -779,10 +744,16 @@ function playUrl(url) {
 function fcSetMode(mode) {
     if (fcMode === mode) return;
     fcMode = mode;
-    // Reset session state when switching
+    
+    // Reset states
     fcIsPlaying = false;
-    fcIsPaused = true;
+    fcReviewStarted = false;
     if(fcLoopTimeout) clearTimeout(fcLoopTimeout);
+    
+    // Reset queue to original order when switching modes to avoid confusion
+    fcIsRandom = false;
+    fcQueue = [...fcOriginalQueue];
+    
     startSession(); // Restart with new mode settings
 }
 
@@ -795,15 +766,46 @@ function fcTogglePlay() {
             if(fcLoopTimeout) clearTimeout(fcLoopTimeout);
             if(currentAudio) currentAudio.pause();
         }
-    } else {
-        // Review Mode: Start/Pause session
-        fcIsPaused = !fcIsPaused;
-        fcUpdateUI();
-        if (!fcIsPaused) {
-            // If starting, play audio of current card
-            if(fcAudioEnabled && fcQueue[fcIndex].audio_de_url) playUrl(fcQueue[fcIndex].audio_de_url);
-        }
     }
+}
+
+function fcNext() {
+    if(fcLoopTimeout) clearTimeout(fcLoopTimeout);
+    if(currentAudio) currentAudio.pause();
+    
+    fcIndex = (fcIndex + 1) % fcQueue.length;
+    
+    if (fcMode === 'study') {
+        fcIsPlaying = true; // Force play
+        fcUpdateUI();
+        runStudyLoop();
+    } else {
+        fcRenderCard(false);
+        fcUpdateUI();
+    }
+}
+
+function fcPrev() {
+    if(fcLoopTimeout) clearTimeout(fcLoopTimeout);
+    if(currentAudio) currentAudio.pause();
+    
+    fcIndex = (fcIndex - 1 + fcQueue.length) % fcQueue.length;
+    
+    if (fcMode === 'study') {
+        fcIsPlaying = true; // Force play
+        fcUpdateUI();
+        runStudyLoop();
+    } else {
+        fcRenderCard(false);
+        fcUpdateUI();
+    }
+}
+
+function fcStartReview() {
+    fcReviewStarted = true;
+    fcUpdateUI();
+    // Play audio of first card
+    if(fcAudioEnabled && fcQueue[fcIndex].audio_de_url) playUrl(fcQueue[fcIndex].audio_de_url);
 }
 
 async function runStudyLoop() {
@@ -844,8 +846,8 @@ async function runStudyLoop() {
 
 function fcHandleCardClick() {
     if (fcMode === 'study') return; // No manual flip in study mode (auto)
-    if (fcIsPaused) return; // Must be "Started" to interact
-    
+    if (!fcReviewStarted) return;   // Must be started
+
     // Review Mode: Flip
     const card = document.getElementById('fc-card');
     if (!card.classList.contains('flipped')) {
@@ -900,25 +902,74 @@ function fcToggleAudio() {
     document.getElementById('fc-audio-btn-review').classList.toggle('active', fcAudioEnabled);
 }
 
-function fcShuffle() {
-    // Fisher-Yates shuffle
-    for (let i = fcQueue.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [fcQueue[i], fcQueue[j]] = [fcQueue[j], fcQueue[i]];
+function fcToggleShuffle() {
+    fcIsRandom = !fcIsRandom;
+    
+    if (fcIsRandom) {
+        // Shuffle
+        // Fisher-Yates shuffle
+        for (let i = fcQueue.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [fcQueue[i], fcQueue[j]] = [fcQueue[j], fcQueue[i]];
+        }
+    } else {
+        // Restore original order
+        fcQueue = [...fcOriginalQueue];
     }
-    // If in Study mode, reset index to 0 to restart loop with new order
-    if (fcMode === 'study') fcIndex = 0;
-    // If in Review, maybe just shuffle remaining? But prompt says "shuffle all words in list".
-    // Let's just shuffle and rerender current
+    
+    // Reset index to 0 to avoid out of bounds or confusion
+    fcIndex = 0;
+    
     fcRenderCard(false);
+    fcUpdateUI();
 }
 
 function fcClose() {
     fcIsPlaying = false;
-    fcIsPaused = true;
+    fcReviewStarted = false;
     if(fcLoopTimeout) clearTimeout(fcLoopTimeout);
     if(currentAudio) currentAudio.pause();
     document.getElementById('fc-overlay').style.display = 'none';
+    if (document.activeElement) document.activeElement.blur(); // Remove focus from trigger button
 }
+
+// Keyboard Shortcuts
+document.addEventListener('keydown', function(e) {
+    if (document.getElementById('fc-overlay').style.display !== 'flex') return;
+
+    if (e.key === 'Escape') {
+        fcClose();
+        return;
+    }
+
+    if (fcMode === 'review') {
+        if (!fcReviewStarted) {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                fcStartReview();
+            }
+            return;
+        }
+        
+        const card = document.getElementById('fc-card');
+        const isFlipped = card.classList.contains('flipped');
+        
+        if (e.code === 'Space') {
+            e.preventDefault();
+            if (!isFlipped) fcHandleCardClick();
+        } else if (isFlipped) {
+            if (e.key === '1' || e.key === 'ArrowLeft') fcRate('hard');
+            if (e.key === '2' || e.key === 'ArrowDown') fcRate('medium');
+            if (e.key === '3' || e.key === 'ArrowRight') fcRate('easy');
+        }
+    } else if (fcMode === 'study') {
+        if (e.code === 'Space') {
+            e.preventDefault();
+            fcTogglePlay();
+        }
+        if (e.key === 'ArrowRight') fcNext();
+        if (e.key === 'ArrowLeft') fcPrev();
+    }
+});
 </script>
 {% endblock %}
