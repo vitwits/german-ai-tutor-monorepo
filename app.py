@@ -1074,6 +1074,7 @@ def quick_translate():
     req = request.json
     original_text = req.get('text', '').strip()
     text_id = req.get('tid')
+    start_char_index = req.get('start_char_index') # Get the new field
 
     if not original_text:
         return jsonify({"error": "Empty text"}), 400
@@ -1185,9 +1186,20 @@ def quick_translate():
     full_sentence = req['ctx']
     word_to_store_and_highlight = text_for_translation # Використовуємо валідний текст
     
-    start_index = full_sentence.find(word_to_store_and_highlight)
-    end_index = start_index + len(word_to_store_and_highlight)
+    # --- REVISED INDEXING LOGIC ---
+    start_index = -1
+    if start_char_index is not None:
+        # Search for the word starting from the index provided by the frontend.
+        # This is much more reliable. We search from a bit before the reported index
+        # to account for any minor discrepancies in whitespace handling between JS and Python.
+        search_start = max(0, start_char_index - 5)
+        start_index = full_sentence.find(word_to_store_and_highlight, search_start)
+
+    # Fallback to the old (less reliable) method if the new one fails for any reason
+    if start_index == -1:
+        start_index = full_sentence.find(word_to_store_and_highlight)
     
+    end_index = start_index + len(word_to_store_and_highlight) if start_index != -1 else -1
     sentence_index = req.get('sent_idx', 0)
     
     with get_db() as conn:

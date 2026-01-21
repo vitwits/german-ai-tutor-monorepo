@@ -364,6 +364,26 @@ var vocabAudioQueue = [];
 var isPlayingVocab = false;
 var vocabData = {{ vocab | tojson }};
 var vocabMap = {};
+
+/**
+ * Calculates the character offset of a node and offset within a container.
+ * This is used to find the absolute character position of a selection
+ * within the plain text content of a larger element.
+ * @param {Node} container - The parent element (e.g., the .de-text span).
+ * @param {Node} node - The text node where the selection starts.
+ * @param {number} offset - The character offset within that text node.
+ * @returns {number} The absolute character offset from the start of the container's text content.
+ */
+function getCharOffset(container, node, offset) {
+    let charCount = 0;
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
+    let currentNode;
+    while (currentNode = walker.nextNode()) {
+        if (currentNode === node) return charCount + offset;
+        charCount += currentNode.length;
+    }
+    return -1; // Should not happen if node is within container
+}
 vocabData.forEach(v => vocabMap[v.id] = v);
 
 // --- QUIZ LOGIC ---
@@ -919,6 +939,10 @@ window.handleViewMouseUp = (e) => {
     if(selText && selText.length < 50 && sentenceDiv && textSpan && textSpan.contains(selection.anchorNode)) {
         const sentIdx = sentenceDiv.getAttribute('data-index');
         
+        // --- NEW: Calculate precise start index ---
+        const range = selection.getRangeAt(0);
+        const startCharIndex = getCharOffset(textSpan, range.startContainer, range.startOffset);
+
         if(pop) pop.style.display = 'block';
         if(pop) pop.style.left = e.pageX + 'px';
         if(pop) pop.style.top = (e.pageY - 45) + 'px';
@@ -935,7 +959,8 @@ window.handleViewMouseUp = (e) => {
                         text: selText, 
                         ctx: textSpan.innerText, 
                         tid: '{{text.id}}',
-                        sent_idx: sentIdx
+                        sent_idx: sentIdx,
+                        start_char_index: startCharIndex // Pass the precise index
                     })
                 });
                 
