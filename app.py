@@ -1300,6 +1300,12 @@ def vocab():
     # Search logic
     q = request.args.get('q', '').strip()
     
+    # --- Level Filter Logic ---
+    levels_arg = request.args.get('levels')
+    selected_levels = levels_arg.split(',') if levels_arg else []
+    valid_levels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']
+    selected_levels = [l for l in selected_levels if l in valid_levels]
+    
     query_base = 'FROM vocabulary WHERE user_id = ? AND is_favorite = 1'
     params = [current_user.id]
     
@@ -1307,6 +1313,11 @@ def vocab():
         query_base += ' AND (display LIKE ? OR ua LIKE ? OR en LIKE ?)'
         search_term = f'%{q}%'
         params.extend([search_term, search_term, search_term])
+    
+    if selected_levels:
+        placeholders = ','.join(['?'] * len(selected_levels))
+        query_base += f' AND level IN ({placeholders})'
+        params.extend(selected_levels)
         
     query_count = f'SELECT COUNT(*) {query_base}'
     query_rows = f'SELECT * {query_base} ORDER BY rowid DESC LIMIT ? OFFSET ?'
@@ -1323,9 +1334,9 @@ def vocab():
         words.append(w)
         
     if is_htmx() and request.headers.get('HX-Target') == 'vocab-container':
-        return render_template('partials/vocab_list.html', words=words, page=page, per_page=per_page, total_pages=total_pages, view_mode=view_mode, q=q)
+        return render_template('partials/vocab_list.html', words=words, page=page, per_page=per_page, total_pages=total_pages, view_mode=view_mode, q=q, selected_levels=selected_levels, mode=mode)
         
-    return render_template('vocab.html', mode='words', words=words, page=page, per_page=per_page, total_pages=total_pages, view_mode=view_mode, q=q)
+    return render_template('vocab.html', mode='words', words=words, page=page, per_page=per_page, total_pages=total_pages, view_mode=view_mode, q=q, selected_levels=selected_levels)
 
 @app.route('/api/toggle_fav', methods=['POST'])
 @login_required

@@ -206,6 +206,34 @@
     .mode-btn.active {
         background: var(--primary); color: var(--on-primary); opacity: 1; box-shadow: 0 2px 8px rgba(0,0,0,0.2);
     }
+
+    /* Level Filter Styles (Same as Library) */
+    .lvl-filter {
+        width: 32px; height: 32px;
+        display: flex; align-items: center; justify-content: center;
+        border-radius: 6px; font-size: 0.8rem; font-weight: 600;
+        cursor: pointer; border: 1px solid var(--border);
+        background: var(--surface); color: var(--on-surface);
+        opacity: 0.6; transition: all 0.2s;
+        text-decoration: none !important;
+    }
+    .lvl-filter:hover { opacity: 1; transform: translateY(-1px); }
+    .lvl-filter.active { opacity: 1; color: white; border-color: transparent; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+    
+    .lvl-filter.active[data-lvl="A1"] { background-color: #8BC34A; }
+    .lvl-filter.active[data-lvl="A2"] { background-color: #4CAF50; }
+    .lvl-filter.active[data-lvl="B1"] { background-color: #29B6F6; }
+    .lvl-filter.active[data-lvl="B2"] { background-color: #1976D2; }
+    .lvl-filter.active[data-lvl="C1"] { background-color: #D32F2F; }
+    .lvl-filter.active[data-lvl="C2"] { background-color: #311B92; }
+
+    /* Level Strip for List View */
+    .vocab-wrapper.list .vocab-item.lvl-strip-a1 { border-left: 10px solid #8BC34A; }
+    .vocab-wrapper.list .vocab-item.lvl-strip-a2 { border-left: 10px solid #4CAF50; }
+    .vocab-wrapper.list .vocab-item.lvl-strip-b1 { border-left: 10px solid #29B6F6; }
+    .vocab-wrapper.list .vocab-item.lvl-strip-b2 { border-left: 10px solid #1976D2; }
+    .vocab-wrapper.list .vocab-item.lvl-strip-c1 { border-left: 10px solid #D32F2F; }
+    .vocab-wrapper.list .vocab-item.lvl-strip-c2 { border-left: 10px solid #311B92; }
 </style>
 
 
@@ -214,15 +242,6 @@
     <a href="/vocab?mode=words" class="mode-btn {% if mode != 'sentences' %}active{% endif %}">{{ ui.vocab_words }}</a>
     <a href="/vocab?mode=sentences" class="mode-btn {% if mode == 'sentences' %}active{% endif %}">{{ ui.vocab_sentences }}</a>
 </div>
-
-{% if mode != 'sentences' %}
-<div style="display: flex; justify-content: flex-end; align-items: center; margin-bottom: 20px;">
-    <div style="display: flex; gap: 4px;">
-        <a href="?view=list&page={{page}}" class="view-btn {% if view_mode == 'list' %}active{% endif %}"><span class="material-symbols-outlined">view_list</span></a>
-        <a href="?view=grid&page={{page}}" class="view-btn {% if view_mode == 'grid' %}active{% endif %}"><span class="material-symbols-outlined">grid_view</span></a>
-    </div>
-</div>
-{% endif %}
 
 <div id="vocab-container">
     {% if mode == 'sentences' %}

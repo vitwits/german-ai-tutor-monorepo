@@ -1,6 +1,36 @@
+<div style="display: flex; justify-content: flex-end; align-items: center; margin-bottom: 20px; gap: 12px;">
+    <!-- Level Filters -->
+    <div style="display: flex; gap: 4px;">
+        {% for l in ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'] %}
+            {% set new_levels = [] %}
+            {% if l in selected_levels %}
+                {% for x in selected_levels %}{% if x != l %}{% set _ = new_levels.append(x) %}{% endif %}{% endfor %}
+            {% else %}
+                {% for x in selected_levels %}{% set _ = new_levels.append(x) %}{% endfor %}
+                {% set _ = new_levels.append(l) %}
+            {% endif %}
+            
+            {% set lvl_url = '/vocab?page=1&view=' + view_mode + '&q=' + q + '&levels=' + new_levels|join(',') %}
+            
+            <button hx-get="{{ lvl_url }}" 
+                    hx-target="#vocab-container"
+                    class="lvl-filter {% if l in selected_levels %}active{% endif %}" 
+                    data-lvl="{{l}}">
+                {{l}}
+            </button>
+        {% endfor %}
+    </div>
+
+    <!-- View buttons -->
+    <div style="display: flex; gap: 4px;">
+        <button hx-get="?view=list&page={{page}}&q={{q}}&levels={{selected_levels|join(',')}}" hx-target="#vocab-container" class="view-btn {% if view_mode == 'list' %}active{% endif %}"><span class="material-symbols-outlined">view_list</span></button>
+        <button hx-get="?view=grid&page={{page}}&q={{q}}&levels={{selected_levels|join(',')}}" hx-target="#vocab-container" class="view-btn {% if view_mode == 'grid' %}active{% endif %}"><span class="material-symbols-outlined">grid_view</span></button>
+    </div>
+</div>
+
 <div class="vocab-wrapper {{ view_mode }}" id="vocab-content">
     {% for w in words %}
-    <div class="vocab-item" onclick="handleCardClick(event, this)" onmouseleave="handleCardLeave(this)" onmouseenter="handleCardEnter(this)">
+    <div class="vocab-item {% if w.level %}lvl-strip-{{ w.level|lower }}{% endif %}" onclick="handleCardClick(event, this)" onmouseleave="handleCardLeave(this)" onmouseenter="handleCardEnter(this)">
         <div class="vocab-card-inner">
         <!-- FRONT -->
         <div class="vocab-face vocab-front">
@@ -87,13 +117,13 @@
 <div style="display: flex; justify-content: center; gap: 6px; margin-top: 24px; align-items: center;" id="vocab-pagination">
     {# Prev #}
     <button class="page-btn {% if page <= 1 %}disabled{% endif %}" 
-            {% if page > 1 %}hx-get="/vocab?page={{ page - 1 }}&q={{ q }}" hx-target="#vocab-container" hx-swap="innerHTML"{% endif %}
+            {% if page > 1 %}hx-get="/vocab?page={{ page - 1 }}&q={{ q }}&levels={{ selected_levels|join(',') }}" hx-target="#vocab-container" hx-swap="innerHTML"{% endif %}
             {% if page <= 1 %}disabled{% endif %}>
         <span class="material-symbols-outlined" style="font-size: 18px;">chevron_left</span>
     </button>
 
     {# Page 1 #}
-    <button class="page-btn {% if page == 1 %}active{% endif %}" hx-get="/vocab?page=1&q={{ q }}" hx-target="#vocab-container" hx-swap="innerHTML">1</button>
+    <button class="page-btn {% if page == 1 %}active{% endif %}" hx-get="/vocab?page=1&q={{ q }}&levels={{ selected_levels|join(',') }}" hx-target="#vocab-container" hx-swap="innerHTML">1</button>
 
     {# Left Dots #}
     {% if page > 3 %}
@@ -105,7 +135,7 @@
     {% set end = page + 1 if page + 1 < total_pages else total_pages - 1 %}
 
     {% for p in range(start, end + 1) %}
-        <button class="page-btn {% if p == page %}active{% endif %}" hx-get="/vocab?page={{ p }}&q={{ q }}" hx-target="#vocab-container" hx-swap="innerHTML">{{ p }}</button>
+        <button class="page-btn {% if p == page %}active{% endif %}" hx-get="/vocab?page={{ p }}&q={{ q }}&levels={{ selected_levels|join(',') }}" hx-target="#vocab-container" hx-swap="innerHTML">{{ p }}</button>
     {% endfor %}
 
     {# Right Dots #}
@@ -115,12 +145,12 @@
     
     {# Last Page #}
     {% if total_pages > 1 %}
-        <button class="page-btn {% if page == total_pages %}active{% endif %}" hx-get="/vocab?page={{ total_pages }}&q={{ q }}" hx-target="#vocab-container" hx-swap="innerHTML">{{ total_pages }}</button>
+        <button class="page-btn {% if page == total_pages %}active{% endif %}" hx-get="/vocab?page={{ total_pages }}&q={{ q }}&levels={{ selected_levels|join(',') }}" hx-target="#vocab-container" hx-swap="innerHTML">{{ total_pages }}</button>
     {% endif %}
 
     {# Next #}
     <button class="page-btn {% if page >= total_pages %}disabled{% endif %}" 
-            {% if page < total_pages %}hx-get="/vocab?page={{ page + 1 }}&q={{ q }}" hx-target="#vocab-container" hx-swap="innerHTML"{% endif %}
+            {% if page < total_pages %}hx-get="/vocab?page={{ page + 1 }}&q={{ q }}&levels={{ selected_levels|join(',') }}" hx-target="#vocab-container" hx-swap="innerHTML"{% endif %}
             {% if page >= total_pages %}disabled{% endif %}>
         <span class="material-symbols-outlined" style="font-size: 18px;">chevron_right</span>
     </button>
