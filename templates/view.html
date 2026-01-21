@@ -296,8 +296,8 @@
     <!-- FOOTER ACTIONS -->
     <div id="q-footer" style="margin-top: 24px; display: flex; justify-content: space-between; align-items: center;">
         <div style="display: flex; gap: 10px;">
-             <button class="btn-contained" onclick="restartQuiz()">
-                {{ ui.retry_btn }}
+             <button id="quiz-restart-btn" class="btn-contained" onclick="restartQuiz()" style="display: none;">
+                {{ ui.restart_btn }}
              </button>
              <button class="btn-contained btn-danger" onclick="abortQuiz()">
                 {{ ui.abort_btn }}
@@ -399,14 +399,18 @@ function showResultsView(score, total) {
 async function switchTab(tab) {
     // Якщо квіз активний і ми намагаємось піти з нього
     if (quizActive && tab !== 'quiz') {
-        const confirmed = await sysConfirm(
-            '{{ ui.abort_confirm_title }}', 
-            '{{ ui.abort_confirm_msg }}', 
-            '{{ ui.exit_btn }}', 
-            '{{ ui.btn_cancel }}', 
-            true
-        );
-        if (!confirmed) return;
+        // Перевіряємо, чи є прогрес (відповіли хоча б на 1 питання або перевірили поточне)
+        const hasProgress = currentQIndex > 0 || isChecked;
+        if (hasProgress) {
+            const confirmed = await sysConfirm(
+                '{{ ui.abort_confirm_title }}', 
+                '{{ ui.abort_confirm_msg }}', 
+                '{{ ui.exit_btn }}', 
+                '{{ ui.btn_cancel }}', 
+                true
+            );
+            if (!confirmed) return;
+        }
         _resetQuizProgress();
     }
 
@@ -470,6 +474,12 @@ function renderQuestion() {
     const btn = document.getElementById('q-action-btn');
     btn.innerText = '{{ ui.check_btn }}';
     btn.disabled = true;
+
+    // Показуємо кнопку "Спочатку" тільки якщо ми вже пройшли перше питання (індекс > 0)
+    const restartBtn = document.getElementById('quiz-restart-btn');
+    if (restartBtn) {
+        restartBtn.style.display = (currentQIndex > 0) ? 'inline-flex' : 'none';
+    }
 }
 
 function selectOption(idx, el) {
@@ -501,6 +511,10 @@ function handleQuizAction() {
             opts[q.correct_index].classList.add('correct');
         }
         
+        // Показуємо кнопку "Спочатку", бо користувач вже відповів на питання
+        const restartBtn = document.getElementById('quiz-restart-btn');
+        if (restartBtn) restartBtn.style.display = 'inline-flex';
+
         // Update progress bar to reflect completion of THIS question
         document.getElementById('q-progress').style.width = (((currentQIndex + 1) / quizData.length) * 100) + '%';
         
@@ -533,17 +547,19 @@ async function restartQuiz() {
 }
 
 async function abortQuiz() {
-    const confirmed = await sysConfirm(
-        '{{ ui.abort_confirm_title }}',
-        '{{ ui.abort_confirm_msg }}',
-        '{{ ui.exit_btn }}',
-        '{{ ui.btn_cancel }}',
-        true
-    );
-    if (confirmed) {
-        _resetQuizProgress();
-        switchTab('vocab');
+    const hasProgress = currentQIndex > 0 || isChecked;
+    if (hasProgress) {
+        const confirmed = await sysConfirm(
+            '{{ ui.abort_confirm_title }}',
+            '{{ ui.abort_confirm_msg }}',
+            '{{ ui.exit_btn }}',
+            '{{ ui.btn_cancel }}',
+            true
+        );
+        if (!confirmed) return;
     }
+    _resetQuizProgress();
+    switchTab('vocab');
 }
 
 function resetQuizState() {
@@ -642,7 +658,7 @@ function launchConfetti() {
 
 // Захист від закриття вкладки браузера
 window.onbeforeunload = function() {
-    if (quizActive) {
+    if (quizActive && (currentQIndex > 0 || isChecked)) {
         return "{{ ui.abort_confirm_msg }}";
     }
 };

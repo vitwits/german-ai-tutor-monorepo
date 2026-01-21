@@ -148,6 +148,7 @@ UI_STRINGS = {
         'sentence_added_fav': 'Речення додано в улюблені',
         'sentence_removed_fav': 'Речення видалено з улюблених',
         'selection_limited_toast': 'Переклад не більше 4 слів',
+        'restart_btn': 'Спочатку',
     },
     'eng': {
         'settings': 'Settings',
@@ -238,6 +239,7 @@ UI_STRINGS = {
         'sentence_added_fav': 'Sentence added to favorites',
         'sentence_removed_fav': 'Sentence removed from favorites',
         'selection_limited_toast': 'Translation up to 4 words',
+        'restart_btn': 'Restart',
     }
 }
 
