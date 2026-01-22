@@ -160,6 +160,8 @@ UI_STRINGS = {
         'fc_esc_hint': 'Esc',
         'fc_session_complete': 'Сесію завершено!',
         'fc_new_session': 'Нова сесія',
+        'report_sentence': 'Поскаржитися',
+        'sentence_reported': 'Речення відправлено на перевірку',
     },
     'eng': {
         'settings': 'Settings',
@@ -267,6 +269,8 @@ UI_STRINGS = {
         'fc_esc_hint': 'Esc',
         'fc_session_complete': 'Session complete!',
         'fc_new_session': 'New Session',
+        'report_sentence': 'Report',
+        'sentence_reported': 'Sentence reported',
     }
 }
 
@@ -329,6 +333,7 @@ class SentenceModel(db.Model):
     audio_uk = db.Column(db.String)
     level = db.Column(db.String)
     topic = db.Column(db.String)
+    reported = db.Column(db.Integer, default=0)
     # quiz_json is handled via raw SQL in migrations, but ideally should be here too if using ORM fully
 
 class SentenceBatch(db.Model):
@@ -423,9 +428,11 @@ class SentenceView(MyModelView):
                 <a href="{edit_url}" class="btn btn-primary action-btn" title="Edit">
                     <span class="material-symbols-outlined" style="font-size: 18px;">edit</span>
                 </a>
-                <a href="{delete_url}" class="btn btn-danger action-btn" title="Delete">
-                    <span class="material-symbols-outlined" style="font-size: 18px;">delete</span>
-                </a>
+                <form action="{delete_url}" method="POST" style="display:inline;" onsubmit="return confirm('Delete sentence?');">
+                    <button type="submit" class="btn btn-danger action-btn" title="Delete">
+                        <span class="material-symbols-outlined" style="font-size: 18px;">delete</span>
+                    </button>
+                </form>
             </div>
         """
         return Markup(actions_html)
@@ -456,6 +463,56 @@ class SentenceView(MyModelView):
                         print(f"Deleted file: {full_path}")
                     except Exception as e:
                         print(f"Error deleting file {full_path}: {e}")
+
+class ReportedSentenceView(SentenceView):
+    list_template = 'admin/sentence_list.html'
+    column_display_actions = False
+    column_list = ['play', 'text_de', 'text_en', 'text_uk', 'topic', 'actions']
+    column_labels = {
+        'play': 'Play',
+        'text_de': 'German',
+        'text_en': 'English',
+        'text_uk': 'Ukrainian',
+        'topic': 'Topic',
+        'actions': 'Actions'
+    }
+    
+    def get_query(self):
+        return self.session.query(self.model).filter(self.model.reported == 1)
+
+    def get_count_query(self):
+        return self.session.query(func.count('*')).filter(self.model.reported == 1)
+
+    def _actions_formatter(view, context, model, name):
+        edit_url = url_for('sentences.edit_view', id=model.id)
+        delete_url = url_for('sentences.delete_view', id=model.id)
+        ignore_url = url_for('.ignore_view', id=model.id)
+        
+        actions_html = f"""
+            <div style="display: flex; gap: 8px; align-items: center; justify-content: center;">
+                <a href="{edit_url}" class="btn btn-primary action-btn" title="Edit"><span class="material-symbols-outlined" style="font-size: 18px;">edit</span></a>
+                <a href="{ignore_url}" class="btn btn-warning action-btn" title="Ignore (Un-report)"><span class="material-symbols-outlined" style="font-size: 18px;">visibility_off</span></a>
+                <form action="{delete_url}" method="POST" style="display:inline;" onsubmit="return confirm('Delete sentence?');">
+                    <button type="submit" class="btn btn-danger action-btn" title="Delete">
+                        <span class="material-symbols-outlined" style="font-size: 18px;">delete</span>
+                    </button>
+                </form>
+            </div>
+        """
+        return Markup(actions_html)
+
+    column_formatters = {
+        'play': SentenceView._play_formatter,
+        'actions': _actions_formatter
+    }
+
+    @expose('/ignore/<int:id>')
+    def ignore_view(self, id):
+        with get_db() as conn:
+            conn.execute('UPDATE sentences SET reported = 0 WHERE id = ?', (id,))
+            conn.commit()
+        flash('Sentence ignored (un-reported).', 'success')
+        return redirect(url_for('.index_view'))
 
 class GenerateSentencesView(BaseView):
     @expose('/')
@@ -708,7 +765,8 @@ def background_audio_gen(app_instance, batch_id):
 # Ініціалізація Адмінки
 admin = Admin(app, name='DE Tutor Admin', index_view=MyAdminIndexView())
 admin.add_view(MyModelView(UserModel, db.session, name='Users'))
-admin.add_view(SentenceView(SentenceModel, db.session, name='Sentences'))
+admin.add_view(ReportedSentenceView(SentenceModel, db.session, name='Reported', endpoint='reported'))
+admin.add_view(SentenceView(SentenceModel, db.session, name='Sentences', endpoint='sentences'))
 admin.add_view(GenerateSentencesView(name='Generate Sentences', endpoint='generate'))
 admin.add_view(CachingStatsView(name='Caching', endpoint='caching'))
 
@@ -1464,14 +1522,14 @@ def vocab_session():
         d['trans'] = d['ua'] if lang == 'ukr' else d['en']
         
         # 1. German Audio URL (Cached)
-        d['audio_de_url'] = get_cached_or_generate_tts(d['display'], 'de')
+        d['audio_de_url'] = get_cached_or_generate_tts(d['display'], 'de', generate=False)
         
         # 2. Translation Audio URLs (Cached, split by comma like in dictionary)
         trans_urls = []
         if d['trans']:
             parts = [p.strip() for p in re.split(r'[,;]', d['trans']) if p.strip()]
             for part in parts:
-                url = get_cached_or_generate_tts(part, target_lang)
+                url = get_cached_or_generate_tts(part, target_lang, generate=False)
                 if url: trans_urls.append(url)
         d['audio_trans_urls'] = trans_urls
         
@@ -1645,7 +1703,7 @@ def remove_fav_sentence():
         return resp
     return jsonify({"ok": True})
 
-def get_cached_or_generate_tts(text, lang, log_stats=False):
+def get_cached_or_generate_tts(text, lang, log_stats=False, generate=True):
     """Helper function to reuse TTS logic. Returns url or None."""
     if not text: return None
     
@@ -1678,6 +1736,9 @@ def get_cached_or_generate_tts(text, lang, log_stats=False):
             except Exception as e:
                 print(f"Log Error: {e}")
         return web_path
+
+    if not generate:
+        return None
     
     # 5. Generate if missing
     # Use original text for generation to preserve casing/intonation
@@ -1753,8 +1814,14 @@ def speaking():
 def speaking_next():
     """Returns the next sentence card as HTML partial"""
     with get_db() as conn:
-        # Get a random sentence for the user's level
-        row = conn.execute('SELECT * FROM sentences WHERE level = ? ORDER BY RANDOM() LIMIT 1', (current_user.level,)).fetchone()
+        # Get a random sentence for the user's level, excluding blocked ones
+        query = '''
+            SELECT * FROM sentences 
+            WHERE level = ? 
+            AND id NOT IN (SELECT sentence_id FROM user_blocked_sentences WHERE user_id = ?)
+            ORDER BY RANDOM() LIMIT 1
+        '''
+        row = conn.execute(query, (current_user.level, current_user.id)).fetchone()
         if not row:
             # Fallback
             row = conn.execute('SELECT * FROM sentences ORDER BY RANDOM() LIMIT 1').fetchone()
@@ -1786,6 +1853,22 @@ def speaking_next():
     })
     
     return resp
+
+@app.route('/api/report_sentence', methods=['POST'])
+@login_required
+def report_sentence():
+    sid = request.form.get('id')
+    if sid:
+        with get_db() as conn:
+            # 1. Mark as reported globally (for admin)
+            conn.execute('UPDATE sentences SET reported = 1 WHERE id = ?', (sid,))
+            # 2. Block for this user
+            conn.execute('INSERT OR IGNORE INTO user_blocked_sentences (user_id, sentence_id) VALUES (?, ?)', (current_user.id, sid))
+            conn.commit()
+            
+    # Load next sentence immediately (skip the reported one)
+    flash(UI_STRINGS[current_user.interface_language]['sentence_reported'], 'info')
+    return speaking_next()
 
 @app.route('/api/evaluate_audio', methods=['POST'])
 @login_required

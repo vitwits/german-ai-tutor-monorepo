@@ -206,7 +206,8 @@ function openPlayer() {
 }
 
 function closePlayer() {
-    document.getElementById('player-splash').style.display = 'none';
+    const splash = document.getElementById('player-splash');
+    if (splash) splash.style.display = 'none';
     stopAudio();
     pIsPlaying = false;
     if(pAnimId) cancelAnimationFrame(pAnimId);
@@ -343,17 +344,24 @@ function startVisualizer() {
 }
 
 // Esc key support
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape' && document.getElementById('player-splash').style.display === 'flex') {
+if (window.handlePlayerEsc) {
+    document.removeEventListener('keydown', window.handlePlayerEsc);
+}
+window.handlePlayerEsc = function(e) {
+    const splash = document.getElementById('player-splash');
+    if (e.key === 'Escape' && splash && splash.style.display === 'flex') {
         closePlayer();
     }
-});
+};
+document.addEventListener('keydown', window.handlePlayerEsc);
 
 // Cleanup on navigation (HTMX)
-if (!window.favSentencesCleanup) {
-    window.favSentencesCleanup = function() {
-        if (typeof closePlayer === 'function') closePlayer();
-    };
-    document.body.addEventListener('htmx:before-swap', window.favSentencesCleanup);
+if (window.favSentencesCleanup) {
+    document.body.removeEventListener('htmx:before-swap', window.favSentencesCleanup);
 }
+window.favSentencesCleanup = function() {
+    if (typeof closePlayer === 'function') closePlayer();
+    if (window.handlePlayerEsc) document.removeEventListener('keydown', window.handlePlayerEsc);
+};
+document.body.addEventListener('htmx:before-swap', window.favSentencesCleanup);
 </script>

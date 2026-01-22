@@ -138,6 +138,13 @@
     @keyframes fall {
         to { transform: translateY(110vh) rotate(720deg); }
     }
+
+    .report-btn {
+        position: absolute; top: 0; right: 0;
+        background: none; border: none; color: #d32f2f; opacity: 0.5;
+        cursor: pointer; transition: opacity 0.2s; padding: 10px;
+    }
+    .report-btn:hover { opacity: 1; }
 </style>
 
 <!-- SPLASH SCREEN -->
@@ -167,6 +174,14 @@
 </div>
 
 <div class="speak-container">
+    <!-- Report Button -->
+    <button class="report-btn" title="{{ ui.report_sentence }}"
+            hx-post="/api/report_sentence" 
+            hx-vals='js:{"id": currentSentenceId}'
+            hx-target="#speaking-card-container">
+        <span class="material-symbols-outlined">flag</span>
+    </button>
+
     <div class="mode-switch">
         <button class="mode-btn active">{{ ui.speaking_sentences }}</button>
         <button class="mode-btn" style="cursor: not-allowed; opacity: 0.3;">{{ ui.speaking_small_talk }} 🔒</button>

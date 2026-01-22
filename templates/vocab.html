@@ -537,9 +537,13 @@ async function playAudio(text, btn = null) {
         body: JSON.stringify({text: cleanText})
     });
     const data = await res.json();
-    currentAudio = new Audio(data.url);
-    currentAudio.play();
-    if (btn) btn.style.opacity = '1';
+    return new Promise(resolve => {
+        currentAudio = new Audio(data.url);
+        currentAudio.onended = resolve;
+        currentAudio.onerror = resolve;
+        currentAudio.play().catch(resolve);
+        if (btn) btn.style.opacity = '1';
+    });
 }
 
 var currentSentenceAudio = null;
@@ -613,7 +617,7 @@ var fcReviewStarted = false; // New state for Review mode
 var fcStats = { easy: 0, medium: 0, hard: 0 };
 var fcLoopTimeout = null;
 
-// Force close overlay on load to prevent history restore artifacts
+// Force close overlay on load (avoid const to prevent HTMX redeclaration errors)
 if(document.getElementById('fc-overlay')) document.getElementById('fc-overlay').style.display = 'none';
 
 async function startSession() {
@@ -625,6 +629,14 @@ async function startSession() {
     // If Study mode, fetch more words for "infinite" feel. If Review, use user setting.
     const limit = fcMode === 'study' ? 500 : {{ current_user.vocab_session_size }};
     
+    // Loading UI
+    const btn = document.querySelector('button[onclick="startSession()"]');
+    const originalBtnContent = btn ? btn.innerHTML : '';
+    if(btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="material-symbols-outlined rotating" style="font-size:18px;">sync</span> Loading...';
+    }
+
     try {
         const res = await fetch(`/api/vocab/session?levels=${levels}&q=${q}&limit=${limit}`);
         const data = await res.json();
@@ -651,6 +663,11 @@ async function startSession() {
     } catch (e) {
         console.error(e);
         window.toast.show('Error starting session', 'error');
+    } finally {
+        if(btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalBtnContent;
+        }
     }
 }
 
@@ -744,6 +761,19 @@ function playUrl(url) {
     });
 }
 
+async function fcPlayItemAudio(item, lang) {
+    if (lang === 'de') {
+        if (item.audio_de_url) await playUrl(item.audio_de_url);
+        else await playAudio(item.display);
+    } else if (lang === 'trans') {
+        if (item.audio_trans_urls && item.audio_trans_urls.length > 0) {
+            for (const url of item.audio_trans_urls) await playUrl(url);
+        } else if (item.trans) {
+            await playAudio(item.trans);
+        }
+    }
+}
+
 function fcSetMode(mode) {
     if (fcMode === mode) return;
     fcMode = mode;
@@ -808,7 +838,7 @@ function fcStartReview() {
     fcReviewStarted = true;
     fcUpdateUI();
     // Play audio of first card
-    if(fcAudioEnabled && fcQueue[fcIndex].audio_de_url) playUrl(fcQueue[fcIndex].audio_de_url);
+    if(fcAudioEnabled) fcPlayItemAudio(fcQueue[fcIndex], 'de');
 }
 
 async function runStudyLoop() {
@@ -819,7 +849,7 @@ async function runStudyLoop() {
     const item = fcQueue[fcIndex];
     
     // 2. Play Audio (Front)
-    if (fcAudioEnabled && item.audio_de_url) await playUrl(item.audio_de_url);
+    if (fcAudioEnabled) await fcPlayItemAudio(item, 'de');
     if (!fcIsPlaying) return;
     
     // 3. Wait 2s
@@ -830,12 +860,7 @@ async function runStudyLoop() {
     document.getElementById('fc-card').classList.add('flipped');
     
     // 5. Play Audio (Back - Trans only)
-    if (fcAudioEnabled && item.audio_trans_urls && item.audio_trans_urls.length > 0) {
-        for (const url of item.audio_trans_urls) {
-            if (!fcIsPlaying) break;
-            await playUrl(url);
-        }
-    }
+    if (fcAudioEnabled) await fcPlayItemAudio(item, 'trans');
     if (!fcIsPlaying) return;
     
     // 6. Wait 3s (Increased from 2s)
@@ -859,10 +884,7 @@ function fcHandleCardClick() {
         
         // Play translation audio sequence
         if (fcAudioEnabled) {
-            const item = fcQueue[fcIndex];
-            if (item.audio_trans_urls && item.audio_trans_urls.length > 0) {
-                (async () => { for (const url of item.audio_trans_urls) await playUrl(url); })();
-            }
+            fcPlayItemAudio(fcQueue[fcIndex], 'trans');
         }
     }
 }
@@ -895,7 +917,7 @@ async function fcRate(rating) {
     } else {
         fcRenderCard(false);
         fcUpdateUI();
-        if (fcAudioEnabled && fcQueue[fcIndex].audio_de_url) playUrl(fcQueue[fcIndex].audio_de_url);
+        if (fcAudioEnabled) fcPlayItemAudio(fcQueue[fcIndex], 'de');
     }
 }
 
@@ -932,13 +954,18 @@ function fcClose() {
     fcReviewStarted = false;
     if(fcLoopTimeout) clearTimeout(fcLoopTimeout);
     if(currentAudio) currentAudio.pause();
-    document.getElementById('fc-overlay').style.display = 'none';
+    const overlay = document.getElementById('fc-overlay');
+    if (overlay) overlay.style.display = 'none';
     if (document.activeElement) document.activeElement.blur(); // Remove focus from trigger button
 }
 
 // Keyboard Shortcuts
-function handleVocabKeydown(e) {
-    if (document.getElementById('fc-overlay').style.display !== 'flex') return;
+if (window.handleVocabKeydown) {
+    document.removeEventListener('keydown', window.handleVocabKeydown);
+}
+window.handleVocabKeydown = function(e) {
+    const overlay = document.getElementById('fc-overlay');
+    if (!overlay || overlay.style.display !== 'flex') return;
 
     if (e.key === 'Escape') {
         fcClose();
@@ -946,6 +973,7 @@ function handleVocabKeydown(e) {
     }
 
     if (fcMode === 'review') {
+        if (e.repeat) return;
         if (!fcReviewStarted) {
             if (e.code === 'Space') {
                 e.preventDefault();
@@ -968,25 +996,31 @@ function handleVocabKeydown(e) {
     } else if (fcMode === 'study') {
         if (e.code === 'Space') {
             e.preventDefault();
+            if (e.repeat) return;
             fcTogglePlay();
         }
         if (e.key === 'ArrowRight') fcNext();
         if (e.key === 'ArrowLeft') fcPrev();
     }
-}
+};
 
-document.addEventListener('keydown', handleVocabKeydown);
+document.addEventListener('keydown', window.handleVocabKeydown);
 
 // Cleanup on navigation (HTMX)
-function vocabCleanup() {
+if (window.vocabCleanup) {
+    document.removeEventListener('htmx:before-swap', window.vocabCleanup);
+}
+window.vocabCleanup = function() {
     fcClose();
-    document.removeEventListener('keydown', handleVocabKeydown);
-    document.removeEventListener('htmx:before-swap', vocabCleanup);
+    if (window.handleVocabKeydown) {
+        document.removeEventListener('keydown', window.handleVocabKeydown);
+        window.handleVocabKeydown = null;
+    }
     
     // Stop any list audio
     if(window.vocabAudioQueue) { window.vocabAudioQueue.forEach(a => a.pause()); window.vocabAudioQueue = []; }
     window.isPlayingVocab = false;
-}
-document.addEventListener('htmx:before-swap', vocabCleanup);
+};
+document.addEventListener('htmx:before-swap', window.vocabCleanup);
 </script>
 {% endblock %}

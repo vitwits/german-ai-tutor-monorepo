@@ -151,6 +151,22 @@ def init_db():
         except sqlite3.OperationalError:
             pass
 
+        # 11. Add reported column to sentences (for Admin Queue)
+        try:
+            conn.execute('ALTER TABLE sentences ADD COLUMN reported INTEGER DEFAULT 0')
+        except sqlite3.OperationalError:
+            pass
+
+        # 12. Table for user blocked sentences (Per-user blocking)
+        conn.execute('''CREATE TABLE IF NOT EXISTS user_blocked_sentences (
+            user_id TEXT,
+            sentence_id INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (user_id, sentence_id),
+            FOREIGN KEY (user_id) REFERENCES users (id),
+            FOREIGN KEY (sentence_id) REFERENCES sentences (id)
+        )''')
+
         # Таблиця результатів квізів
         conn.execute('''CREATE TABLE IF NOT EXISTS quiz_results (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
