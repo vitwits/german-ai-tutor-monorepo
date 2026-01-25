@@ -11,7 +11,7 @@ import azure.cognitiveservices.speech as speechsdk
 load_dotenv()
 
 # Ініціалізація клієнта (New SDK)
-client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
+client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 # ПОВНІ ПРАВИЛА CEFR
 CEFR_GUIDELINES = {
