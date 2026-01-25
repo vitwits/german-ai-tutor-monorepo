@@ -2,9 +2,11 @@
   import { router } from "tinro"; // Ensure this is correct
   import { user, isAuthenticated, logout } from "../stores/auth";
   import api from "../lib/api";
+  import { getUI } from "../lib/ui";
 
   let showMenu = false;
   let isDark = localStorage.getItem('t') === 'd';
+  $: ui = getUI($user?.interface_language || 'ukr');
 
   // Ініціалізація теми при завантаженні
   if (isDark) document.body.classList.add('dark-mode');
@@ -74,10 +76,10 @@
         {#if showMenu}
           <div class="dropdown-menu">
             <button class="dropdown-item" on:click={() => { showMenu = false; router.goto('/settings'); }}>
-              <span class="material-symbols-outlined" style="font-size: 20px;">tune</span> Налаштування
+              <span class="material-symbols-outlined" style="font-size: 20px;">tune</span> {ui.settings}
             </button>
             <button class="dropdown-item" on:click={() => { showMenu = false; logout(); }}>
-              <span class="material-symbols-outlined" style="font-size: 20px;">logout</span> Вийти
+              <span class="material-symbols-outlined" style="font-size: 20px;">logout</span> {ui.logout}
             </button>
           </div>
           <!-- Backdrop to close menu -->

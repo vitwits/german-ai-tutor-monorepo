@@ -96,3 +96,9 @@ button, a.btn-contained, a.btn-text, .btn-contained, .btn-text {
     box-sizing: border-box;
 }
 .form-control:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.1); }
+
+/* Global Animations */
+@keyframes fall {
+  0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+}

@@ -1,10 +1,14 @@
 <script>
   import { onMount, onDestroy, tick } from "svelte";
+  import { fade } from "svelte/transition";
+  import { tweened } from 'svelte/motion';
+  import { cubicOut } from 'svelte/easing';
   import api from "../lib/api";
   import { user } from "../stores/auth";
   import { router } from "tinro";
   import { addToast } from "../stores/toast";
   import { getUI } from "../lib/ui";
+  import { confirmModal } from "../stores/confirm";
 
   export let id; 
 
@@ -30,7 +34,14 @@
   let selectedOptionIndex = null;
   let isChecked = false;
   let lastQuizResult = null;
-  let scorePct = 0; // Для анімації
+  let showQuizSplash = false;
+  let scorePct = 0;
+
+  // Tweened store for smooth score animation
+  const animatedScore = tweened(0, {
+    duration: 1500,
+    easing: cubicOut
+  });
 
   // Popups
   let showPopup = false;
@@ -49,7 +60,6 @@
   let grammarCache = {};
 
   // Reactive UI strings
-  $: ui = getUI($user ? $user.interface_language : 'ukr');
   $: ui = getUI($user?.interface_language || 'ukr');
 
   async function loadText() {
@@ -58,6 +68,7 @@
       const res = await api.get(`/texts/${id}`);
       text = res.data.text;
       vocab = res.data.vocab || [];
+      lastQuizResult = res.data.last_quiz_result;
       
       // Build Vocab Map for quick lookup
       vocab.forEach(v => vocabMap[v.id] = v);
@@ -286,11 +297,10 @@
     selectionStartIndex = getCharOffset(textSpan, range.startContainer, range.startOffset);
 
     // Position Popup
-    const scrollTop = window.scrollY;
-    const scrollLeft = window.scrollX;
     
     if (window.innerWidth > 768) {
-        popupStyle = `top: ${rect.top + scrollTop - 45}px; left: ${rect.left + scrollLeft + (rect.width / 2)}px; transform: translateX(-50%);`;
+        // Use fixed positioning to avoid issues with relative containers
+        popupStyle = `position: fixed; top: ${rect.top - 45}px; left: ${rect.left + (rect.width / 2)}px; transform: translateX(-50%); z-index: 2000;`;
     } else {
         popupStyle = `position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); width: auto; min-width: 200px; text-align: center;`;
     }
@@ -386,8 +396,22 @@
   // --- QUIZ LOGIC ---
 
   function startQuiz() {
+      switchTab('quiz');
+  }
+
+  function initQuizState() {
       activeTab = 'quiz';
-      if (!quizActive && !quizFinished) {
+      
+      // Якщо квіз не активний, перевіряємо, чи є старий результат для показу
+      if (!quizActive && lastQuizResult && lastQuizResult.score !== undefined) {
+          quizFinished = true;
+          quizScore = lastQuizResult.score;
+          const total = lastQuizResult.total_questions || quizData.length;
+          scorePct = Math.round((quizScore / total) * 100);
+          animatedScore.set(scorePct, { duration: 0 });
+      } 
+      // Інакше починаємо новий (якщо не активний)
+      else if (!quizActive && !quizFinished) {
           quizActive = true;
           currentQIndex = 0;
           quizScore = 0;
@@ -423,6 +447,13 @@
       quizActive = false;
       quizFinished = true;
       scorePct = Math.round((quizScore / quizData.length) * 100);
+      // FIX: Set the animated score. This will trigger the animation on both splash and embedded views.
+      animatedScore.set(scorePct);
+      showQuizSplash = true;
+      
+      // Оновлюємо локальний кеш результату
+      lastQuizResult = { score: quizScore, total_questions: quizData.length };
+      
       try {
           await api.post('/save_quiz_result', {
               text_id: id,
@@ -430,12 +461,90 @@
               total: quizData.length
           });
       } catch(e) {}
+
+      if (scorePct >= 100) {
+          setTimeout(launchConfetti, 300);
+      }
+  }
+
+  async function abortQuiz() {
+      const ok = await confirmModal.ask(ui.abort_confirm_title, ui.abort_confirm_msg, ui.exit_btn, ui.btn_cancel, true);
+      if (ok) {
+          activeTab = 'vocab';
+          quizActive = false;
+          quizFinished = false; // Ensure we don't show results screen
+      }
   }
 
   function restartQuiz() {
+      showQuizSplash = false;
       quizFinished = false;
-      startQuiz();
+      quizActive = true;
+      currentQIndex = 0;
+      quizScore = 0;
+      selectedOptionIndex = null;
+      isChecked = false;
       scorePct = 0;
+      animatedScore.set(0, { duration: 0 });
+  }
+
+  function closeSplash() {
+      showQuizSplash = false;
+      // Видаляємо конфетті
+      const container = document.getElementById('quiz-splash');
+      if (container) {
+          const particles = container.querySelectorAll('.confetti');
+          particles.forEach(p => p.remove());
+      }
+  }
+
+  function launchConfetti() {
+      const colors = ['#FFC107', '#2196F3', '#4CAF50', '#F44336', '#9C27B0'];
+      const container = document.getElementById('quiz-splash');
+      if (!container) return;
+      
+      for (let i = 0; i < 50; i++) {
+          const el = document.createElement('div');
+          el.classList.add('confetti');
+          el.style.left = Math.random() * 100 + '%';
+          el.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+          el.style.animation = `fall ${Math.random() * 3 + 2}s linear forwards`;
+          container.appendChild(el);
+      }
+  }
+
+  // --- TABS & NAVIGATION GUARD ---
+
+  function switchTab(tab) {
+      if (activeTab === tab) return;
+
+      // Захист від випадкового виходу з квізу
+      if (activeTab === 'quiz' && quizActive && (currentQIndex > 0 || isChecked)) {
+          if (!confirm(ui.abort_confirm_msg)) return;
+          // Якщо користувач погодився вийти - скидаємо прогрес
+          quizActive = false;
+          currentQIndex = 0;
+          isChecked = false;
+      }
+
+      activeTab = tab;
+      
+      // Якщо пішли з квіза, але не було прогресу - просто скидаємо активність
+      if (activeTab !== 'quiz') {
+          quizActive = false;
+      }
+      if (tab === 'quiz') {
+          initQuizState();
+      }
+  }
+
+  // Захист від закриття вкладки/оновлення
+  function handleBeforeUnload(e) {
+      if (activeTab === 'quiz' && quizActive && (currentQIndex > 0 || isChecked)) {
+          e.preventDefault();
+          e.returnValue = '';
+          return '';
+      }
   }
 
   // --- ACTIONS ---
@@ -477,9 +586,11 @@
   
   // Global click listener for learned words popup
   onMount(() => {
+      window.addEventListener('beforeunload', handleBeforeUnload);
       document.addEventListener('click', handleLearnedClick);
   });
   onDestroy(() => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
       if (typeof document !== 'undefined') document.removeEventListener('click', handleLearnedClick);
       if (currentAudio) currentAudio.pause();
   });
@@ -539,9 +650,9 @@
 
         <!-- TABS -->
         <div class="tabs-container">
-            <button class="tab-btn {activeTab === 'vocab' ? 'active' : ''}" on:click={() => activeTab = 'vocab'}>{ui.vocab_tab}</button>
+            <button class="tab-btn {activeTab === 'vocab' ? 'active' : ''}" on:click={() => switchTab('vocab')}>{ui.vocab_tab}</button>
             {#if quizData.length > 0}
-                <button class="tab-btn {activeTab === 'quiz' ? 'active' : ''}" on:click={startQuiz}>{ui.quiz_tab}</button>
+                <button class="tab-btn {activeTab === 'quiz' ? 'active' : ''}" on:click={() => switchTab('quiz')}>{ui.quiz_tab}</button>
             {/if}
         </div>
 
@@ -553,21 +664,23 @@
                 {/if}
                 {#each vocab as v}
                     <div class="vocab-item">
-                        <div style="display:flex; align-items:center; gap:12px;">
+                        <div style="display:flex; align-items:center; gap:12px; flex: 1; min-width: 0;">
                             <button class="btn-text" on:click={() => playVocabPair(v.display, $user.interface_language === 'ukr' ? v.ua : v.en)}>
                                 <span class="material-symbols-outlined" style="font-size:18px;">volume_up</span>
                             </button>
-                            <div>
+                            <div style="overflow: hidden; text-overflow: ellipsis;">
                                 <span style="font-weight: 500; color: var(--primary); font-size: 1.1rem;">{v.display}</span>
-                                <div style="font-size:0.85rem; opacity:0.7; margin-top:6px;">{$user.interface_language === 'ukr' ? v.ua : v.en}</div>
+                                <div style="font-size:0.85rem; opacity:0.7; margin-top:6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{$user.interface_language === 'ukr' ? v.ua : v.en}</div>
                             </div>
                         </div>
-                        <button class="btn-text" on:click={() => toggleVocabFav(v.id)} style="color: {v.is_favorite ? '#FFC107' : 'inherit'}; min-width: 32px; padding: 0;">
-                            <span class="material-symbols-outlined {v.is_favorite ? 'filled' : ''}">star</span>
-                        </button>
-                        <button class="btn-text" on:click={() => removeWord(v.id)} style="color:red;">
-                            <span class="material-symbols-outlined">delete</span>
-                        </button>
+                        <div style="display: flex; align-items: center; gap: 0;">
+                            <button class="btn-text" on:click={() => toggleVocabFav(v.id)} style="color: {v.is_favorite ? '#FFC107' : 'inherit'}; min-width: 32px; padding: 0;">
+                                <span class="material-symbols-outlined {v.is_favorite ? 'filled' : ''}">star</span>
+                            </button>
+                            <button class="btn-text" on:click={() => removeWord(v.id)} style="color:red; min-width: 32px; padding: 0;">
+                                <span class="material-symbols-outlined">delete</span>
+                            </button>
+                        </div>
                     </div>
                 {/each}
             </div>
@@ -576,27 +689,28 @@
         <!-- QUIZ TAB -->
         {#if activeTab === 'quiz'}
             <div class="quiz-container">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <div style="font-weight: 500; opacity: 0.7;">{ui.quiz_tab} {quizFinished ? quizData.length : currentQIndex + 1} / {quizData.length}</div>
+                </div>
+                
                 {#if quizFinished}
                     <div class="results-view">
-                        <div class="score-circle" style="width: 160px; height: 160px; margin-bottom: 20px;">
-                            <svg viewBox="0 0 160 160">
+                        <div class="score-circle">
+                    <svg viewBox="0 0 160 160" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
                                 <circle class="score-circle-bg" cx="80" cy="80" r="69"></circle>
-                                <circle class="score-circle-fg" cx="80" cy="80" r="69" style="stroke-dashoffset: {434 - (scorePct / 100) * 434}; stroke: {scorePct >= 80 ? '#4CAF50' : scorePct >= 50 ? '#FFC107' : '#f44336'};"></circle>
+                            <circle class="score-circle-fg" cx="80" cy="80" r="69" style="stroke-dashoffset: {434 - ($animatedScore / 100) * 434}; stroke: {$animatedScore >= 80 ? '#4CAF50' : $animatedScore >= 50 ? '#FFC107' : '#f44336'};"></circle>
                             </svg>
-                            <span style="font-size: 2.5rem;">{scorePct}%</span>
+                    <span style="font-size: 2.5rem; position: relative; z-index: 1;">{$animatedScore.toFixed(0)}%</span>
                         </div>
-                        <div style="font-size: 1.1rem; margin-bottom: 30px; opacity: 0.8;">{ui.your_score}</div>
+                <div style="font-size: 1.1rem; margin-bottom: 30px; opacity: 0.8;">{ui.your_score}</div>
                         <button class="btn-contained" on:click={restartQuiz}>{ui.retry_btn}</button>
                     </div>
                 {:else}
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
-                        <div style="font-weight: 500; opacity: 0.7;">{ui.quiz_tab} {currentQIndex + 1} / {quizData.length}</div>
-                    </div>
                     <div class="quiz-progress-track">
                         <div class="quiz-progress-fill" style="width: {((currentQIndex) / quizData.length) * 100}%"></div>
                     </div>
                     
-                    <div class="quiz-question">{quizData[currentQIndex].question}</div>
+                    <div class="quiz-question">{@html quizData[currentQIndex].question}</div>
                     
                     <div class="quiz-options">
                         {#each quizData[currentQIndex].options as opt, idx}
@@ -611,11 +725,21 @@
                         {/each}
                     </div>
 
-                    <div style="margin-top: 24px; display: flex; justify-content: flex-end;">
+                    <!-- FOOTER ACTIONS -->
+                    <div style="margin-top: 24px; display: flex; justify-content: space-between; align-items: center;">
+                        <div style="display: flex; gap: 10px;">
+                             <button class="btn-contained btn-danger" on:click={abortQuiz}>
+                                {ui.abort_btn}
+                             </button>
+                             {#if isChecked}
+                                <button class="btn-contained" on:click={restartQuiz} style="background-color: var(--secondary); color: black;">{ui.restart_btn}</button>
+                             {/if}
+                        </div>
+                        
                         {#if !isChecked}
-                            <button class="btn-contained" disabled={selectedOptionIndex === null} on:click={checkAnswer}>{ui.check_btn}</button>
+                            <button class="btn-contained" disabled={selectedOptionIndex === null} on:click={checkAnswer} style="min-width: 100px;">{ui.check_btn}</button>
                         {:else}
-                            <button class="btn-contained" on:click={nextQuestion}>{currentQIndex < quizData.length - 1 ? ui.next_btn : ui.finish_btn}</button>
+                            <button class="btn-contained" on:click={nextQuestion} style="min-width: 100px;">{currentQIndex < quizData.length - 1 ? ui.next_btn : ui.finish_btn}</button>
                         {/if}
                     </div>
                 {/if}
@@ -633,6 +757,25 @@
     {#if showLearnedPopup}
         <div id="learned-pop" style={learnedPopupStyle}>
             {@html learnedPopupContent}
+        </div>
+    {/if}
+
+    <!-- QUIZ SPLASH SCREEN -->
+    {#if showQuizSplash}
+        <div id="quiz-splash" transition:fade={{ duration: 300 }}>
+            <h2 style="margin-bottom: 30px;">{ui.quiz_completed}</h2>
+            <div class="score-circle" style="width: 160px; height: 160px; margin-bottom: 20px;">
+                <svg viewBox="0 0 160 160">
+                    <circle class="score-circle-bg" cx="80" cy="80" r="69"></circle>
+                    <circle class="score-circle-fg" cx="80" cy="80" r="69" style="stroke-dashoffset: {434 - ($animatedScore / 100) * 434}; stroke: {$animatedScore >= 80 ? '#4CAF50' : $animatedScore >= 50 ? '#FFC107' : '#f44336'};"></circle>
+                </svg>
+                <span id="splash-score">{$animatedScore.toFixed(0)}%</span>
+            </div>
+            <div style="font-size: 1.2rem; margin-bottom: 40px; opacity: 0.8;">{ui.your_score}</div>
+            <div style="display: flex; gap: 20px;">
+                <button class="btn-contained" style="background: white; color: black;" on:click={closeSplash}>{ui.done_btn}</button>
+                <button class="btn-contained" on:click={restartQuiz}>{ui.retry_btn}</button>
+            </div>
         </div>
     {/if}
 </div>
@@ -688,12 +831,14 @@
     }
     .quiz-progress-track { width: 100%; height: 6px; background: rgba(0,0,0,0.1); border-radius: 3px; margin-bottom: 20px; overflow: hidden; }
     .quiz-progress-fill { height: 100%; background: var(--primary); transition: width 0.3s ease; }
-    .quiz-question { font-size: 1.2rem; font-weight: 500; margin-bottom: 20px; }
+    .quiz-question { font-size: 1.2rem; font-weight: 500; margin-bottom: 20px; line-height: 1.4; }
     .quiz-options { display: flex; flex-direction: column; gap: 10px; }
     .quiz-option {
         padding: 12px 16px; border: 2px solid var(--border); border-radius: 8px; cursor: pointer;
-        font-size: 1rem; background: transparent; color: var(--on-surface); text-align: left;
+        font-size: 1rem; background: transparent; color: var(--on-surface); text-align: left; transition: all 0.2s;
+        text-transform: none; justify-content: flex-start; height: auto; line-height: 1.4; font-weight: normal;
     }
+    /* Скидаємо стилі кнопки для quiz-option, щоб вона виглядала як div */
     .quiz-option:hover:not(.disabled) { background: rgba(0,0,0,0.02); border-color: var(--primary); }
     .quiz-option.selected { border-color: var(--primary); background: rgba(25, 118, 210, 0.05); }
     .quiz-option.correct { border-color: #4CAF50 !important; background: rgba(76, 175, 80, 0.1) !important; color: #2E7D32; }
@@ -702,7 +847,7 @@
 
     .results-view { display: flex; flex-direction: column; align-items: center; padding: 20px 0; animation: fadeIn 0.3s ease; }
     .score-circle {
-        display: flex; align-items: center; justify-content: center; position: relative;
+        display: flex; align-items: center; justify-content: center; position: relative; width: 160px; height: 160px; margin-bottom: 20px;
     }
     .score-circle svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
     .score-circle circle { fill: none; stroke-width: 22; stroke-linecap: round; }
@@ -710,6 +855,20 @@
     .score-circle-fg {
         stroke-dasharray: 434; /* 2 * PI * 69 */
         transition: stroke-dashoffset 1.5s ease-out;
+    }
+
+    /* Splash Screen */
+    #quiz-splash {
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(8px);
+        z-index: 10000; display: flex; flex-direction: column;
+        align-items: center; justify-content: center; color: white;
+    }
+    #splash-score { font-size: 2.5rem; font-weight: 700; position: absolute; color: white; }
+
+    /* Confetti */
+    :global(.confetti) { 
+        position: fixed; width: 10px; height: 10px; z-index: 10001; pointer-events: none; top: -20px;
     }
 
     /* Popups */
@@ -733,5 +892,10 @@
     :global(body.dark-mode .learned) {
         background-color: rgba(144, 202, 249, 0.2);
         border-bottom-color: #90CAF9;
+    }
+
+    .btn-danger {
+        background-color: #d32f2f;
+        color: white;
     }
 </style>

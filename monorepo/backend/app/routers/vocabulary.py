@@ -8,7 +8,7 @@ from sqlalchemy import select, func, or_, update, delete
 
 from ..database import get_db
 from ..models import User, Vocabulary, UserFavoriteSentence, Sentence
-from ..schemas import VocabUpdateRequest, VocabRemoveRequest, ToggleFavRequest, VocabProgressRequest, QuickTranslateRequest
+from ..schemas import VocabUpdateRequest, VocabRemoveRequest, ToggleFavRequest, VocabProgressRequest, QuickTranslateRequest, VocabWordSchema
 from ..dependencies import get_current_user
 from .. import services, billing
 from ..utils_tts import get_cached_or_generate_tts
@@ -76,8 +76,19 @@ async def get_vocab_list(
         total = (await db.execute(count_query)).scalar_one()
         result = await db.execute(query.order_by(Vocabulary.id.desc()).offset(offset).limit(per_page))
         words = result.scalars().all()
+        
+        # Transform to dicts and add display_trans
+        items_data = []
+        target_lang = 'uk' if current_user.interface_language == 'ukr' else 'en'
+        
+        for w in words:
+            # Convert SQLAlchemy model to dict (or construct manually to be safe)
+            item = VocabWordSchema.model_validate(w)
+            # Add computed field
+            item.display_trans = w.ua if target_lang == 'uk' else w.en
+            items_data.append(item)
 
-        return {"items": words, "total": total, "pages": math.ceil(total / per_page)}
+        return {"items": items_data, "total": total, "pages": math.ceil(total / per_page)}
 
 @router.get("/vocab/session")
 async def vocab_session(
@@ -198,5 +209,109 @@ async def quick_translate(
     cost = billing.calculate_translation_cost(req.text)
     await billing.deduct_credits(current_user.id, cost)
     
+    await db.commit()
+    return {"ok": True}
+
+@router.post("/update_word")
+async def update_word(
+    req: VocabUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    lang = current_user.interface_language
+    
+    values = {}
+    if lang == 'ukr':
+        values['ua'] = req.translation
+    else:
+        values['en'] = req.translation
+        
+    await db.execute(
+        update(Vocabulary)
+        .where(Vocabulary.id == req.id, Vocabulary.user_id == current_user.id)
+        .values(**values)
+    )
+    await db.commit()
+    return {"ok": True}
+
+@router.post("/toggle_fav")
+async def toggle_fav(
+    req: ToggleFavRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # 1. Get word
+    result = await db.execute(select(Vocabulary).where(Vocabulary.id == req.id))
+    word = result.scalar_one_or_none()
+    
+    if not word:
+        return {"ok": False}
+        
+    display_val = word.display
+    
+    # 2. Check global favorites
+    q_existing = select(Vocabulary).where(
+        Vocabulary.user_id == current_user.id,
+        Vocabulary.display == display_val,
+        Vocabulary.is_favorite == 1
+    )
+    res_existing = await db.execute(q_existing)
+    existing_fav = res_existing.first()
+    
+    if existing_fav:
+        # Disable ALL favorites for this display
+        await db.execute(
+            update(Vocabulary)
+            .where(Vocabulary.user_id == current_user.id, Vocabulary.display == display_val)
+            .values(is_favorite=0)
+        )
+    else:
+        # Enable THIS one
+        await db.execute(
+            update(Vocabulary)
+            .where(Vocabulary.id == req.id)
+            .values(is_favorite=1)
+        )
+            
+    await db.commit()
+    return {"ok": True}
+
+@router.post("/remove_word")
+async def remove_word(
+    req: VocabRemoveRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if req.from_vocab:
+        # Remove from favorites (soft delete from vocab list view)
+        await db.execute(
+            update(Vocabulary)
+            .where(Vocabulary.id == req.id, Vocabulary.user_id == current_user.id)
+            .values(is_favorite=0)
+        )
+        # Clean up garbage (words that are not favorite and not attached to a text)
+        await db.execute(
+            delete(Vocabulary)
+            .where(Vocabulary.id == req.id, Vocabulary.is_favorite == 0, Vocabulary.text_id == None)
+        )
+    else:
+        # Remove from text context
+        res = await db.execute(select(Vocabulary.is_favorite).where(Vocabulary.id == req.id))
+        is_fav = res.scalar_one_or_none()
+        
+        if is_fav == 1:
+            # Keep in vocab (favorites), but detach from text
+            await db.execute(
+                update(Vocabulary)
+                .where(Vocabulary.id == req.id, Vocabulary.user_id == current_user.id)
+                .values(text_id=None)
+            )
+        else:
+            # Delete completely
+            await db.execute(
+                delete(Vocabulary)
+                .where(Vocabulary.id == req.id, Vocabulary.user_id == current_user.id)
+            )
+        
     await db.commit()
     return {"ok": True}

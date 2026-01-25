@@ -2,11 +2,14 @@
   import { user } from "../stores/auth";
   import api from "../lib/api";
   import { router } from "tinro";
+  import { getUI } from "../lib/ui";
 
   let topic = "";
   let style = "neutral";
   let size = "M";
   let loading = false;
+
+  $: ui = getUI($user?.interface_language || 'ukr');
 
     async function handleSubmit() {
     if (!$user) {
@@ -39,28 +42,28 @@
 <form class="card form-container" on:submit|preventDefault={handleSubmit}>
     <div class="header-section">
         <span class="material-symbols-outlined header-icon">auto_stories</span>
-        <h2 style="margin: 0; color: var(--primary); font-weight: 500; letter-spacing: 1px;">СТВОРИТИ УРОК</h2>
+        <h2 style="margin: 0; color: var(--primary); font-weight: 500; letter-spacing: 1px;">{ui.generate_new}</h2>
     </div>
 
     <div class="form-group">
-        <label class="form-label" for="topic">Тема уроку</label>
+        <label class="form-label" for="topic">{ui.topic}</label>
         <!-- svelte-ignore a11y-autofocus -->
-        <input type="text" id="topic" bind:value={topic} class="form-control control-height" placeholder="Наприклад: Подорож, IT, Спорт..." required autofocus>
+        <input type="text" id="topic" bind:value={topic} class="form-control control-height" placeholder={ui.topic_placeholder} required autofocus>
     </div>
 
     <div class="controls-row">
         <div class="form-group" style="flex: 1;">
-            <label class="form-label" for="style">Стиль тексту</label>
+            <label class="form-label" for="style">{ui.style_label}</label>
             <select id="style" bind:value={style} class="form-control control-height">
-                <option value="neutral">Нейтральний</option>
-                <option value="formal">Офіційний</option>
-                <option value="conversational">Розмовний</option>
-                <option value="dialogue_informal">Неформальний діалог</option>
-                <option value="dialogue_formal">Офіційний діалог</option>
+                <option value="neutral">{ui.style_neutral}</option>
+                <option value="formal">{ui.style_formal}</option>
+                <option value="conversational">{ui.style_conversational}</option>
+                <option value="dialogue_informal">{ui.style_dialogue_informal}</option>
+                <option value="dialogue_formal">{ui.style_dialogue_formal}</option>
             </select>
         </div>
         <div class="form-group">
-            <span class="form-label">Кількість речень</span>
+            <span class="form-label">{ui.count}</span>
             <div class="size-selector">
                 {#each ['S', 'M', 'L'] as s}
                     <button type="button" class:active={size === s} on:click={() => size = s}>{s}</button>
@@ -71,9 +74,9 @@
 
     <button type="submit" class="btn-contained" style="width: 100%; height: 50px; justify-content: center; font-size: 1rem; margin-top: 20px;" disabled={loading}>
         {#if loading}
-            <span class="material-symbols-outlined rotating">sync</span> Генерація...
+            <span class="material-symbols-outlined rotating">sync</span> {ui.generating}
         {:else}
-            <span class="material-symbols-outlined">auto_awesome</span> Згенерувати
+            <span class="material-symbols-outlined">auto_awesome</span> {ui.generate_btn}
         {/if}
     </button>
 </form>

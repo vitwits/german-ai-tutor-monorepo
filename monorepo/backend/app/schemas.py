@@ -52,6 +52,8 @@ class TextReadSchema(BaseModel):
     content_json: str
     is_favorite: int
     quiz_json: Optional[str]
+    display_title: Optional[str] = None
+    trans_title: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -59,7 +61,7 @@ class TextReadSchema(BaseModel):
 # --- Vocabulary Schemas ---
 class VocabWordSchema(BaseModel):
     id: str
-    display: str
+    display: Optional[str]
     ua: Optional[str]
     en: Optional[str]
     ctx: Optional[str]
@@ -69,6 +71,7 @@ class VocabWordSchema(BaseModel):
     sentence_index: Optional[int]
     start_index: Optional[int]
     end_index: Optional[int]
+    display_trans: Optional[str] = None
 
     class Config:
         from_attributes = True

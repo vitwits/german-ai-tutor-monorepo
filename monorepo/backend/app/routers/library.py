@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from ..database import get_db
-from ..models import User, Text, Vocabulary, GrammarExplanation
+from ..models import User, Text, Vocabulary, GrammarExplanation, QuizResult
 from ..schemas import TextGenerateRequest, TextReadSchema, ToggleFavRequest, GrammarExplainRequest, QuizResultRequest, VocabWordSchema
 from ..dependencies import get_current_user
 from .. import services, billing
@@ -78,8 +78,18 @@ async def get_library(
     result = await db.execute(query)
     texts = result.scalars().all()
     
-    # Convert SQLAlchemy objects to Pydantic models to avoid serialization errors
-    text_models = [TextReadSchema.model_validate(t) for t in texts]
+    text_models = []
+    for t in texts:
+        tm = TextReadSchema.model_validate(t)
+        try:
+            titles = json.loads(t.title) if t.title else {}
+            lang_key = current_user.interface_language
+            tm.display_title = titles.get('de', t.title)
+            tm.trans_title = titles.get(lang_key, '')
+        except (json.JSONDecodeError, TypeError):
+            tm.display_title = t.title
+            tm.trans_title = ""
+        text_models.append(tm)
 
     return {
         "texts": text_models,
@@ -168,4 +178,39 @@ async def get_text(text_id: str, db: AsyncSession = Depends(get_db), current_use
     text_model = TextReadSchema.model_validate(text)
     vocab_models = [VocabWordSchema.model_validate(v) for v in vocab]
     
-    return {"text": text_model, "vocab": vocab_models}
+    # Fetch last quiz result
+    q_res = await db.execute(select(QuizResult).where(
+        QuizResult.user_id == current_user.id,
+        QuizResult.text_id == text_id
+    ).order_by(QuizResult.created_at.desc()).limit(1))
+    last_result = q_res.scalar_one_or_none()
+    
+    last_result_data = None
+    if last_result:
+        last_result_data = {"score": last_result.score, "total_questions": last_result.total_questions}
+    
+    return {"text": text_model, "vocab": vocab_models, "last_quiz_result": last_result_data}
+
+@router.post("/save_quiz_result")
+async def save_quiz_result(
+    req: QuizResultRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # Check if result exists
+    q_res = await db.execute(select(QuizResult).where(
+        QuizResult.user_id == current_user.id,
+        QuizResult.text_id == req.text_id
+    ))
+    existing = q_res.scalar_one_or_none()
+    
+    if existing:
+        existing.score = req.score
+        existing.total_questions = req.total
+        existing.created_at = func.now()
+    else:
+        new_result = QuizResult(user_id=current_user.id, text_id=req.text_id, score=req.score, total_questions=req.total)
+        db.add(new_result)
+        
+    await db.commit()
+    return {"ok": True}

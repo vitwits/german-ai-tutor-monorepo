@@ -4,7 +4,7 @@ from sqlalchemy import select, func, update, delete
 import random
 
 from ..database import get_db
-from ..models import User, Sentence, UserBlockedSentence, UserFavoriteSentence, Vocabulary
+from ..models import User, Sentence, UserBlockedSentence, UserFavoriteSentence, Vocabulary, Feedback
 from ..schemas import ReportSentenceRequest, ToggleSentenceFavRequest, RemoveFavSentenceRequest
 from ..dependencies import get_current_user
 from .. import services, billing
@@ -63,6 +63,18 @@ async def evaluate_audio(
     avg = int((result.get('pronunciation_score', 0) + result.get('context_score', 0) + result.get('grammar_score', 0)) / 3)
     result['average_score'] = avg
     
+    # Select feedback audio from DB
+    fb_res = await db.execute(select(Feedback).where(
+        Feedback.language == lang_code,
+        Feedback.category == 'common',
+        Feedback.min_score <= avg,
+        Feedback.max_score >= avg
+    ).order_by(func.random()).limit(1))
+    
+    fb_row = fb_res.scalar_one_or_none()
+    if fb_row:
+        result['feedback_audio_url'] = f"/static/audio/{fb_row.file_path}"
+
     # Billing
     new_bal = await billing.deduct_credits(current_user.id, billing.PRICING['speaking_evaluation'])
     result['credits'] = new_bal

@@ -2,6 +2,9 @@
   import { onMount } from "svelte";
   import api from "../lib/api";
   import { router } from "tinro";
+  import { user } from "../stores/auth";
+  import { getUI } from "../lib/ui";
+  import { confirmModal } from "../stores/confirm";
 
   let texts = [];
   let page = 1;
@@ -12,6 +15,8 @@
   let showFav = false;
   let selectedLevels = [];
   const allLevels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+
+  $: ui = getUI($user?.interface_language || 'ukr');
 
   async function loadLibrary() {
     loading = true;
@@ -54,8 +59,9 @@
       }
   }
 
-  async function deleteText(id) {
-      if(!confirm("Delete this text?")) return;
+  async function deleteText(id) {      
+      const ok = await confirmModal.ask(ui.confirm_title, ui.confirm_delete_text_msg, ui.btn_delete, ui.btn_cancel, true);
+      if (!ok) return;
       try {
           await api.post("/delete_text", { id });
           loadLibrary();
@@ -75,7 +81,7 @@
 </script>
 
 <div class="library-header">
-    <h2 style="margin: 0;">My Texts</h2>
+    <h2 style="margin: 0;">{ui.my_texts}</h2>
     <div class="filters">
         <button class="icon-btn {showFav ? 'active-fav' : ''}" on:click={toggleFavFilter}>
             <span class="material-symbols-outlined {showFav ? 'filled' : ''}">favorite</span>
@@ -103,11 +109,16 @@
                         <span class="material-symbols-outlined {t.is_favorite ? 'filled' : ''}">favorite</span>
                     </button>
                 </div>
-                <div class="text-title">{t.display_title}</div>
+                <div class="text-title">
+                    {t.display_title}
+                    {#if t.trans_title}
+                        <div class="text-subtitle">{t.trans_title}</div>
+                    {/if}
+                </div>
             </div>
             <div class="card-actions">
                 <!-- Link to View page (stub for now) -->
-                <a href={`/view/${t.id}`} on:click|preventDefault={() => router.goto(`/view/${t.id}`)} class="btn-contained">Read</a>
+                <a href={`/view/${t.id}`} on:click|preventDefault={() => router.goto(`/view/${t.id}`)} class="btn-contained">{ui.read}</a>
                 <button class="btn-text delete-btn" on:click={() => deleteText(t.id)}>
                     <span class="material-symbols-outlined">delete</span>
                 </button>
@@ -133,6 +144,7 @@
     .texts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
     .text-card { height: 200px; display: flex; flex-direction: column; justify-content: space-between; margin-bottom: 0; }
     .text-title { font-weight: 500; font-size: 1.1rem; margin-top: 10px; }
+    .text-subtitle { font-size: 0.9rem; opacity: 0.7; font-weight: 400; margin-top: 2px; }
     .card-actions { display: flex; justify-content: space-between; margin-top: auto; }
     
     .icon-btn { width: 36px; height: 36px; border: 1px solid var(--border); background: transparent; border-radius: var(--radius); display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--on-surface); }

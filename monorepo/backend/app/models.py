@@ -106,6 +106,17 @@ class QuizResult(Base):
     total_questions: Mapped[Optional[int]] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
 
+class Feedback(Base):
+    __tablename__ = "feedback"
+    
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    text: Mapped[Optional[str]] = mapped_column(String)
+    file_path: Mapped[Optional[str]] = mapped_column(String)
+    language: Mapped[Optional[str]] = mapped_column(String)
+    category: Mapped[Optional[str]] = mapped_column(String)
+    min_score: Mapped[Optional[int]] = mapped_column(Integer)
+    max_score: Mapped[Optional[int]] = mapped_column(Integer)
+
 # Admin / Generation Tables
 class SentenceBatch(Base):
     __tablename__ = "sentence_batches"

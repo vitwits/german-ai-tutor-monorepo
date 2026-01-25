@@ -1,7 +1,8 @@
 <script>
   import { onMount } from "svelte";
   import { Route, router } from "tinro";
-  import { fetchUser, isAuthenticated } from "./stores/auth";
+  import { fetchUser, isAuthenticated, user } from "./stores/auth";
+  import { getUI } from "./lib/ui";
   import Home from "./pages/Home.svelte";
   import Login from "./pages/Login.svelte";
   import Register from "./pages/Register.svelte";
@@ -9,12 +10,16 @@
   import View from "./pages/View.svelte";
   import Vocab from "./pages/Vocab.svelte";
   import Speaking from "./pages/Speaking.svelte";
+  import Settings from "./pages/Settings.svelte";
   import Navbar from "./components/Navbar.svelte";
   import Toast from "./components/Toast.svelte";
+  import ConfirmDialog from "./components/ConfirmDialog.svelte";
   
   onMount(() => {
     fetchUser();
   });
+
+  $: ui = getUI($user?.interface_language || 'ukr');
 
   // ЗАХИСТ РОУТІВ: Перенаправляє на /login, якщо користувач не в системі
   // і намагається зайти на захищену сторінку.
@@ -32,6 +37,7 @@
 
 <Navbar />
 <Toast />
+<ConfirmDialog />
 
 <div class="container">
   <main>
@@ -39,6 +45,7 @@
     <Route path="/login"><Login /></Route>
     <Route path="/register"><Register /></Route>
     <Route path="/library"><Library /></Route>
+    <Route path="/settings"><Settings /></Route>
     <Route path="/view/:id" let:meta><View id={meta.params.id} /></Route>
     <Route path="/vocab"><Vocab /></Route>
     <Route path="/speaking"><Speaking /></Route>
@@ -48,16 +55,16 @@
 {#if $isAuthenticated}
 <div class="nav-mobile">
   <a href="/" class={$router.path === '/' ? 'active' : ''} on:click|preventDefault={() => router.goto('/')}>
-    <span class="material-symbols-outlined">home</span>Головна
+    <span class="material-symbols-outlined">home</span>{ui.main}
   </a>
   <a href="/library" class={$router.path === '/library' ? 'active' : ''} on:click|preventDefault={() => router.goto('/library')}>
-    <span class="material-symbols-outlined">menu_book</span>Бібліотека
+    <span class="material-symbols-outlined">menu_book</span>{ui.library}
   </a>
   <a href="/speaking" class={$router.path === '/speaking' ? 'active' : ''} on:click|preventDefault={() => router.goto('/speaking')}>
-    <span class="material-symbols-outlined">mic</span>Голос
+    <span class="material-symbols-outlined">mic</span>{ui.voice}
   </a>
   <a href="/vocab" class={$router.path === '/vocab' ? 'active' : ''} on:click|preventDefault={() => router.goto('/vocab')}>
-    <span class="material-symbols-outlined">style</span>Словник
+    <span class="material-symbols-outlined">style</span>{ui.vocab}
   </a>
 </div>
 {/if}
