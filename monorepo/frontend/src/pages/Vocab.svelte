@@ -32,6 +32,18 @@
   let fcStats = { easy: 0, medium: 0, hard: 0 };
   let fcLoopTimeout = null;
   let currentAudio = null;
+  let fcIsRandom = false;
+
+  // Player State (Sentences)
+  let showPlayer = false;
+  let playerPlaylist = [];
+  let playerIndex = 0;
+  let playerIsPlaying = false;
+  let playerIsLoop = false;
+  let playerIsShuffle = false;
+  let playerAudio = null;
+  let playerCanvas;
+  let playerAnimId;
   
   // Editing State
   let editingId = null;
@@ -85,6 +97,7 @@
   // --- FLASHCARD LOGIC ---
 
   async function startSession() {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     loading = true;
     try {
         // If study mode, fetch more for infinite feel
@@ -101,6 +114,7 @@
             fcStats = { easy: 0, medium: 0, hard: 0 };
             fcIsPlaying = false;
             fcReviewStarted = false;
+            fcIsRandom = false;
         } else {
             addToast("No words found for session", "info");
         }
@@ -178,6 +192,22 @@
     }
   }
 
+  function nextCard() {
+      if (fcLoopTimeout) clearTimeout(fcLoopTimeout);
+      if (currentAudio) currentAudio.pause();
+      currentCardIdx = (currentCardIdx + 1) % sessionCards.length;
+      fcIsPlaying = false; // Stop auto-play on manual nav
+      isFlipped = false;
+  }
+
+  function prevCard() {
+      if (fcLoopTimeout) clearTimeout(fcLoopTimeout);
+      if (currentAudio) currentAudio.pause();
+      currentCardIdx = (currentCardIdx - 1 + sessionCards.length) % sessionCards.length;
+      fcIsPlaying = false;
+      isFlipped = false;
+  }
+
   async function rateCard(rating) {
     const card = sessionCards[currentCardIdx];
     fcStats[rating]++;
@@ -197,6 +227,19 @@
     } catch (e) {
         console.error(e);
     }
+  }
+
+  function toggleShuffle() {
+      fcIsRandom = !fcIsRandom;
+      // Logic for shuffle would go here (shuffling sessionCards array)
+      // For now just toggling UI state
+      if (fcIsRandom) {
+          sessionCards = [...sessionCards].sort(() => Math.random() - 0.5);
+          currentCardIdx = 0;
+          isFlipped = false;
+      } else {
+          // Ideally restore original order, but for simplicity just restart
+      }
   }
 
   // --- AUDIO & UTILS ---
@@ -327,17 +370,184 @@
       }
   }
 
+  // --- PLAYER LOGIC ---
+  function openPlayer() {
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+      if (items.length === 0) return;
+      playerPlaylist = [...items];
+      showPlayer = true;
+      playerIndex = 0;
+      playerIsPlaying = true;
+      
+      setTimeout(() => {
+          startVisualizer();
+          playCurrentSentence();
+      }, 0);
+  }
+
+  function closePlayer() {
+      showPlayer = false;
+      stopPlayerAudio();
+      playerIsPlaying = false;
+      playerIsLoop = false;
+      playerIsShuffle = false;
+      if (playerAnimId) cancelAnimationFrame(playerAnimId);
+  }
+
+  function stopPlayerAudio() {
+      if (playerAudio) {
+          playerAudio.pause();
+          playerAudio = null;
+      }
+  }
+
+  async function playCurrentSentence() {
+      if (!playerIsPlaying || !showPlayer) return;
+      stopPlayerAudio();
+
+      const item = playerPlaylist[playerIndex];
+      if (!item) return;
+
+      // Play DE
+      const urlDe = item.audio_de?.startsWith('http') ? item.audio_de : `/static/audio/sentences/${item.audio_de}`;
+      await playPlayerAudioFile(urlDe);
+      if (!playerIsPlaying || !showPlayer) return;
+
+      // Pause
+      await new Promise(r => setTimeout(r, 600));
+      if (!playerIsPlaying || !showPlayer) return;
+
+      // Play Trans
+      if (item.display_audio) {
+          const urlTrans = item.display_audio.startsWith('http') ? item.display_audio : `/static/audio/sentences/${item.display_audio}`;
+          await playPlayerAudioFile(urlTrans);
+      }
+
+      if (!playerIsPlaying || !showPlayer) return;
+
+      // Pause before next
+      await new Promise(r => setTimeout(r, 1000));
+      if (!playerIsPlaying || !showPlayer) return;
+
+      playNext(true);
+  }
+
+  function playPlayerAudioFile(url) {
+      return new Promise(resolve => {
+          if (!url) { resolve(); return; }
+          playerAudio = new Audio(url);
+          playerAudio.onended = resolve;
+          playerAudio.onerror = resolve;
+          playerAudio.play().catch(e => resolve());
+      });
+  }
+
+  function togglePlayerPlay() {
+      playerIsPlaying = !playerIsPlaying;
+      if (playerIsPlaying) playCurrentSentence();
+      else stopPlayerAudio();
+  }
+
+  function playNext(auto = false) {
+      if (playerIsShuffle) {
+           playerIndex = Math.floor(Math.random() * playerPlaylist.length);
+      } else {
+          playerIndex++;
+          if (playerIndex >= playerPlaylist.length) {
+              if (playerIsLoop) playerIndex = 0;
+              else {
+                  playerIndex = playerPlaylist.length - 1;
+                  playerIsPlaying = false;
+                  return;
+              }
+          }
+      }
+      if (!auto) playerIsPlaying = true;
+      playCurrentSentence();
+  }
+
+  function playPrev() {
+      playerIndex--;
+      if (playerIndex < 0) playerIndex = playerPlaylist.length - 1;
+      playerIsPlaying = true;
+      playCurrentSentence();
+  }
+
+  function startVisualizer() {
+      if (!playerCanvas) return;
+      const ctx = playerCanvas.getContext('2d');
+      playerCanvas.width = window.innerWidth;
+      playerCanvas.height = window.innerHeight;
+      let time = 0;
+
+      function animate() {
+          if (!showPlayer) return;
+          ctx.clearRect(0, 0, playerCanvas.width, playerCanvas.height);
+          ctx.beginPath();
+          ctx.strokeStyle = 'rgba(25, 118, 210, 0.3)';
+          ctx.lineWidth = 2;
+
+          for (let x = 0; x < playerCanvas.width; x++) {
+              const y = playerCanvas.height / 2 + Math.sin(x * 0.01 + time) * 50 * (playerIsPlaying ? 1 : 0.1) + Math.sin(x * 0.02 + time * 1.5) * 20;
+              if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+          }
+          ctx.stroke();
+          time += 0.05;
+          playerAnimId = requestAnimationFrame(animate);
+      }
+      animate();
+  }
+
+  function handleKeydown(e) {
+      if (showPlayer && e.key === 'Escape') {
+          closePlayer();
+          return;
+      }
+
+      if (!showSession) return;
+      
+      if (e.key === 'Escape') {
+          showSession = false;
+          return;
+      }
+
+      if (fcMode === 'study') {
+          if (e.code === 'Space') {
+              e.preventDefault();
+              toggleFcPlay();
+          }
+          if (e.key === 'ArrowRight') nextCard();
+          if (e.key === 'ArrowLeft') prevCard();
+      } else {
+          // Review
+          if (!fcReviewStarted) {
+               if (e.code === 'Space') { e.preventDefault(); startReview(); }
+               return;
+          }
+          if (!isFlipped) {
+              if (e.code === 'Space') { e.preventDefault(); flipCard(); }
+          } else {
+              if (e.key === '1' || e.key === 'ArrowLeft') rateCard('hard');
+              if (e.key === '2' || e.key === 'ArrowDown') rateCard('medium');
+              if (e.key === '3' || e.key === 'ArrowRight') rateCard('easy');
+          }
+      }
+  }
+
   onMount(() => {
       loadData();
       window.addEventListener('click', handleGlobalClick);
       window.addEventListener('blur', handleWindowBlur);
+      window.addEventListener('keydown', handleKeydown);
   });
 
   onDestroy(() => {
       if (fcLoopTimeout) clearTimeout(fcLoopTimeout);
       if (currentAudio) currentAudio.pause();
+      if (playerAudio) playerAudio.pause();
       window.removeEventListener('click', handleGlobalClick);
       window.removeEventListener('blur', handleWindowBlur);
+      window.removeEventListener('keydown', handleKeydown);
   });
 
   function handleCardLeave(e) {
@@ -374,6 +584,11 @@
             <button class="btn-contained practice-btn" onclick={startSession}>
                 <span class="material-symbols-outlined">school</span> {ui.fc_start_review}
             </button>
+        {:else}
+            <button class="btn-contained practice-btn" onclick={openPlayer}>
+                <span class="material-symbols-outlined">play_arrow</span>
+                {ui.play_all}
+            </button>
         {/if}
 
         <!-- Level Filters -->
@@ -403,18 +618,33 @@
 
 {#if showSession}
     <!-- FLASHCARD OVERLAY -->
-    <div class="session-overlay">
+    <div class="session-overlay" role="dialog" aria-modal="true">
+        <button class="fc-close-btn" onclick={fcClose} aria-label="Close">
+            <span class="material-symbols-outlined" style="font-size: 32px;">close</span>
+            <div style="font-size: 0.9rem; font-weight: bold; opacity: 0.8; text-align: center; margin-top: 2px;">Esc</div>
+        </button>
+
+        <div class="fc-container">
         <!-- Top Controls -->
-        <div class="session-header">
+        <div class="fc-top-controls">
             <div class="fc-mode-toggle">
-                <button class="fc-mode-opt {fcMode === 'study' ? 'active' : ''}" onclick={() => fcMode = 'study'}>{ui.fc_study_mode}</button>
-                <button class="fc-mode-opt {fcMode === 'review' ? 'active' : ''}" onclick={() => fcMode = 'review'}>{ui.fc_review_mode}</button>
+                <button class="fc-mode-opt {fcMode === 'study' ? 'active' : ''}" onclick={() => fcSetMode('study')}>{ui.fc_study_mode}</button>
+                <button class="fc-mode-opt {fcMode === 'review' ? 'active' : ''}" onclick={() => fcSetMode('review')}>{ui.fc_review_mode}</button>
             </div>
-            <button class="btn-text" onclick={() => showSession = false}>{ui.exit_btn}</button>
         </div>
 
+        <!-- Progress Bar (Review Only) -->
+        {#if fcMode === 'review'}
+        <div class="fc-progress-wrapper">
+            <div class="fc-progress-track">
+                <div class="fc-progress-fill" style="width: {(currentCardIdx / sessionCards.length) * 100}%"></div>
+            </div>
+            <div class="fc-progress-text">{currentCardIdx} / {sessionCards.length}</div>
+        </div>
+        {/if}
+
         <!-- Card Area -->
-        <div class="flashcard-container" 
+        <div class="fc-card-area" 
              onclick={flipCard} 
              onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && flipCard()}
              role="button" 
@@ -425,52 +655,119 @@
                     <button class="fc-start-btn" onclick={(e) => { e.stopPropagation(); startReview(); }}>
                         <span class="material-symbols-outlined">play_arrow</span>
                     </button>
+                    <div style="margin-top: 24px; opacity: 0.8; font-weight: 500; font-size: 1.2rem;">{ui.fc_start_review}</div>
                 </div>
             {/if}
 
-            <div class="flashcard {isFlipped ? 'flipped' : ''}">
-                <div class="front">
-                    <span class="level-badge lvl-{sessionCards[currentCardIdx].level?.toLowerCase()}" style="position:absolute; top:20px; left:20px;">
+            <!-- Додаємо умову відображення картки, щоб вона не перекривала кнопку старту в режимі Review -->
+            <div class="fc-card {isFlipped ? 'flipped' : ''}" style="display: {fcMode === 'review' && !fcReviewStarted ? 'none' : 'block'}">
+                <div class="fc-face fc-front">
+                    <span class="level-badge lvl-{sessionCards[currentCardIdx].level?.toLowerCase()}" style="position:absolute; top:20px; left:20px; z-index: 5;">
                         {sessionCards[currentCardIdx].level || '?'}
                     </span>
-                    <div class="word">{sessionCards[currentCardIdx].display}</div>
+                    <div class="fc-word">{sessionCards[currentCardIdx].display}</div>
                     {#if fcMode === 'review'}
-                        <div class="hint">{ui.fc_tap_to_flip}</div>
+                        <div class="fc-hint">{ui.fc_tap_to_flip} {ui.fc_press_space}</div>
                     {/if}
-                    <button class="btn-audio" onclick={(e) => { e.stopPropagation(); playAudio(sessionCards[currentCardIdx].audio_de_url); }}>
-                        <span class="material-symbols-outlined">volume_up</span>
-                    </button>
                 </div>
-                <div class="back">
-                    <div class="trans">{sessionCards[currentCardIdx].trans}</div>
-                    {#if fcMode === 'review'}
-                        <div class="ctx">{sessionCards[currentCardIdx].ctx}</div>
+                <div class="fc-face fc-back">
+                    <div class="fc-trans">{sessionCards[currentCardIdx].trans}</div>
+                    {#if fcMode === 'review' || !fcIsPlaying}
+                        <div class="fc-ctx">{sessionCards[currentCardIdx].ctx}</div>
                     {/if}
                 </div>
             </div>
+
+            {#if fcMode === 'study'}
+            <div class="fc-study-hint-text">
+                {ui.fc_study_hint}
+            </div>
+            {/if}
         </div>
 
         <!-- Bottom Controls -->
-        <div class="controls">
+        <div class="fc-bottom-controls">
             {#if fcMode === 'study'}
-                <div class="study-controls">
+                <div class="fc-ctrl-row">
+                    <button class="fc-icon-btn active" onclick={(e) => { e.stopPropagation(); playAudio(sessionCards[currentCardIdx].audio_de_url); }}>
+                        <span class="material-symbols-outlined">volume_up</span>
+                    </button>
                     <button class="fc-play-btn" onclick={toggleFcPlay}>
                         <span class="material-symbols-outlined">{fcIsPlaying ? 'pause' : 'play_arrow'}</span>
                     </button>
-                    <div class="fc-hint-text">{ui.fc_study_hint}</div>
+                    <button class="fc-icon-btn {fcIsRandom ? 'active' : ''}" onclick={toggleShuffle}>
+                        <span class="material-symbols-outlined">shuffle</span>
+                    </button>
+                </div>
+            {:else if !fcReviewStarted}
+                <!-- Review Pre-start -->
+                <div class="fc-ctrl-row">
+                    <button class="fc-icon-btn active" onclick={(e) => { e.stopPropagation(); playAudio(sessionCards[currentCardIdx].audio_de_url); }}>
+                        <span class="material-symbols-outlined">volume_up</span>
+                    </button>
+                    <button class="fc-icon-btn {fcIsRandom ? 'active' : ''}" onclick={toggleShuffle}>
+                        <span class="material-symbols-outlined">shuffle</span>
+                    </button>
                 </div>
             {:else if fcReviewStarted}
                 {#if isFlipped}
-                    <button class="btn-rate hard" onclick={() => rateCard('hard')}>{ui.fc_hard}</button>
-                    <button class="btn-rate medium" onclick={() => rateCard('medium')}>{ui.fc_medium}</button>
-                    <button class="btn-rate easy" onclick={() => rateCard('easy')}>{ui.fc_easy}</button>
-                {:else}
-                    <div class="fc-hint-text">{currentCardIdx + 1} / {sessionCards.length}</div>
+                    <div class="fc-ctrl-row" style="gap: 20px;">
+                        <button class="fc-rate-btn hard" onclick={() => rateCard('hard')}>
+                            <span class="material-symbols-outlined">sentiment_very_dissatisfied</span>
+                            {ui.fc_hard}
+                            <span class="kb-hint">[1]</span>
+                        </button>
+                        <button class="fc-rate-btn mid" onclick={() => rateCard('medium')}>
+                            <span class="material-symbols-outlined">sentiment_neutral</span>
+                            {ui.fc_medium}
+                            <span class="kb-hint">[2]</span>
+                        </button>
+                        <button class="fc-rate-btn easy" onclick={() => rateCard('easy')}>
+                            <span class="material-symbols-outlined">sentiment_very_satisfied</span>
+                            {ui.fc_easy}
+                            <span class="kb-hint">[3]</span>
+                        </button>
+                    </div>
                 {/if}
             {/if}
         </div>
+        </div>
     </div>
 {:else}
+    <!-- PLAYER OVERLAY -->
+    {#if showPlayer}
+    <div class="player-overlay">
+        <canvas bind:this={playerCanvas} class="player-canvas"></canvas>
+        <button class="close-player-btn" onclick={closePlayer}>
+            <span class="material-symbols-outlined" style="font-size: 32px;">close</span>
+            <div style="font-size: 0.9rem; font-weight: bold; opacity: 0.8; text-align: center; margin-top: 2px;">Esc</div>
+        </button>
+        
+        <div class="player-content">
+            <div class="player-sent-de">{playerPlaylist[playerIndex]?.text_de}</div>
+            <div class="player-sent-trans">{playerPlaylist[playerIndex]?.display_trans}</div>
+            
+            <div class="player-controls">
+                <button class="ctrl-btn ctrl-btn-sm {playerIsLoop ? 'active' : ''}" onclick={() => playerIsLoop = !playerIsLoop} title="Loop">
+                    <span class="material-symbols-outlined">repeat</span>
+                </button>
+                <button class="ctrl-btn ctrl-btn-md" onclick={playPrev}>
+                    <span class="material-symbols-outlined" style="font-size: 36px;">skip_previous</span>
+                </button>
+                <button class="ctrl-btn ctrl-btn-lg" onclick={togglePlayerPlay}>
+                    <span class="material-symbols-outlined" style="font-size: 40px;">{playerIsPlaying ? 'pause' : 'play_arrow'}</span>
+                </button>
+                <button class="ctrl-btn ctrl-btn-md" onclick={() => playNext(false)}>
+                    <span class="material-symbols-outlined" style="font-size: 36px;">skip_next</span>
+                </button>
+                <button class="ctrl-btn ctrl-btn-sm {playerIsShuffle ? 'active' : ''}" onclick={() => playerIsShuffle = !playerIsShuffle} title="Mix">
+                    <span class="material-symbols-outlined">shuffle</span>
+                </button>
+            </div>
+        </div>
+    </div>
+    {/if}
+
     <!-- MAIN CONTENT -->
     {#if activeTab === 'words'}
         <div class="vocab-wrapper {viewMode}">
@@ -747,18 +1044,23 @@
     }
     .session-header { padding: 20px; display: flex; justify-content: space-between; align-items: center; }
     
-    .fc-mode-toggle { background: rgba(0,0,0,0.05); border-radius: 20px; padding: 4px; display: flex; }
-    .fc-mode-opt {
-        padding: 6px 16px; border: none; background: transparent; border-radius: 16px;
-        font-weight: 500; cursor: pointer; color: var(--on-surface); opacity: 0.6; font-size: 0.9rem;
-    }
-    .fc-mode-opt.active { background: var(--surface); box-shadow: 0 2px 8px rgba(0,0,0,0.1); opacity: 1; color: var(--primary); }
-    
     .flashcard-container {
         flex: 1; perspective: 1000px; display: flex; align-items: center; justify-content: center; padding: 20px; position: relative;
     }
     .flashcard {
-        width: 100%; max-width: 400px; height: 300px; position: relative;
+        width: 100%; max-width: 400px; height: 340px; position: relative;
+        transform-style: preserve-3d; transition: transform 0.6s;
+        cursor: pointer;
+    }
+    .flashcard.flipped { transform: rotateY(180deg); }
+
+    .front, .back {
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        backface-visibility: hidden; -webkit-backface-visibility: hidden;
+        background: var(--surface); border-radius: 20px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.1); border: 1px solid var(--border);
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        padding: 20px; text-align: center;
     }
     .back { transform: rotateY(180deg); }
 
@@ -798,7 +1100,47 @@
         color: var(--primary);
     }
 
+    .fc-face.fc-front { transform: rotateY(0deg); z-index: 2; }
+    .fc-face.fc-back { transform: rotateY(180deg); z-index: 1; }
+
     .pagination { display: flex; justify-content: center; gap: 10px; margin-top: 20px; align-items: center; }
     .page-btn { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; }
     .page-btn:disabled { opacity: 0.3; cursor: default; }
+
+    /* Player Styles */
+    .player-overlay {
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: var(--bg); 
+        z-index: 10000;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        color: var(--on-surface);
+    }
+    .player-canvas {
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        opacity: 0.2; pointer-events: none;
+    }
+    .player-content {
+        z-index: 2; text-align: center; padding: 20px; width: 90%; max-width: 600px;
+        flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center;
+    }
+    .player-sent-de { font-size: 1.5rem; font-weight: 500; margin-bottom: 24px; color: var(--primary); line-height: 1.4; }
+    .player-sent-trans { font-size: 1.1rem; opacity: 0.8; margin-bottom: 40px; line-height: 1.4; }
+    .player-controls {
+        display: flex; align-items: center; justify-content: center; gap: 24px;
+        margin-bottom: 60px; z-index: 2;
+    }
+    .ctrl-btn {
+        background: none; border: none; color: var(--on-surface); cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        transition: transform 0.1s, color 0.2s; padding: 0;
+    }
+    .ctrl-btn:active { transform: scale(0.9); }
+    .ctrl-btn.active { color: var(--primary); }
+    .ctrl-btn-lg { width: 72px; height: 72px; border-radius: 50%; background: var(--primary); color: var(--on-primary); box-shadow: 0 6px 16px rgba(0,0,0,0.2); }
+    .ctrl-btn-md { width: 48px; height: 48px; opacity: 0.9; }
+    .ctrl-btn-sm { width: 40px; height: 40px; opacity: 0.6; }
+    .close-player-btn {
+        position: absolute; top: 24px; right: 24px; z-index: 3;
+        background: none; border: none; color: var(--on-surface); cursor: pointer; padding: 8px;
+    }
 </style>
