@@ -178,6 +178,13 @@ async def get_text(text_id: str, db: AsyncSession = Depends(get_db), current_use
     text_model = TextReadSchema.model_validate(text)
     vocab_models = [VocabWordSchema.model_validate(v) for v in vocab]
     
+    # Fetch grammar availability
+    g_res = await db.execute(select(GrammarExplanation.sentence_index).where(
+        GrammarExplanation.text_id == text_id,
+        GrammarExplanation.language == current_user.interface_language
+    ))
+    grammar_indices = g_res.scalars().all()
+
     # Fetch last quiz result
     q_res = await db.execute(select(QuizResult).where(
         QuizResult.user_id == current_user.id,
@@ -189,7 +196,7 @@ async def get_text(text_id: str, db: AsyncSession = Depends(get_db), current_use
     if last_result:
         last_result_data = {"score": last_result.score, "total_questions": last_result.total_questions}
     
-    return {"text": text_model, "vocab": vocab_models, "last_quiz_result": last_result_data}
+    return {"text": text_model, "vocab": vocab_models, "last_quiz_result": last_result_data, "grammar_indices": grammar_indices}
 
 @router.post("/save_quiz_result")
 async def save_quiz_result(

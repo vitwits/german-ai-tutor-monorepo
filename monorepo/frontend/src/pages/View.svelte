@@ -69,6 +69,7 @@
       text = res.data.text;
       vocab = res.data.vocab || [];
       lastQuizResult = res.data.last_quiz_result;
+      const grammarIndices = res.data.grammar_indices || [];
       
       // Build Vocab Map for quick lookup
       vocab.forEach(v => vocabMap[v.id] = v);
@@ -119,7 +120,7 @@
         if (userLang !== 'ukr') transText = s.en || s.uk;
         if (!transText) transText = s.en || s.uk;
 
-        return { ...s, de_html: html, index: idx, has_grammar: false, grammar_explanation: null, display_trans: transText };
+        return { ...s, de_html: html, index: idx, has_grammar: grammarIndices.includes(idx), grammar_explanation: null, display_trans: transText };
       });
 
     } catch (e) {
@@ -366,6 +367,15 @@
           sentences = [...sentences];
       }
   }
+  
+  function scrollToWord(wid) {
+      const el = document.querySelector(`.learned[data-wid="${wid}"]`);
+      if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          // Optional: highlight effect
+          // el.classList.add('highlight-word');
+      }
+  }
 
   // --- LEARNED WORD POPUP ---
 
@@ -382,7 +392,7 @@
               const trans = $user.interface_language === 'ukr' ? word.ua : word.en;
               learnedPopupContent = `<div style="font-weight:500; color:var(--primary);">${trans}</div>`;
               
-              learnedPopupStyle = `top: ${rect.top + scrollTop - 8}px; left: ${rect.left + scrollLeft + (rect.width/2)}px; transform: translate(-50%, -100%); display: block;`;
+              learnedPopupStyle = `top: ${rect.top - 8}px; left: ${rect.left + (rect.width/2)}px; transform: translate(-50%, -100%); display: block; position: fixed;`;
               showLearnedPopup = true;
               
               if (hideTimeout) clearTimeout(hideTimeout);
@@ -632,7 +642,7 @@
                             </button>
                             <span class="de-text">{@html s.de_html}</span>
                         </div>
-            <button class="btn-text" onclick={() => explainGrammar(i)} title={ui.grammar_tooltip} style="color: var(--primary); opacity: 0.5;">
+            <button class="btn-text" onclick={() => explainGrammar(i)} title={ui.grammar_tooltip} style="color: var(--primary); opacity: {s.has_grammar ? 1 : 0.5};">
                             <span class="material-symbols-outlined">{s.grammar_loading ? 'sync' : 'quiz'}</span>
                         </button>
                     </div>
@@ -663,21 +673,21 @@
                     <div class="card" style="text-align:center; opacity:0.6;">{ui.empty_vocab_prompt}</div>
                 {/if}
                 {#each vocab as v}
-                    <div class="vocab-item">
+                    <div class="vocab-item" onclick={() => toggleVocabFav(v.id)} role="button" tabindex="0" onkeydown={(e) => e.key === 'Enter' && toggleVocabFav(v.id)}>
                         <div style="display:flex; align-items:center; gap:12px; flex: 1; min-width: 0;">
-                            <button class="btn-text" onclick={() => playVocabPair(v.display, $user.interface_language === 'ukr' ? v.ua : v.en)}>
+                            <button class="btn-text" onclick={(e) => { e.stopPropagation(); playVocabPair(v.display, $user.interface_language === 'ukr' ? v.ua : v.en); }}>
                                 <span class="material-symbols-outlined" style="font-size:18px;">volume_up</span>
                             </button>
                             <div style="overflow: hidden; text-overflow: ellipsis;">
-                                <span style="font-weight: 500; color: var(--primary); font-size: 1.1rem;">{v.display}</span>
+                                <span style="font-weight: 500; color: var(--primary); font-size: 1.1rem; cursor: pointer;" onclick={(e) => { e.stopPropagation(); scrollToWord(v.id); }} role="button" tabindex="0" onkeydown={(e) => e.key === 'Enter' && scrollToWord(v.id)}>{v.display}</span>
                                 <div style="font-size:0.85rem; opacity:0.7; margin-top:6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{$user.interface_language === 'ukr' ? v.ua : v.en}</div>
                             </div>
                         </div>
                         <div style="display: flex; align-items: center; gap: 0;">
-                            <button class="btn-text" onclick={() => toggleVocabFav(v.id)} style="color: {v.is_favorite ? '#FFC107' : 'inherit'}; min-width: 32px; padding: 0;">
+                            <button class="btn-text" onclick={(e) => { e.stopPropagation(); toggleVocabFav(v.id); }} style="color: {v.is_favorite ? '#FFC107' : 'inherit'}; min-width: 32px; padding: 0;">
                                 <span class="material-symbols-outlined {v.is_favorite ? 'filled' : ''}">star</span>
                             </button>
-                            <button class="btn-text" onclick={() => removeWord(v.id)} style="color:red; min-width: 32px; padding: 0;">
+                            <button class="btn-text" onclick={(e) => { e.stopPropagation(); removeWord(v.id); }} style="color:red; min-width: 32px; padding: 0;">
                                 <span class="material-symbols-outlined">delete</span>
                             </button>
                         </div>
@@ -822,6 +832,7 @@
         display:flex; justify-content:space-between; align-items:center; padding:12px 16px;
         border:1px solid var(--border); border-radius: var(--radius); background: var(--surface);
         box-shadow: var(--shadow);
+        cursor: pointer;
     }
 
     /* Quiz */

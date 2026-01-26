@@ -255,9 +255,13 @@
   // --- ITEM ACTIONS ---
 
   function toggleContext(id) {
-      if (expandedContexts.has(id)) expandedContexts.delete(id);
-      else expandedContexts.add(id);
-      expandedContexts = expandedContexts; // Trigger reactivity
+      if (expandedContexts.has(id)) {
+          expandedContexts.delete(id);
+      } else {
+          expandedContexts.clear();
+          expandedContexts.add(id);
+      }
+      expandedContexts = expandedContexts;
   }
 
   async function deleteItem(id, isSentence = false) {
@@ -308,11 +312,53 @@
       } catch(e) { addToast("Error saving", "error"); }
   }
 
-  onMount(loadData);
+  function handleGlobalClick(e) {
+      if (editingId) cancelEdit();
+      if (expandedContexts.size > 0) {
+          expandedContexts.clear();
+          expandedContexts = expandedContexts;
+      }
+  }
+
+  function handleWindowBlur() {
+      if (editingId) cancelEdit();
+      if (expandedContexts.size > 0) {
+          expandedContexts.clear();
+          expandedContexts = expandedContexts;
+      }
+  }
+
+  onMount(() => {
+      loadData();
+      window.addEventListener('click', handleGlobalClick);
+      window.addEventListener('blur', handleWindowBlur);
+  });
+
   onDestroy(() => {
       if (fcLoopTimeout) clearTimeout(fcLoopTimeout);
       if (currentAudio) currentAudio.pause();
+      window.removeEventListener('click', handleGlobalClick);
+      window.removeEventListener('blur', handleWindowBlur);
   });
+
+  function handleCardLeave(e) {
+      if (viewMode !== 'grid') return;
+      const card = e.currentTarget;
+      if (card.classList.contains('flipped')) {
+          card._flipTimeout = setTimeout(() => {
+              card.classList.remove('flipped');
+              card._flipTimeout = null;
+          }, 400);
+      }
+  }
+
+  function handleCardEnter(e) {
+      const card = e.currentTarget;
+      if (card._flipTimeout) {
+          clearTimeout(card._flipTimeout);
+          card._flipTimeout = null;
+      }
+  }
 </script>
 
 <!-- HEADER & CONTROLS -->
@@ -434,7 +480,12 @@
                      role="button"
                      tabindex="0"
                      onkeydown={(e) => { if((e.key === 'Enter' || e.key === ' ') && viewMode==='grid' && !e.target.closest('button')) e.currentTarget.classList.toggle('flipped'); }}
-                     onclick={(e) => { if(viewMode==='grid' && !e.target.closest('button')) e.currentTarget.classList.toggle('flipped'); }}>
+                     onclick={(e) => { 
+                        if(viewMode==='grid' && !e.target.closest('button')) e.currentTarget.classList.toggle('flipped');
+                        if(viewMode==='list' && expandedContexts.has(w.id)) e.stopPropagation();
+                     }}
+                     onmouseleave={handleCardLeave}
+                     onmouseenter={handleCardEnter}>
                     
                     <div class="vocab-card-inner">
                         <!-- FRONT / MAIN -->
@@ -449,7 +500,7 @@
                                         <button class="btn-text list-audio-btn" onclick={(e) => { e.stopPropagation(); playVocabPair(w.display, w.display_trans); }}>
                                             <span class="material-symbols-outlined">volume_up</span>
                                         </button>
-                                        <div style="flex:1; min-width:0; text-align: left;">
+                                        <div class="vocab-text-area {editingId === w.id ? 'editing' : ''}">
                                             <div class="word-text" 
                                                  role="button" 
                                                  tabindex="0" 
@@ -457,24 +508,27 @@
                                                  onclick={(e) => { e.stopPropagation(); toggleContext(w.id); }}>
                                                 {w.display}
                                             </div>
-                                            <div class="trans-text">{w.display_trans}</div>
+                                            {#if editingId === w.id}
+                                                <input type="text" class="edit-input" bind:value={editValue} onclick={(e) => e.stopPropagation()} onkeydown={(e) => { e.stopPropagation(); if(e.key === 'Enter') saveEdit(w.id); }} autofocus />
+                                            {:else}
+                                                <div class="trans-text">{w.display_trans}</div>
+                                            {/if}
                                         </div>
                                     </div>
                                     
                                     {#if viewMode === 'list'}
-                                        <div class="list-tools" style="display:flex; align-items:center;">
+                                        <div class="list-tools" style="display:flex; align-items:center; gap: 8px;">
                                             {#if editingId === w.id}
                                                 <!-- Edit Mode -->
-                                                <input type="text" class="edit-input" bind:value={editValue} onclick={(e) => e.stopPropagation()} onkeydown={(e) => { e.stopPropagation(); if(e.key === 'Enter') saveEdit(w.id); }} />
-                                                <button class="btn-text" style="color:var(--primary)" onclick={(e) => { e.stopPropagation(); saveEdit(w.id); }}>
+                                                <button class="btn-text" style="color:var(--primary); padding:0; min-width:32px;" onclick={(e) => { e.stopPropagation(); saveEdit(w.id); }}>
                                                     <span class="material-symbols-outlined">check</span>
                                                 </button>
-                                                <button class="btn-text" onclick={(e) => { e.stopPropagation(); cancelEdit(); }}>
+                                                <button class="btn-text" style="padding:0; min-width:32px;" onclick={(e) => { e.stopPropagation(); cancelEdit(); }}>
                                                     <span class="material-symbols-outlined">close</span>
                                                 </button>
                                             {:else}
                                                 <!-- Normal Mode -->
-                                                <button class="btn-text" style="color:var(--primary); opacity:0.7;" onclick={(e) => { e.stopPropagation(); startEdit(w.id, w.display_trans); }}>
+                                                <button class="btn-text" style="color:var(--primary); opacity:0.7; padding:0; min-width:32px;" onclick={(e) => { e.stopPropagation(); startEdit(w.id, w.display_trans); }}>
                                                     <span class="material-symbols-outlined">edit</span>
                                                 </button>
                                                 <button class="btn-text delete-btn" onclick={(e) => { e.stopPropagation(); deleteItem(w.id); }}>
@@ -503,9 +557,15 @@
                                     <button class="btn-text" onclick={(e) => { e.stopPropagation(); playVocabPair(w.display, w.display_trans); }}>
                                         <span class="material-symbols-outlined">volume_up</span>
                                     </button>
-                                    <button class="btn-text" style="color:var(--on-surface); opacity:0.5;" onclick={(e) => { e.stopPropagation(); startEdit(w.id, w.display_trans); }}>
-                                        <span class="material-symbols-outlined">edit</span>
-                                    </button>
+                                    {#if editingId === w.id}
+                                        <button class="btn-text" style="color:var(--primary); opacity:1;" onclick={(e) => { e.stopPropagation(); saveEdit(w.id); }}>
+                                            <span class="material-symbols-outlined">check</span>
+                                        </button>
+                                    {:else}
+                                        <button class="btn-text" style="color:var(--primary); opacity:0.7;" onclick={(e) => { e.stopPropagation(); startEdit(w.id, w.display_trans); }}>
+                                            <span class="material-symbols-outlined">edit</span>
+                                        </button>
+                                    {/if}
                                     <button class="btn-text delete-btn" onclick={(e) => { e.stopPropagation(); deleteItem(w.id); }}>
                                         <span class="material-symbols-outlined">delete</span>
                                     </button>
@@ -517,12 +577,7 @@
                         {#if viewMode === 'grid'}
                             <div class="vocab-face vocab-back">
                                 <div class="vocab-back-scroll">
-                                    {#if editingId === w.id}
-                                         <textarea class="edit-textarea" bind:value={editValue} onclick={(e) => e.stopPropagation()}></textarea>
-                                         <button class="btn-contained" style="margin-top:8px; height:30px;" onclick={(e) => { e.stopPropagation(); saveEdit(w.id); }}>Save</button>
-                                    {:else}
-                                        <div class="ctx-text">{w.ctx}</div>
-                                    {/if}
+                                    <div class="ctx-text">{w.ctx}</div>
                                 </div>
                                 {#if w.text_id}
                                     <button type="button" class="ctx-link btn-text" style="padding:0; height:auto; text-transform:none;" onclick={() => router.goto(`/view/${w.text_id}`)}>
@@ -622,7 +677,8 @@
     .ctx-text { font-style: italic; opacity: 0.9; margin-bottom: 6px; }
     .ctx-link { display: inline-flex; align-items: center; gap: 4px; font-size: 0.8rem; color: var(--primary); text-decoration: none; cursor: pointer; }
 
-    .edit-input { border: 1px solid var(--primary); border-radius: 4px; padding: 4px 8px; font-size: 0.9rem; width: 100%; max-width: 200px; }
+    .vocab-text-area { flex:1; min-width:0; text-align: left; }
+    .edit-input { flex:1; width:100%; min-width:0; border:none; background:transparent; font:inherit; font-size:1.1rem; outline:none; padding:0; margin:0; color:inherit; border-bottom: 1px solid var(--primary); border-radius: 0; }
     .edit-textarea { width: 100%; height: 80px; border: 1px solid var(--primary); border-radius: 4px; padding: 8px; font-family: inherit; resize: none; }
 
     /* Level Strips */
@@ -635,21 +691,22 @@
 
     /* Grid View */
     .vocab-wrapper.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
-    .vocab-wrapper.grid .vocab-item { height: 200px; perspective: 1000px; background: transparent; border: none; box-shadow: none; }
-    .vocab-card-inner {
+    .vocab-wrapper.grid .vocab-item { height: 200px; perspective: 1000px; background: transparent; border: none; box-shadow: none; overflow: visible; }
+    .vocab-wrapper.grid .vocab-card-inner {
         position: relative; width: 100%; height: 100%; text-align: center;
         transition: transform 0.6s; transform-style: preserve-3d;
     }
     .vocab-item.flipped .vocab-card-inner { transform: rotateY(180deg); }
     
-    .vocab-face {
+    .vocab-wrapper.grid .vocab-face {
         position: absolute; top: 0; left: 0; width: 100%; height: 100%;
         backface-visibility: hidden; border-radius: var(--radius);
         box-shadow: var(--shadow); border: 1px solid var(--border); background: var(--surface);
         display: flex; flex-direction: column;
+        overflow: hidden; box-sizing: border-box;
     }
     .vocab-front { z-index: 2; }
-    .vocab-back { transform: rotateY(180deg); padding: 16px; display: flex; flex-direction: column; }
+    .vocab-back { transform: rotateY(180deg); padding: 24px; display: flex; flex-direction: column; justify-content: center; align-items: center; }
     
     .vocab-back-scroll {
         flex: 1; overflow-y: auto; width: 100%; display: flex; flex-direction: column;
@@ -661,9 +718,13 @@
     
     .vocab-wrapper.grid .item-content { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 10px; }
     .vocab-wrapper.grid .vocab-main-row { flex-direction: column; text-align: center; }
-    .vocab-wrapper.grid .vocab-word-group { flex-direction: column; }
+    .vocab-wrapper.grid .vocab-word-group { flex-direction: column; width: 100%; }
     .vocab-wrapper.grid .list-audio-btn { display: none; }
-    .vocab-wrapper.grid .word-text { font-size: 1.4rem; margin-bottom: 8px; }
+    .vocab-wrapper.grid .vocab-text-area { text-align: center; width: 100%; display: block; }
+    .vocab-wrapper.grid .vocab-text-area.editing { text-align: left; }
+    .vocab-wrapper.grid .edit-input { text-align: left; width: 100%; display: block; box-sizing: border-box; }
+    .vocab-wrapper.grid .ctx-text { white-space: normal; word-wrap: break-word; }
+    .vocab-wrapper.grid .word-text { font-size: 1.2rem; margin-bottom: 8px; }
     
     .grid-footer {
         height: 40px; border-top: 1px solid var(--border); background: rgba(0,0,0,0.02);
