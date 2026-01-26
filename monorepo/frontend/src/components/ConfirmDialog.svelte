@@ -9,15 +9,20 @@
 </script>
 
 {#if $confirmModal.show}
-    <div class="modal-overlay" on:click|self={() => handleClose(false)} transition:fade={{ duration: 100 }}>
+    <div class="modal-overlay" 
+         onclick={(e) => { if (e.target === e.currentTarget) handleClose(false); }} 
+         onkeydown={(e) => { if (e.key === 'Escape') handleClose(false); }}
+         role="button" 
+         tabindex="0" 
+         transition:fade={{ duration: 100 }}>
         <div class="box-area" transition:scale={{ duration: 100, start: 0.9, easing: cubicOut }}>
             <h3 class="text-heading5" id="sys-confirm-title">{$confirmModal.title}</h3>
             <div class="sub-text" id="sys-confirm-body">{$confirmModal.message}</div>
             <div class="action-buttons">
-                <button type="button" class="btn-text" on:click={() => handleClose(false)}>
+                <button type="button" class="btn-text" onclick={() => handleClose(false)}>
                     <span>{$confirmModal.cancelText}</span>
                 </button>
-                <button type="button" class="btn-contained {$confirmModal.isDanger ? 'btn-danger' : ''}" on:click={() => handleClose(true)}>
+                <button type="button" class="btn-contained {$confirmModal.isDanger ? 'btn-danger' : ''}" onclick={() => handleClose(true)}>
                     <span>{$confirmModal.okText}</span>
                 </button>
             </div>

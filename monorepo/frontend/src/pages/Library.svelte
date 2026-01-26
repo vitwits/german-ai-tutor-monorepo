@@ -83,14 +83,14 @@
 <div class="library-header">
     <h2 style="margin: 0;">{ui.my_texts}</h2>
     <div class="filters">
-        <button class="icon-btn {showFav ? 'active-fav' : ''}" on:click={toggleFavFilter}>
+        <button class="icon-btn {showFav ? 'active-fav' : ''}" onclick={toggleFavFilter}>
             <span class="material-symbols-outlined {showFav ? 'filled' : ''}">favorite</span>
         </button>
         
         <div class="level-filters">
             {#each allLevels as lvl}
                 <button class="lvl-filter {selectedLevels.includes(lvl) ? 'active' : ''}" 
-                        on:click={() => toggleLevel(lvl)}
+                        onclick={() => toggleLevel(lvl)}
                         data-lvl={lvl}>
                     {lvl}
                 </button>
@@ -105,21 +105,18 @@
             <div class="card-top">
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <span class="level-badge lvl-{t.level.toLowerCase()}">{t.level}</span>
-                    <button class="btn-text fav-btn" on:click={() => toggleFav(t)}>
+                    <button class="btn-text fav-btn" onclick={() => toggleFav(t)}>
                         <span class="material-symbols-outlined {t.is_favorite ? 'filled' : ''}">favorite</span>
                     </button>
                 </div>
                 <div class="text-title">
                     {t.display_title}
-                    {#if t.trans_title}
-                        <div class="text-subtitle">{t.trans_title}</div>
-                    {/if}
                 </div>
             </div>
             <div class="card-actions">
                 <!-- Link to View page (stub for now) -->
-                <a href={`/view/${t.id}`} on:click|preventDefault={() => router.goto(`/view/${t.id}`)} class="btn-contained">{ui.read}</a>
-                <button class="btn-text delete-btn" on:click={() => deleteText(t.id)}>
+                <button type="button" onclick={() => router.goto(`/view/${t.id}`)} class="btn-contained">{ui.read}</button>
+                <button class="btn-text delete-btn" onclick={() => deleteText(t.id)}>
                     <span class="material-symbols-outlined">delete</span>
                 </button>
             </div>
@@ -129,9 +126,9 @@
 
 {#if totalPages > 1}
 <div class="pagination">
-    <button class="page-btn" disabled={page===1} on:click={() => changePage(page-1)}>&lt;</button>
+    <button class="page-btn" disabled={page===1} onclick={() => changePage(page-1)}>&lt;</button>
     <span>{page} / {totalPages}</span>
-    <button class="page-btn" disabled={page===totalPages} on:click={() => changePage(page+1)}>&gt;</button>
+    <button class="page-btn" disabled={page===totalPages} onclick={() => changePage(page+1)}>&gt;</button>
 </div>
 {/if}
 
@@ -142,7 +139,7 @@
     
     /* minmax(320px, 1fr) гарантує 3 колонки на ширині 1200px (3 * 320 + відступи < 1200) */
     .texts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
-    .text-card { height: 200px; display: flex; flex-direction: column; justify-content: space-between; margin-bottom: 0; }
+    .text-card { height: 160px; display: flex; flex-direction: column; justify-content: space-between; margin-bottom: 0; }
     .text-title { font-weight: 500; font-size: 1.1rem; margin-top: 10px; }
     .text-subtitle { font-size: 0.9rem; opacity: 0.7; font-weight: 400; margin-top: 2px; }
     .card-actions { display: flex; justify-content: space-between; margin-top: auto; }
@@ -159,7 +156,7 @@
     .lvl-filter.active[data-lvl="C1"] { background-color: #D32F2F; }
     .lvl-filter.active[data-lvl="C2"] { background-color: #311B92; }
 
-    .level-badge { padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 700; color: white; }
+    .level-badge { padding: 2px 2px; border-radius: 4px; font-size: 0.75rem; font-weight: 700; color: white; }
     .lvl-a1 { background-color: #8BC34A; } .lvl-a2 { background-color: #4CAF50; }
     .lvl-b1 { background-color: #29B6F6; } .lvl-b2 { background-color: #1976D2; }
     .lvl-c1 { background-color: #D32F2F; } .lvl-c2 { background-color: #311B92; }

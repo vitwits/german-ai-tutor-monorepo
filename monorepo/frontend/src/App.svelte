@@ -33,6 +33,7 @@
       }
     }
   }
+
 </script>
 
 <Navbar />
@@ -54,18 +55,18 @@
 
 {#if $isAuthenticated}
 <div class="nav-mobile">
-  <a href="/" class={$router.path === '/' ? 'active' : ''} on:click|preventDefault={() => router.goto('/')}>
+  <button type="button" class="nav-item {$router.path === '/' ? 'active' : ''}" onclick={() => router.goto('/')}>
     <span class="material-symbols-outlined">home</span>{ui.main}
-  </a>
-  <a href="/library" class={$router.path === '/library' ? 'active' : ''} on:click|preventDefault={() => router.goto('/library')}>
+  </button>
+  <button type="button" class="nav-item {$router.path === '/library' ? 'active' : ''}" onclick={() => router.goto('/library')}>
     <span class="material-symbols-outlined">menu_book</span>{ui.library}
-  </a>
-  <a href="/speaking" class={$router.path === '/speaking' ? 'active' : ''} on:click|preventDefault={() => router.goto('/speaking')}>
+  </button>
+  <button type="button" class="nav-item {$router.path === '/speaking' ? 'active' : ''}" onclick={() => router.goto('/speaking')}>
     <span class="material-symbols-outlined">mic</span>{ui.voice}
-  </a>
-  <a href="/vocab" class={$router.path === '/vocab' ? 'active' : ''} on:click|preventDefault={() => router.goto('/vocab')}>
+  </button>
+  <button type="button" class="nav-item {$router.path === '/vocab' ? 'active' : ''}" onclick={() => router.goto('/vocab')}>
     <span class="material-symbols-outlined">style</span>{ui.vocab}
-  </a>
+  </button>
 </div>
 {/if}
 
@@ -77,12 +78,13 @@
     padding: 8px 0; border-top: 1px solid var(--border); 
     box-shadow: 0 -2px 10px rgba(0,0,0,0.05); z-index: 1000; 
   }
-  .nav-mobile a { 
+  .nav-mobile .nav-item { 
+    background: none; border: none; padding: 0; height: auto; width: 100%;
     text-decoration: none; color: var(--on-surface); 
     font-size: 10px; display: flex; flex-direction: column; 
     align-items: center; opacity: 0.7; cursor: pointer;
   }
-  .nav-mobile a.active { 
+  .nav-mobile .nav-item.active { 
     color: var(--primary); opacity: 1; 
   }
 </style>

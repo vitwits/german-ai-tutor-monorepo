@@ -8,7 +8,7 @@
   {#each $toasts as toast (toast.id)}
     <div class="toast {toast.type}" animate:flip transition:fly={{ y: 20, duration: 300 }}>
       <span>{toast.msg}</span>
-      <button class="close-btn" on:click={() => removeToast(toast.id)}>×</button>
+      <button class="close-btn" onclick={() => removeToast(toast.id)}>×</button>
     </div>
   {/each}
 </div>

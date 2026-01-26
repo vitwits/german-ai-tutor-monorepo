@@ -392,7 +392,7 @@
 
 <div class="speak-container">
   <!-- Report Button -->
-  <button class="report-btn" title={ui.report_sentence} on:click={reportSentence}>
+  <button class="report-btn" title={ui.report_sentence} onclick={reportSentence}>
       <span class="material-symbols-outlined">flag</span>
   </button>
 
@@ -414,7 +414,7 @@
 
   <div class="controls-container">
     <!-- Repeat Button -->
-    <button class="side-btn {phase === 'feedback' ? 'visible' : ''}" on:click={repeatRound}>
+    <button class="side-btn {phase === 'feedback' ? 'visible' : ''}" onclick={repeatRound}>
       <span class="material-symbols-outlined">replay</span>
     </button>
 
@@ -423,7 +423,7 @@
       <div class="mic-ring" style="transform: translate(-50%, -50%) scale({visualizerScale}); display: {phase === 'recording' ? 'block' : 'none'}"></div>
       
       <button class="mic-btn {phase === 'recording' ? 'recording' : ''} {phase === 'processing' ? 'processing' : ''}" 
-              on:click={handleMainClick} disabled={phase === 'processing' || loading}>
+              onclick={handleMainClick} disabled={phase === 'processing' || loading}>
         {#if phase === 'processing'}
           <span class="material-symbols-outlined rotating">sync</span>
         {:else if phase === 'recording'}
@@ -437,7 +437,7 @@
     </div>
 
     <!-- Fav Button -->
-    <button class="side-btn {phase === 'feedback' ? 'visible' : ''}" on:click={toggleFav} style="color: {isFav ? '#FFC107' : 'inherit'}">
+    <button class="side-btn {phase === 'feedback' ? 'visible' : ''}" onclick={toggleFav} style="color: {isFav ? '#FFC107' : 'inherit'}">
       <span class="material-symbols-outlined {isFav ? 'filled' : ''}">star</span>
     </button>
   </div>

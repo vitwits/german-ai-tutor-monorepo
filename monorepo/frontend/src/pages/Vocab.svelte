@@ -319,14 +319,14 @@
 <div class="vocab-header-controls">
     <!-- Tabs -->
     <div class="mode-switch">
-        <button class="mode-btn {activeTab === 'words' ? 'active' : ''}" on:click={() => switchTab('words')}>{ui.vocab_words}</button>
-        <button class="mode-btn {activeTab === 'sentences' ? 'active' : ''}" on:click={() => switchTab('sentences')}>{ui.vocab_sentences}</button>
+        <button class="mode-btn {activeTab === 'words' ? 'active' : ''}" onclick={() => switchTab('words')}>{ui.vocab_words}</button>
+        <button class="mode-btn {activeTab === 'sentences' ? 'active' : ''}" onclick={() => switchTab('sentences')}>{ui.vocab_sentences}</button>
     </div>
 
     <div class="filters-row">
         <!-- Practice Button -->
         {#if activeTab === 'words'}
-            <button class="btn-contained practice-btn" on:click={startSession}>
+            <button class="btn-contained practice-btn" onclick={startSession}>
                 <span class="material-symbols-outlined">school</span> {ui.fc_start_review}
             </button>
         {/if}
@@ -335,7 +335,7 @@
         <div class="level-filters">
             {#each allLevels as lvl}
                 <button class="lvl-filter {selectedLevels.includes(lvl) ? 'active' : ''}" 
-                        on:click={() => toggleLevel(lvl)}
+                        onclick={() => toggleLevel(lvl)}
                         data-lvl={lvl}>
                     {lvl}
                 </button>
@@ -345,10 +345,10 @@
         <!-- View Mode (Words only) -->
         {#if activeTab === 'words'}
             <div class="view-toggles">
-                <button class="view-btn {viewMode === 'list' ? 'active' : ''}" on:click={() => viewMode = 'list'}>
+                <button class="view-btn {viewMode === 'list' ? 'active' : ''}" onclick={() => viewMode = 'list'}>
                     <span class="material-symbols-outlined">view_list</span>
                 </button>
-                <button class="view-btn {viewMode === 'grid' ? 'active' : ''}" on:click={() => viewMode = 'grid'}>
+                <button class="view-btn {viewMode === 'grid' ? 'active' : ''}" onclick={() => viewMode = 'grid'}>
                     <span class="material-symbols-outlined">grid_view</span>
                 </button>
             </div>
@@ -362,22 +362,22 @@
         <!-- Top Controls -->
         <div class="session-header">
             <div class="fc-mode-toggle">
-                <button class="fc-mode-opt {fcMode === 'study' ? 'active' : ''}" on:click={() => fcMode = 'study'}>{ui.fc_study_mode}</button>
-                <button class="fc-mode-opt {fcMode === 'review' ? 'active' : ''}" on:click={() => fcMode = 'review'}>{ui.fc_review_mode}</button>
+                <button class="fc-mode-opt {fcMode === 'study' ? 'active' : ''}" onclick={() => fcMode = 'study'}>{ui.fc_study_mode}</button>
+                <button class="fc-mode-opt {fcMode === 'review' ? 'active' : ''}" onclick={() => fcMode = 'review'}>{ui.fc_review_mode}</button>
             </div>
-            <button class="btn-text" on:click={() => showSession = false}>{ui.exit_btn}</button>
+            <button class="btn-text" onclick={() => showSession = false}>{ui.exit_btn}</button>
         </div>
 
         <!-- Card Area -->
         <div class="flashcard-container" 
-             on:click={flipCard} 
-             on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && flipCard()}
+             onclick={flipCard} 
+             onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && flipCard()}
              role="button" 
              tabindex="0">
              
             {#if fcMode === 'review' && !fcReviewStarted}
                 <div class="fc-start-overlay">
-                    <button class="fc-start-btn" on:click|stopPropagation={startReview}>
+                    <button class="fc-start-btn" onclick={(e) => { e.stopPropagation(); startReview(); }}>
                         <span class="material-symbols-outlined">play_arrow</span>
                     </button>
                 </div>
@@ -392,7 +392,7 @@
                     {#if fcMode === 'review'}
                         <div class="hint">{ui.fc_tap_to_flip}</div>
                     {/if}
-                    <button class="btn-audio" on:click|stopPropagation={() => playAudio(sessionCards[currentCardIdx].audio_de_url)}>
+                    <button class="btn-audio" onclick={(e) => { e.stopPropagation(); playAudio(sessionCards[currentCardIdx].audio_de_url); }}>
                         <span class="material-symbols-outlined">volume_up</span>
                     </button>
                 </div>
@@ -409,16 +409,16 @@
         <div class="controls">
             {#if fcMode === 'study'}
                 <div class="study-controls">
-                    <button class="fc-play-btn" on:click={toggleFcPlay}>
+                    <button class="fc-play-btn" onclick={toggleFcPlay}>
                         <span class="material-symbols-outlined">{fcIsPlaying ? 'pause' : 'play_arrow'}</span>
                     </button>
                     <div class="fc-hint-text">{ui.fc_study_hint}</div>
                 </div>
             {:else if fcReviewStarted}
                 {#if isFlipped}
-                    <button class="btn-rate hard" on:click={() => rateCard('hard')}>{ui.fc_hard}</button>
-                    <button class="btn-rate medium" on:click={() => rateCard('medium')}>{ui.fc_medium}</button>
-                    <button class="btn-rate easy" on:click={() => rateCard('easy')}>{ui.fc_easy}</button>
+                    <button class="btn-rate hard" onclick={() => rateCard('hard')}>{ui.fc_hard}</button>
+                    <button class="btn-rate medium" onclick={() => rateCard('medium')}>{ui.fc_medium}</button>
+                    <button class="btn-rate easy" onclick={() => rateCard('easy')}>{ui.fc_easy}</button>
                 {:else}
                     <div class="fc-hint-text">{currentCardIdx + 1} / {sessionCards.length}</div>
                 {/if}
@@ -433,8 +433,8 @@
                 <div class="vocab-item lvl-strip-{w.level?.toLowerCase()} {viewMode === 'grid' ? 'grid-card' : ''}"
                      role="button"
                      tabindex="0"
-                     on:keydown={(e) => { if((e.key === 'Enter' || e.key === ' ') && viewMode==='grid' && !e.target.closest('button')) e.currentTarget.classList.toggle('flipped'); }}
-                     on:click={(e) => { if(viewMode==='grid' && !e.target.closest('button')) e.currentTarget.classList.toggle('flipped'); }}>
+                     onkeydown={(e) => { if((e.key === 'Enter' || e.key === ' ') && viewMode==='grid' && !e.target.closest('button')) e.currentTarget.classList.toggle('flipped'); }}
+                     onclick={(e) => { if(viewMode==='grid' && !e.target.closest('button')) e.currentTarget.classList.toggle('flipped'); }}>
                     
                     <div class="vocab-card-inner">
                         <!-- FRONT / MAIN -->
@@ -446,15 +446,15 @@
                             <div class="item-content">
                                 <div class="vocab-main-row">
                                     <div class="vocab-word-group">
-                                        <button class="btn-text list-audio-btn" on:click|stopPropagation={() => playVocabPair(w.display, w.display_trans)}>
+                                        <button class="btn-text list-audio-btn" onclick={(e) => { e.stopPropagation(); playVocabPair(w.display, w.display_trans); }}>
                                             <span class="material-symbols-outlined">volume_up</span>
                                         </button>
                                         <div style="flex:1; min-width:0; text-align: left;">
                                             <div class="word-text" 
                                                  role="button" 
                                                  tabindex="0" 
-                                                 on:keydown|stopPropagation={(e) => { if(e.key === 'Enter' || e.key === ' ') toggleContext(w.id); }}
-                                                 on:click|stopPropagation={() => toggleContext(w.id)}>
+                                                 onkeydown={(e) => { e.stopPropagation(); if(e.key === 'Enter' || e.key === ' ') toggleContext(w.id); }}
+                                                 onclick={(e) => { e.stopPropagation(); toggleContext(w.id); }}>
                                                 {w.display}
                                             </div>
                                             <div class="trans-text">{w.display_trans}</div>
@@ -465,19 +465,19 @@
                                         <div class="list-tools" style="display:flex; align-items:center;">
                                             {#if editingId === w.id}
                                                 <!-- Edit Mode -->
-                                                <input type="text" class="edit-input" bind:value={editValue} on:click|stopPropagation on:keydown|stopPropagation={(e) => e.key === 'Enter' && saveEdit(w.id)} />
-                                                <button class="btn-text" style="color:var(--primary)" on:click|stopPropagation={() => saveEdit(w.id)}>
+                                                <input type="text" class="edit-input" bind:value={editValue} onclick={(e) => e.stopPropagation()} onkeydown={(e) => { e.stopPropagation(); if(e.key === 'Enter') saveEdit(w.id); }} />
+                                                <button class="btn-text" style="color:var(--primary)" onclick={(e) => { e.stopPropagation(); saveEdit(w.id); }}>
                                                     <span class="material-symbols-outlined">check</span>
                                                 </button>
-                                                <button class="btn-text" on:click|stopPropagation={cancelEdit}>
+                                                <button class="btn-text" onclick={(e) => { e.stopPropagation(); cancelEdit(); }}>
                                                     <span class="material-symbols-outlined">close</span>
                                                 </button>
                                             {:else}
                                                 <!-- Normal Mode -->
-                                                <button class="btn-text" style="color:var(--primary); opacity:0.7;" on:click|stopPropagation={() => startEdit(w.id, w.display_trans)}>
+                                                <button class="btn-text" style="color:var(--primary); opacity:0.7;" onclick={(e) => { e.stopPropagation(); startEdit(w.id, w.display_trans); }}>
                                                     <span class="material-symbols-outlined">edit</span>
                                                 </button>
-                                                <button class="btn-text delete-btn" on:click|stopPropagation={() => deleteItem(w.id)}>
+                                                <button class="btn-text delete-btn" onclick={(e) => { e.stopPropagation(); deleteItem(w.id); }}>
                                                     <span class="material-symbols-outlined">delete</span>
                                                 </button>
                                             {/if}
@@ -490,9 +490,9 @@
                                         <div class="ctx-label">{ui.context}</div>
                                         <div class="ctx-text">{w.ctx}</div>
                                         {#if w.text_id}
-                                            <a href="/view/{w.text_id}" class="ctx-link" on:click|stopPropagation={() => router.goto(`/view/${w.text_id}`)}>
+                                            <button type="button" class="ctx-link btn-text" style="padding:0; height:auto; text-transform:none;" onclick={() => router.goto(`/view/${w.text_id}`)}>
                                                 <span class="material-symbols-outlined" style="font-size:14px;">open_in_new</span> {ui.go_to_text}
-                                            </a>
+                                            </button>
                                         {/if}
                                     </div>
                                 {/if}
@@ -500,13 +500,13 @@
                             
                             {#if viewMode === 'grid'}
                                 <div class="grid-footer">
-                                    <button class="btn-text" on:click|stopPropagation={() => playVocabPair(w.display, w.display_trans)}>
+                                    <button class="btn-text" onclick={(e) => { e.stopPropagation(); playVocabPair(w.display, w.display_trans); }}>
                                         <span class="material-symbols-outlined">volume_up</span>
                                     </button>
-                                    <button class="btn-text" style="color:var(--on-surface); opacity:0.5;" on:click|stopPropagation={() => startEdit(w.id, w.display_trans)}>
+                                    <button class="btn-text" style="color:var(--on-surface); opacity:0.5;" onclick={(e) => { e.stopPropagation(); startEdit(w.id, w.display_trans); }}>
                                         <span class="material-symbols-outlined">edit</span>
                                     </button>
-                                    <button class="btn-text delete-btn" on:click|stopPropagation={() => deleteItem(w.id)}>
+                                    <button class="btn-text delete-btn" onclick={(e) => { e.stopPropagation(); deleteItem(w.id); }}>
                                         <span class="material-symbols-outlined">delete</span>
                                     </button>
                                 </div>
@@ -518,16 +518,16 @@
                             <div class="vocab-face vocab-back">
                                 <div class="vocab-back-scroll">
                                     {#if editingId === w.id}
-                                         <textarea class="edit-textarea" bind:value={editValue} on:click|stopPropagation></textarea>
-                                         <button class="btn-contained" style="margin-top:8px; height:30px;" on:click|stopPropagation={() => saveEdit(w.id)}>Save</button>
+                                         <textarea class="edit-textarea" bind:value={editValue} onclick={(e) => e.stopPropagation()}></textarea>
+                                         <button class="btn-contained" style="margin-top:8px; height:30px;" onclick={(e) => { e.stopPropagation(); saveEdit(w.id); }}>Save</button>
                                     {:else}
                                         <div class="ctx-text">{w.ctx}</div>
                                     {/if}
                                 </div>
                                 {#if w.text_id}
-                                    <a href="/view/{w.text_id}" class="ctx-link" on:click|stopPropagation={() => router.goto(`/view/${w.text_id}`)}>
+                                    <button type="button" class="ctx-link btn-text" style="padding:0; height:auto; text-transform:none;" onclick={() => router.goto(`/view/${w.text_id}`)}>
                                         <span class="material-symbols-outlined" style="font-size:14px;">open_in_new</span> {ui.go_to_text}
-                                    </a>
+                                    </button>
                                 {/if}
                             </div>
                         {/if}
@@ -541,7 +541,7 @@
             {#each items as s (s.id)}
                 <div class="card sentence-card">
                     <div class="sent-main">
-                        <button class="btn-text" on:click={() => playSentencePair(s)}>
+                        <button class="btn-text" onclick={() => playSentencePair(s)}>
                             <span class="material-symbols-outlined" style="color:var(--primary)">volume_up</span>
                         </button>
                         <div class="sent-content">
@@ -549,7 +549,7 @@
                             <div class="sent-trans">{s.display_trans}</div>
                         </div>
                     </div>
-                    <button class="btn-text delete-btn" on:click={() => deleteItem(s.fav_id, true)}>
+                    <button class="btn-text delete-btn" onclick={() => deleteItem(s.fav_id, true)}>
                         <span class="material-symbols-outlined">delete</span>
                     </button>
                 </div>
@@ -560,9 +560,9 @@
     <!-- Pagination -->
     {#if totalPages > 1}
         <div class="pagination">
-            <button class="page-btn" disabled={page===1} on:click={() => changePage(page-1)}>&lt;</button>
+            <button class="page-btn" disabled={page===1} onclick={() => changePage(page-1)}>&lt;</button>
             <span>{page} / {totalPages}</span>
-            <button class="page-btn" disabled={page===totalPages} on:click={() => changePage(page+1)}>&gt;</button>
+            <button class="page-btn" disabled={page===totalPages} onclick={() => changePage(page+1)}>&gt;</button>
         </div>
     {/if}
 {/if}
@@ -620,7 +620,7 @@
     .ctx-block { padding: 0 16px 12px 56px; background: rgba(0,0,0,0.02); font-size: 0.9rem; }
     .ctx-label { font-size: 0.75rem; color: var(--primary); font-weight: 500; margin-bottom: 2px; }
     .ctx-text { font-style: italic; opacity: 0.9; margin-bottom: 6px; }
-    .ctx-link { display: inline-flex; align-items: center; gap: 4px; font-size: 0.8rem; color: var(--primary); text-decoration: none; }
+    .ctx-link { display: inline-flex; align-items: center; gap: 4px; font-size: 0.8rem; color: var(--primary); text-decoration: none; cursor: pointer; }
 
     .edit-input { border: 1px solid var(--primary); border-radius: 4px; padding: 4px 8px; font-size: 0.9rem; width: 100%; max-width: 200px; }
     .edit-textarea { width: 100%; height: 80px; border: 1px solid var(--primary); border-radius: 4px; padding: 8px; font-family: inherit; resize: none; }

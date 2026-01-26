@@ -39,10 +39,10 @@
 </script>
 
 <div class="header">
-  <a href="/" class="brand" on:click|preventDefault={() => router.goto('/')}>
+  <button type="button" class="brand" onclick={() => router.goto('/')}>
     <span class="material-symbols-outlined" style="color:var(--primary)">school</span>
     Gemini <span class="brand-de">DE</span>
-  </a>
+  </button>
 
   <div class="header-right">
     {#if $isAuthenticated}
@@ -56,7 +56,7 @@
         {#each levels as lvl}
           <button 
             class="lvl-tile lvl-{lvl.toLowerCase()} { ($user && $user.level === lvl) ? 'active' : '' }"
-            on:click={() => updateLevel(lvl)}
+            onclick={() => updateLevel(lvl)}
           >
             {lvl}
           </button>
@@ -64,28 +64,28 @@
       </div>
     {/if}
 
-    <button class="btn-text" on:click={toggleTheme}>
+    <button class="btn-text" onclick={toggleTheme}>
       <span class="material-symbols-outlined">{isDark ? 'light_mode' : 'dark_mode'}</span>
     </button>
 
     {#if $isAuthenticated}
       <div style="position: relative;">
-        <button class="btn-text settings-trigger" on:click={() => showMenu = !showMenu}>
+        <button class="btn-text settings-trigger" onclick={() => showMenu = !showMenu}>
           <span class="material-symbols-outlined">settings</span>
         </button>
         {#if showMenu}
           <div class="dropdown-menu">
-            <button class="dropdown-item" on:click={() => { showMenu = false; router.goto('/settings'); }}>
+            <button class="dropdown-item" onclick={() => { showMenu = false; router.goto('/settings'); }}>
               <span class="material-symbols-outlined" style="font-size: 20px;">tune</span> {ui.settings}
             </button>
-            <button class="dropdown-item" on:click={() => { showMenu = false; logout(); }}>
+            <button class="dropdown-item" onclick={() => { showMenu = false; logout(); }}>
               <span class="material-symbols-outlined" style="font-size: 20px;">logout</span> {ui.logout}
             </button>
           </div>
           <!-- Backdrop to close menu -->
           <div class="menu-backdrop" 
-               on:click={() => showMenu = false}
-               on:keydown={(e) => e.key === 'Escape' && (showMenu = false)}
+               onclick={() => showMenu = false}
+               onkeydown={(e) => e.key === 'Escape' && (showMenu = false)}
                role="button"
                tabindex="0"
                aria-label="Close menu"></div>
@@ -97,7 +97,11 @@
 
 <style>
   .header { display: flex; justify-content: space-between; align-items: center; background: var(--surface); padding: 16px 24px; box-shadow: var(--shadow); margin-bottom: 24px; }
-  .brand { font-size: 1.5rem; font-weight: 500; display: flex; align-items: center; gap: 8px; text-transform: uppercase; text-decoration: none; color: var(--on-surface); }
+  .brand { 
+    background: none; border: none; padding: 0; height: auto;
+    font-size: 1.5rem; font-weight: 500; display: flex; align-items: center; gap: 8px; 
+    text-transform: uppercase; text-decoration: none; color: var(--on-surface); cursor: pointer;
+  }
   .brand-de { color: var(--primary); font-weight: 700; }
   .header-right { display: flex; align-items: center; gap: 8px; }
 
@@ -106,6 +110,7 @@
     padding: 4px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 500;
     display: flex; align-items: center; gap: 6px; color: var(--on-surface);
     margin-right: 12px;
+    position: absolute; left: 50%; transform: translateX(-50%);
   }
 
   .level-tiles { display: flex; gap: 4px; margin-right: 12px; }

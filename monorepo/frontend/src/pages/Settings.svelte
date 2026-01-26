@@ -46,7 +46,7 @@
     <input id="vss" type="number" class="form-control" bind:value={vocabSize} min="5" max="100">
   </div>
 
-  <button class="btn-contained" on:click={save} disabled={loading}>
+  <button class="btn-contained" onclick={save} disabled={loading}>
     {ui.save_settings}
   </button>
 </div>

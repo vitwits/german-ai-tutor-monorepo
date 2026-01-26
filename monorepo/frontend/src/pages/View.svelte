@@ -596,7 +596,7 @@
   });
 </script>
 
-<div class="view-container" on:mouseup={handleMouseUp} role="button" tabindex="0">
+<div class="view-container" onmouseup={handleMouseUp} role="button" tabindex="0">
     {#if loading}
         <div style="text-align: center; padding: 50px; opacity: 0.6;">{ui.loading}</div>
     {:else if text}
@@ -609,15 +609,15 @@
             <div class="toolbar">
                 <span class="level-badge lvl-{text.level.toLowerCase()}">{text.level}</span>
                 
-                <button class="badge-btn" on:click={() => showTrans = !showTrans}>
+                <button class="badge-btn" onclick={() => showTrans = !showTrans}>
                     <span class="material-symbols-outlined">{showTrans ? 'visibility_off' : 'translate'}</span>
                 </button>
                 
-                <button class="badge-btn" on:click={toggleTextFav} style="color: {text.is_favorite ? '#d32f2f' : 'inherit'}">
+                <button class="badge-btn" onclick={toggleTextFav} style="color: {text.is_favorite ? '#d32f2f' : 'inherit'}">
                     <span class="material-symbols-outlined {text.is_favorite ? 'filled' : ''}">favorite</span>
                 </button>
 
-                <button class="btn-contained" on:click={playAll} style="margin-left: auto;">
+                <button class="btn-contained" onclick={playAll} style="margin-left: auto;">
                     <span class="material-symbols-outlined">{isPlayingAll ? 'pause' : 'play_arrow'}</span> 
                     {isPlayingAll ? ui.stop : ui.play_all}
                 </button>
@@ -627,12 +627,12 @@
                 <div class="de-line {playingIndex === i ? 'highlight-sentence' : ''}" id="sent-{i}" data-index={i} data-text={s.de}>
                     <div style="display:flex; justify-content: space-between; align-items: center;">
                         <div style="display:flex; align-items:center; gap:12px; flex: 1;">
-                            <button class="btn-text" on:click={() => playAudio(s.de, i)} style="height:32px; width:32px; padding:0; min-width:32px;">
+                <button class="btn-text" onclick={() => playAudio(s.de, i)} style="height:32px; width:32px; padding:0; min-width:32px;">
                                 <span class="material-symbols-outlined" style="font-size:20px; color:var(--primary)">volume_up</span>
                             </button>
                             <span class="de-text">{@html s.de_html}</span>
                         </div>
-                        <button class="btn-text" on:click={() => explainGrammar(i)} title={ui.grammar_tooltip} style="color: var(--primary); opacity: 0.5;">
+            <button class="btn-text" onclick={() => explainGrammar(i)} title={ui.grammar_tooltip} style="color: var(--primary); opacity: 0.5;">
                             <span class="material-symbols-outlined">{s.grammar_loading ? 'sync' : 'quiz'}</span>
                         </button>
                     </div>
@@ -650,9 +650,9 @@
 
         <!-- TABS -->
         <div class="tabs-container">
-            <button class="tab-btn {activeTab === 'vocab' ? 'active' : ''}" on:click={() => switchTab('vocab')}>{ui.vocab_tab}</button>
+            <button class="tab-btn {activeTab === 'vocab' ? 'active' : ''}" onclick={() => switchTab('vocab')}>{ui.vocab_tab}</button>
             {#if quizData.length > 0}
-                <button class="tab-btn {activeTab === 'quiz' ? 'active' : ''}" on:click={() => switchTab('quiz')}>{ui.quiz_tab}</button>
+                <button class="tab-btn {activeTab === 'quiz' ? 'active' : ''}" onclick={() => switchTab('quiz')}>{ui.quiz_tab}</button>
             {/if}
         </div>
 
@@ -665,7 +665,7 @@
                 {#each vocab as v}
                     <div class="vocab-item">
                         <div style="display:flex; align-items:center; gap:12px; flex: 1; min-width: 0;">
-                            <button class="btn-text" on:click={() => playVocabPair(v.display, $user.interface_language === 'ukr' ? v.ua : v.en)}>
+                            <button class="btn-text" onclick={() => playVocabPair(v.display, $user.interface_language === 'ukr' ? v.ua : v.en)}>
                                 <span class="material-symbols-outlined" style="font-size:18px;">volume_up</span>
                             </button>
                             <div style="overflow: hidden; text-overflow: ellipsis;">
@@ -674,10 +674,10 @@
                             </div>
                         </div>
                         <div style="display: flex; align-items: center; gap: 0;">
-                            <button class="btn-text" on:click={() => toggleVocabFav(v.id)} style="color: {v.is_favorite ? '#FFC107' : 'inherit'}; min-width: 32px; padding: 0;">
+                            <button class="btn-text" onclick={() => toggleVocabFav(v.id)} style="color: {v.is_favorite ? '#FFC107' : 'inherit'}; min-width: 32px; padding: 0;">
                                 <span class="material-symbols-outlined {v.is_favorite ? 'filled' : ''}">star</span>
                             </button>
-                            <button class="btn-text" on:click={() => removeWord(v.id)} style="color:red; min-width: 32px; padding: 0;">
+                            <button class="btn-text" onclick={() => removeWord(v.id)} style="color:red; min-width: 32px; padding: 0;">
                                 <span class="material-symbols-outlined">delete</span>
                             </button>
                         </div>
@@ -703,7 +703,7 @@
                     <span style="font-size: 2.5rem; position: relative; z-index: 1;">{$animatedScore.toFixed(0)}%</span>
                         </div>
                 <div style="font-size: 1.1rem; margin-bottom: 30px; opacity: 0.8;">{ui.your_score}</div>
-                        <button class="btn-contained" on:click={restartQuiz}>{ui.retry_btn}</button>
+                <button class="btn-contained" onclick={restartQuiz}>{ui.retry_btn}</button>
                     </div>
                 {:else}
                     <div class="quiz-progress-track">
@@ -719,7 +719,7 @@
                                 {isChecked && idx === quizData[currentQIndex].correct_index ? 'correct' : ''}
                                 {isChecked && selectedOptionIndex === idx && idx !== quizData[currentQIndex].correct_index ? 'wrong' : ''}
                                 {isChecked ? 'disabled' : ''}"
-                                on:click={() => selectOption(idx)}>
+                                onclick={() => selectOption(idx)}>
                                 {opt}
                             </button>
                         {/each}
@@ -728,18 +728,18 @@
                     <!-- FOOTER ACTIONS -->
                     <div style="margin-top: 24px; display: flex; justify-content: space-between; align-items: center;">
                         <div style="display: flex; gap: 10px;">
-                             <button class="btn-contained btn-danger" on:click={abortQuiz}>
+                             <button class="btn-contained btn-danger" onclick={abortQuiz}>
                                 {ui.abort_btn}
                              </button>
                              {#if isChecked}
-                                <button class="btn-contained" on:click={restartQuiz} style="background-color: var(--secondary); color: black;">{ui.restart_btn}</button>
+                                <button class="btn-contained" onclick={restartQuiz} style="background-color: var(--secondary); color: black;">{ui.restart_btn}</button>
                              {/if}
                         </div>
                         
                         {#if !isChecked}
-                            <button class="btn-contained" disabled={selectedOptionIndex === null} on:click={checkAnswer} style="min-width: 100px;">{ui.check_btn}</button>
+                            <button class="btn-contained" disabled={selectedOptionIndex === null} onclick={checkAnswer} style="min-width: 100px;">{ui.check_btn}</button>
                         {:else}
-                            <button class="btn-contained" on:click={nextQuestion} style="min-width: 100px;">{currentQIndex < quizData.length - 1 ? ui.next_btn : ui.finish_btn}</button>
+                            <button class="btn-contained" onclick={nextQuestion} style="min-width: 100px;">{currentQIndex < quizData.length - 1 ? ui.next_btn : ui.finish_btn}</button>
                         {/if}
                     </div>
                 {/if}
@@ -749,9 +749,9 @@
 
     <!-- POPUPS -->
     {#if showPopup}
-        <div id="pop" style={popupStyle} on:click|stopPropagation={quickTranslate}>
+        <button type="button" id="pop" style={popupStyle} onclick={(e) => { e.stopPropagation(); quickTranslate(); }}>
             {ui.add_translation}
-        </div>
+        </button>
     {/if}
 
     {#if showLearnedPopup}
@@ -773,15 +773,15 @@
             </div>
             <div style="font-size: 1.2rem; margin-bottom: 40px; opacity: 0.8;">{ui.your_score}</div>
             <div style="display: flex; gap: 20px;">
-                <button class="btn-contained" style="background: white; color: black;" on:click={closeSplash}>{ui.done_btn}</button>
-                <button class="btn-contained" on:click={restartQuiz}>{ui.retry_btn}</button>
+                <button class="btn-contained" style="background: white; color: black;" onclick={closeSplash}>{ui.done_btn}</button>
+                <button class="btn-contained" onclick={restartQuiz}>{ui.retry_btn}</button>
             </div>
         </div>
     {/if}
 </div>
 
 <style>
-    .view-container { max-width: 800px; margin: 0 auto; padding-bottom: 100px; position: relative; }
+    .view-container { max-width: 1180px; margin: 0 auto; padding-bottom: 100px; position: relative; }
     
     .toolbar { display:flex; align-items:center; gap:12px; margin-bottom:24px; flex-wrap:wrap; }
     
@@ -875,6 +875,7 @@
     #pop {
         position: absolute; background: var(--on-surface); color: var(--bg);
         padding: 8px 16px; border-radius: 4px; z-index: 2000; cursor: pointer;
+        border: none; font-family: inherit; height: auto; text-transform: none;
         font-weight: 500; font-size: 0.8rem; box-shadow: 0 4px 12px rgba(0,0,0,0.2);
     }
     #learned-pop {

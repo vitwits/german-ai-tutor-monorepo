@@ -39,7 +39,7 @@
 
 </script>
 
-<form class="card form-container" on:submit|preventDefault={handleSubmit}>
+<form class="card form-container" onsubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
     <div class="header-section">
         <span class="material-symbols-outlined header-icon">auto_stories</span>
         <h2 style="margin: 0; color: var(--primary); font-weight: 500; letter-spacing: 1px;">{ui.generate_new}</h2>
@@ -66,7 +66,7 @@
             <span class="form-label">{ui.count}</span>
             <div class="size-selector">
                 {#each ['S', 'M', 'L'] as s}
-                    <button type="button" class:active={size === s} on:click={() => size = s}>{s}</button>
+                    <button type="button" class:active={size === s} onclick={() => size = s}>{s}</button>
                 {/each}
             </div>
         </div>

@@ -25,7 +25,7 @@
     <div class="error-msg">{error}</div>
   {/if}
 
-  <form on:submit|preventDefault={handleSubmit}>
+  <form onsubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
     <div class="form-group">
       <label for="email">Email</label>
       <input type="email" id="email" bind:value={email} class="form-control" placeholder="name@example.com" required>
@@ -38,7 +38,7 @@
   </form>
   
   <p style="margin-top: 24px; font-size: 0.9rem; opacity: 0.8;">
-    Don't have an account? <a href="/register" on:click|preventDefault={() => router.goto('/register')} style="color: var(--primary);">Register</a>
+    Don't have an account? <button type="button" class="btn-text" style="padding:0; height:auto; color: var(--primary); text-transform:none; display:inline;" onclick={() => router.goto('/register')}>Register</button>
   </p>
 </div>
 

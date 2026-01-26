@@ -17,10 +17,11 @@ body {
   margin: 0;
   line-height: 1.5;
   font-family: 'Roboto', sans-serif;
+  overflow-y: scroll; /* Завжди показувати скролбар, щоб уникнути зсуву макету */
 }
 
 /* Global Layout Classes */
-.container { max-width: 1200px; margin: 0 auto; padding: 20px; padding-bottom: 80px; }
+.container { max-width: 1160px; margin: 0 auto; padding: 20px; padding-bottom: 80px; }
 .card { background: var(--surface); padding: 20px; border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 20px; }
 
 /* Buttons & Links */
