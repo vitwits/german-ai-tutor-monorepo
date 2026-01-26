@@ -578,18 +578,34 @@
   }
 
   async function removeWord(wid) {
-      if(!confirm(ui.confirm_delete_word)) return;
-      try {
-          await api.post('/remove_word', { id: wid, from_vocab: false });
-          // Remove highlight locally
-          const sIdx = sentences.findIndex(s => s.de_html.includes(`data-wid="${wid}"`));
-          if (sIdx !== -1) {
-              // Reload text to refresh highlights cleanly
-              loadText();
-          }
-          // Remove from vocab list
-          vocab = vocab.filter(v => v.id !== wid);
-      } catch(e) {}
+      // No confirm needed, using undo toast flow
+      
+      // 1. Optimistic UI update
+      // Hide from vocab list
+      vocab = vocab.filter(v => v.id !== wid);
+      // Remove highlight from text
+      const highlights = document.querySelectorAll(`.learned[data-wid="${wid}"]`);
+      highlights.forEach(span => {
+          const textNode = document.createTextNode(span.innerText);
+          span.parentNode.replaceChild(textNode, span);
+      });
+
+      // 2. Set up delayed delete
+      const deleteTimeout = setTimeout(() => {
+          api.post('/remove_word', { id: wid, from_vocab: false }).catch(e => {
+              console.error("Final delete failed:", e);
+              addToast('Error, reloading...', 'error');
+              setTimeout(() => location.reload(), 1500);
+          });
+      }, 5000);
+
+      // 3. Show toast with undo
+      const undo = () => {
+          clearTimeout(deleteTimeout);
+          loadText(); // Easiest way to restore state
+      };
+
+      addToast(ui.word_deleted || 'Word removed', "info", undo, 5000);
   }
 
   onMount(loadText);

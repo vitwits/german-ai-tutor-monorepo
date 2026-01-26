@@ -4,11 +4,17 @@
   import { addToast } from "../stores/toast";
   import { getUI } from "../lib/ui";
 
-  let lang = $user?.interface_language || 'ukr';
-  let vocabSize = $user?.vocab_session_size || 20;
+  let lang = 'ukr';
+  let vocabSize = 20;
   let loading = false;
 
   $: ui = getUI($user?.interface_language || 'ukr');
+
+  // Reactive statement to initialize and update local state when user store changes
+  $: if ($user) {
+    lang = $user.interface_language || 'ukr';
+    vocabSize = $user.vocab_session_size || 20;
+  }
 
   async function save() {
     loading = true;
@@ -21,12 +27,17 @@
       // Оновлюємо локальний стан користувача миттєво
       user.update(u => ({ ...u, interface_language: lang, vocab_session_size: vocabSize }));
       addToast(ui.settings_saved || "Settings saved", "success");
+      history.back();
     } catch (e) {
       console.error(e);
       addToast("Error saving settings", "error");
     } finally {
       loading = false;
     }
+  }
+
+  function cancel() {
+    history.back();
   }
 </script>
 
@@ -46,11 +57,18 @@
     <input id="vss" type="number" class="form-control" bind:value={vocabSize} min="5" max="100">
   </div>
 
-  <button class="btn-contained" onclick={save} disabled={loading}>
-    {ui.save_settings}
-  </button>
+  <div class="btn-group">
+    <button class="btn-contained" on:click={save} disabled={loading}>
+      {ui.save_settings}
+    </button>
+    <button class="btn-outlined" on:click={cancel} disabled={loading}>
+      {ui.btn_cancel || 'Cancel'}
+    </button>
+  </div>
 </div>
 
 <style>
   .settings-container { max-width: 500px; margin: 40px auto; padding: 30px; }
+  h2 { margin-top: 0; }
+  .btn-group { display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end; }
 </style>

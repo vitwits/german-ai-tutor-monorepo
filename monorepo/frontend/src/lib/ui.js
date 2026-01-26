@@ -81,7 +81,9 @@ export const UI_STRINGS = {
         'go_to_text': 'Перейти до тексту',
         'undo': 'ВІДМІНИТИ',
         'speaking_sentences': 'Переклад',
-        'speaking_small_talk': 'Розмова'
+        'speaking_small_talk': 'Розмова',
+        'sentence_removed_fav': 'Речення видалено',
+        'text_deleted': 'Текст видалено',
     },
     'eng': {
         'settings': 'Settings',
@@ -165,7 +167,9 @@ export const UI_STRINGS = {
         'go_to_text': 'Go to text',
         'undo': 'UNDO',
         'speaking_sentences': 'Translate',
-        'speaking_small_talk': 'Dialogue'
+        'speaking_small_talk': 'Dialogue',
+        'sentence_removed_fav': 'Sentence removed',
+        'text_deleted': 'Text deleted',
     
     }
 };

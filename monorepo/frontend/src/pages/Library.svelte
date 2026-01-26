@@ -5,6 +5,7 @@
   import { user } from "../stores/auth";
   import { getUI } from "../lib/ui";
   import { confirmModal } from "../stores/confirm";
+  import { addToast } from "../stores/toast";
 
   let texts = [];
   let page = 1;
@@ -62,10 +63,27 @@
   async function deleteText(id) {      
       const ok = await confirmModal.ask(ui.confirm_title, ui.confirm_delete_text_msg, ui.btn_delete, ui.btn_cancel, true);
       if (!ok) return;
-      try {
-          await api.post("/delete_text", { id });
-          loadLibrary();
-      } catch(e) { console.error(e); }
+
+      // Proceed with deletion + undo toast
+      const originalTexts = [...texts];
+      texts = texts.filter(t => t.id !== id); // Optimistic UI
+
+      // Delayed actual delete
+      const deleteTimeout = setTimeout(() => {
+          api.post("/delete_text", { id }).catch(e => {
+              console.error("Final delete failed:", e);
+              addToast("Error deleting text", "error");
+              texts = originalTexts; // Revert UI on error
+          });
+      }, 5000);
+
+      // Show toast with undo action
+      const undo = () => {
+          clearTimeout(deleteTimeout);
+          texts = originalTexts;
+      };
+
+      addToast(ui.text_deleted || "Text deleted", "info", undo, 5000);
   }
 
   async function toggleFav(text) {
@@ -116,7 +134,7 @@
             <div class="card-actions">
                 <!-- Link to View page (stub for now) -->
                 <button type="button" onclick={() => router.goto(`/view/${t.id}`)} class="btn-contained">{ui.read}</button>
-                <button class="btn-text delete-btn" onclick={() => deleteText(t.id)}>
+                <button class="btn-text delete-btn" onclick={(e) => { e.stopPropagation(); deleteText(t.id); }}>
                     <span class="material-symbols-outlined">delete</span>
                 </button>
             </div>

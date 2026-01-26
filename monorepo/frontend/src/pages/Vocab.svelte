@@ -265,33 +265,32 @@
   }
 
   async function deleteItem(id, isSentence = false) {
-      // No confirm for vocab list usually, but if needed:
-      // const ok = await confirmModal.ask(...)
       const originalItems = [...items];
-      items = items.filter(i => i.id !== id);
+      const itemToDelete = items.find(i => (isSentence ? i.fav_id : i.id) === id);
+      if (!itemToDelete) return;
+
+      // 1. Optimistic UI update
+      items = items.filter(i => (isSentence ? i.fav_id : i.id) !== id);
       
+      // 2. Set up delayed delete
+      const deleteTimeout = setTimeout(() => {
+          const url = isSentence ? '/api/remove_fav_sentence' : '/api/remove_word';
+          const payload = { id };
+          if (!isSentence) payload.from_vocab = true;
+          
+          api.post(url, payload).catch(e => {
+              console.error("Final delete failed:", e);
+          });
+      }, 5000);
+
+      // 3. Show toast with undo
       const undo = () => {
+          clearTimeout(deleteTimeout);
           items = originalItems;
       };
-
-      addToast(ui.word_deleted, "info", undo, 4000);
-
-      // Actual delete after delay (handled by Toast store logic usually, 
-      // but here we just fire request and if undo happens we'd need to restore. 
-      // For simplicity in this architecture, we delete immediately on server 
-      // but UI allows "undo" by reloading or we implement delayed request.
-      // Let's do simple request for now as per "PROJECT_RULES" (no complex logic in templates).
       
-      try {
-          if (isSentence) {
-             await api.post('/remove_fav_sentence', { id });
-          } else {
-             await api.post('/remove_word', { id, from_vocab: true });
-          }
-      } catch(e) {
-          items = originalItems; // Revert on error
-          addToast("Error deleting", "error");
-      }
+      const message = isSentence ? (ui.sentence_removed_fav || 'Sentence removed from favorites') : (ui.word_deleted || 'Word deleted');
+      addToast(message, "info", undo, 5000);
   }
 
   function startEdit(id, currentVal) {
@@ -509,7 +508,7 @@
                                                 {w.display}
                                             </div>
                                             {#if editingId === w.id}
-                                                <input type="text" class="edit-input" bind:value={editValue} onclick={(e) => e.stopPropagation()} onkeydown={(e) => { e.stopPropagation(); if(e.key === 'Enter') saveEdit(w.id); }} autofocus />
+                                                <input type="text" class="edit-input" bind:value={editValue} onclick={(e) => e.stopPropagation()} onkeydown={(e) => { e.stopPropagation(); if(e.key === 'Enter') saveEdit(w.id); }} />
                                             {:else}
                                                 <div class="trans-text">{w.display_trans}</div>
                                             {/if}

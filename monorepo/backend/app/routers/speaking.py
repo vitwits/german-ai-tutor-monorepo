@@ -97,3 +97,13 @@ async def toggle_sentence_fav(req: ToggleSentenceFavRequest, db: AsyncSession = 
         is_fav = True
     await db.commit()
     return {"ok": True, "is_fav": is_fav}
+
+@router.post("/remove_fav_sentence")
+async def remove_fav_sentence(req: RemoveFavSentenceRequest, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    # Here req.id is the ID from user_favorite_sentences table
+    await db.execute(
+        delete(UserFavoriteSentence)
+        .where(UserFavoriteSentence.id == req.id, UserFavoriteSentence.user_id == current_user.id)
+    )
+    await db.commit()
+    return {"ok": True}

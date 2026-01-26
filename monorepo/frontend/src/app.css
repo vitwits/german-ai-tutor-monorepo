@@ -34,6 +34,15 @@ button, a.btn-contained, a.btn-text, .btn-contained, .btn-text {
 }
 .btn-contained { background: var(--primary); color: var(--on-primary); }
 .btn-text { background: transparent; color: var(--on-surface); }
+.btn-outlined {
+  background: transparent;
+  color: var(--on-surface);
+  border: 1px solid var(--border);
+}
+.btn-outlined:hover {
+  background: rgba(0,0,0,0.04);
+}
+body.dark-mode .btn-outlined:hover { background: rgba(255,255,255,0.08); }
 
 /* Icons */
 .material-symbols-outlined {
@@ -89,12 +98,31 @@ button, a.btn-contained, a.btn-text, .btn-contained, .btn-text {
 /* Form Controls */
 .form-group { margin-bottom: 25px; text-align: left; }
 .form-label { font-size: 0.85rem; font-weight: 500; margin-bottom: 8px; display: block; opacity: 0.8; }
-.control-height { height: 45px; box-sizing: border-box; }
 .form-control {
-    width: 100%; padding: 0 12px; border: 1px solid var(--border);
-    border-radius: var(--radius); background: var(--bg); color: var(--on-surface);
-    font-size: 16px; transition: all 0.2s;
+    width: 100%; 
+    padding: 0 16px; /* More horizontal padding */
+    border: 1px solid var(--border);
+    border-radius: var(--radius); 
+    background: var(--bg); 
+    color: var(--on-surface);
+    font-size: 1rem; /* Slightly larger font */
+    transition: all 0.2s;
     box-sizing: border-box;
+    height: 48px; /* Taller */
+}
+/* Specific styles for select to make it look good */
+select.form-control {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 16px center;
+  background-size: 1em;
+  padding-right: 40px; /* Space for the arrow */
+}
+body.dark-mode select.form-control {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%239CA3AF' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
 }
 .form-control:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.1); }
 
