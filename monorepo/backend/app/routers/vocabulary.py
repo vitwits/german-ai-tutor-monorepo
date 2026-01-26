@@ -15,6 +15,40 @@ from ..utils_tts import get_cached_or_generate_tts
 
 router = APIRouter(prefix="/api", tags=["vocabulary"])
 
+def remove_duplicate_parts(translation_string):
+    if not translation_string:
+        return ""
+    parts = [part.strip() for part in translation_string.split(',')]
+    parts = [p for p in parts if p]
+    
+    unique_list = []
+    seen = set()
+    for p in parts:
+        if p not in seen:
+            unique_list.append(p)
+            seen.add(p)
+            
+    final_parts = []
+    for i, p_a in enumerate(unique_list):
+        words_a = p_a.split()
+        if not words_a: continue
+        first_a = words_a[0].lower()
+        
+        is_redundant = False
+        for j, p_b in enumerate(unique_list):
+            if i == j: continue
+            words_b = p_b.split()
+            if not words_b: continue
+            
+            if words_b[0].lower() == first_a and len(words_b) > len(words_a):
+                is_redundant = True
+                break
+        
+        if not is_redundant:
+            final_parts.append(p_a)
+            
+    return ', '.join(final_parts)
+
 @router.get("/vocab")
 async def get_vocab_list(
     page: int = 1,
@@ -189,13 +223,36 @@ async def quick_translate(
     if not word_data or word_data.get('ua') == 'Error':
         return {"ok": False, "error_key": "translation_failed"}
 
-    # 3. Generate Audio (Async)
-    await get_cached_or_generate_tts(req.text, 'de', current_user.id, db, log_stats=True)
+    # Clean duplicates
+    word_data['ua'] = remove_duplicate_parts(word_data.get('ua'))
+    word_data['en'] = remove_duplicate_parts(word_data.get('en'))
+
+    # 3. Generate Audio (German)
+    if not await get_cached_or_generate_tts(req.text, 'de', current_user.id, db, log_stats=True):
+        return {"ok": False, "error_key": "audio_failed"}
+
+    # 3.1 Generate Audio (Translation)
+    target_lang = 'uk' if current_user.interface_language == 'ukr' else 'en'
+    trans_text = word_data.get('ua') if target_lang == 'uk' else word_data.get('en')
+    
+    if trans_text:
+        parts = [p.strip() for p in re.split(r'[,;]', trans_text) if p.strip()]
+        for part in parts:
+            if not await get_cached_or_generate_tts(part, target_lang, current_user.id, db, log_stats=True):
+                return {"ok": False, "error_key": "audio_failed"}
     
     # 4. Save
     wid = str(uuid.uuid4())
-    # Simple find for index (can be improved)
-    start_index = req.ctx.find(req.text)
+    
+    # Robust indexing logic
+    start_index = -1
+    if req.start_char_index is not None:
+        search_start = max(0, req.start_char_index - 5)
+        start_index = req.ctx.find(req.text, search_start)
+    
+    if start_index == -1:
+        start_index = req.ctx.find(req.text)
+
     end_index = start_index + len(req.text) if start_index != -1 else -1
 
     new_word = Vocabulary(
