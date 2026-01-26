@@ -146,7 +146,32 @@ async def explain_grammar(
         if cached: return {"explanation": cached.explanation}
 
     # Generate
-    prompt = f"Explain grammar for: {req.sentence}" # Simplified prompt for brevity
+    # Fetch text level
+    text_level = "B1" # Default
+    if req.text_id:
+        res = await db.execute(select(Text.level).where(Text.id == req.text_id))
+        text_level = res.scalar_one_or_none() or "B1"
+
+    lang = current_user.interface_language
+    target_lang_name = "Ukrainian" if lang == 'ukr' else "English"
+
+    prompt = f"""
+    Act as a concise German tutor for a {target_lang_name}-speaking student.
+    Analyze this German sentence (Level {text_level}): "{req.sentence}"
+
+    RULES FOR EXPLANATION:
+    1. KEEP IT SHORT. Maximum 3-4 bullet points. No long paragraphs. No intro, no Let's start no small talk.
+    2. DO NOT define obvious words (e.g., don't say "Computer is a noun").
+    3. FOCUS ONLY on grammar nuances relevant to Level {text_level}:
+       - Why this specific article/ending? (Case/Gender)
+       - Word order (Why is the verb here?)
+       - Verb conjugations or tenses.
+    4. If the sentence is very simple (A1/A2), just give 1 sentence summary like: "Standard structure: Subject + Verb + Adjective."
+    5. Highlight key grammar parts in **bold**.
+
+    Respond in {target_lang_name}.
+    """
+
     explanation = services.explain_grammar_text(prompt)
     
     # Save

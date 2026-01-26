@@ -139,7 +139,7 @@
     
     /* minmax(320px, 1fr) гарантує 3 колонки на ширині 1200px (3 * 320 + відступи < 1200) */
     .texts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
-    .text-card { height: 160px; display: flex; flex-direction: column; justify-content: space-between; margin-bottom: 0; }
+    .text-card { height: 160px; display: flex; flex-direction: column; justify-content: space-between; margin-bottom: 0; border: 1px solid var(--border); }
     .text-title { font-weight: 500; font-size: 1.1rem; margin-top: 10px; }
     .text-subtitle { font-size: 0.9rem; opacity: 0.7; font-weight: 400; margin-top: 2px; }
     .card-actions { display: flex; justify-content: space-between; margin-top: auto; }
@@ -147,7 +147,7 @@
     .icon-btn { width: 36px; height: 36px; border: 1px solid var(--border); background: transparent; border-radius: var(--radius); display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--on-surface); }
     .active-fav { border-color: #d32f2f; color: #d32f2f; background: rgba(211, 47, 47, 0.1); }
     
-    .lvl-filter { width: 32px; height: 32px; border: 1px solid var(--border); background: var(--surface); border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.8rem; opacity: 0.6; }
+    .lvl-filter { width: 32px; height: 32px; border: 1px solid var(--border); background: var(--surface); border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.8rem; opacity: 0.6; color: var(--on-surface); }
     .lvl-filter.active { opacity: 1; color: white; border-color: transparent; }
     .lvl-filter.active[data-lvl="A1"] { background-color: #8BC34A; }
     .lvl-filter.active[data-lvl="A2"] { background-color: #4CAF50; }

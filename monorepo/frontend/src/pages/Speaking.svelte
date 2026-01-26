@@ -409,21 +409,24 @@
     <div class="task-text">
       {sourceText}
     </div>
-  {/if}
+    {/if}
   </div>
 
-  <div class="controls-container">
-    <!-- Repeat Button -->
-    <button class="side-btn {phase === 'feedback' ? 'visible' : ''}" onclick={repeatRound}>
-      <span class="material-symbols-outlined">replay</span>
-    </button>
+ 
 
-    <!-- Main Mic -->
+    <div class="controls-container">
+      <!-- Repeat Button -->
+      <button class="side-btn {phase === 'feedback' ? 'visible' : ''}" onclick={repeatRound}>
+        <span class="material-symbols-outlined">replay</span>
+      </button>
+      <!-- Main Mic -->
     <div class="mic-wrapper">
       <div class="mic-ring" style="transform: translate(-50%, -50%) scale({visualizerScale}); display: {phase === 'recording' ? 'block' : 'none'}"></div>
       
       <button class="mic-btn {phase === 'recording' ? 'recording' : ''} {phase === 'processing' ? 'processing' : ''}" 
               onclick={handleMainClick} disabled={phase === 'processing' || loading}>
+
+      
         {#if phase === 'processing'}
           <span class="material-symbols-outlined rotating">sync</span>
         {:else if phase === 'recording'}
@@ -433,10 +436,11 @@
         {:else}
           <span class="material-symbols-outlined icon-play">play_arrow</span>
         {/if}
+        
+
       </button>
     </div>
-
-    <!-- Fav Button -->
+<!-- Fav Button -->
     <button class="side-btn {phase === 'feedback' ? 'visible' : ''}" onclick={toggleFav} style="color: {isFav ? '#FFC107' : 'inherit'}">
       <span class="material-symbols-outlined {isFav ? 'filled' : ''}">star</span>
     </button>
@@ -447,6 +451,8 @@
         <div class="user-transcript" transition:fade>{transcript}</div>
         <div class="correction-box" transition:fade>{correction}</div>
       {/if}
+
+
   </div>
 </div>
 
@@ -454,7 +460,6 @@
   .speak-container {
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     min-height: 70vh; text-align: center; position: relative;
-  }
   .mode-switch {
     display: flex; background: var(--surface); border: 1px solid var(--border);
     border-radius: 20px; padding: 4px; margin-bottom: 40px;

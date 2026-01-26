@@ -594,19 +594,23 @@
         <!-- SENTENCES TAB -->
         <div class="sentences-list">
             {#each items as s (s.id)}
-                <div class="card sentence-card">
-                    <div class="sent-main">
-                        <button class="btn-text" onclick={() => playSentencePair(s)}>
-                            <span class="material-symbols-outlined" style="color:var(--primary)">volume_up</span>
-                        </button>
-                        <div class="sent-content">
-                            <div class="sent-de">{s.text_de}</div>
-                            <div class="sent-trans">{s.display_trans}</div>
+                <div class="vocab-item">
+                    <div class="vocab-main-row">
+                        <div class="vocab-word-group">
+                            <button class="btn-text list-audio-btn" onclick={() => playSentencePair(s)}>
+                                <span class="material-symbols-outlined">volume_up</span>
+                            </button>
+                            <div style="flex: 1; min-width: 0;">
+                                <div class="sent-de">{s.text_de}</div>
+                                <div class="sent-trans">{s.display_trans}</div>
+                            </div>
+                        </div>
+                        <div class="list-tools">
+                            <button class="btn-text delete-btn" onclick={() => deleteItem(s.fav_id, true)}>
+                                <span class="material-symbols-outlined">delete</span>
+                            </button>
                         </div>
                     </div>
-                    <button class="btn-text delete-btn" onclick={() => deleteItem(s.fav_id, true)}>
-                        <span class="material-symbols-outlined">delete</span>
-                    </button>
                 </div>
             {/each}
         </div>
@@ -655,7 +659,7 @@
     .view-toggles { display: flex; gap: 4px; }
     .view-btn {
         width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
-        border: 1px solid var(--border); background: transparent; border-radius: 6px; cursor: pointer; opacity: 0.6;
+        border: 1px solid var(--border); background: transparent; border-radius: 6px; cursor: pointer; opacity: 0.6; color: var(--on-surface);
     }
     .view-btn.active { background: var(--primary); color: white; opacity: 1; border-color: var(--primary); }
 
@@ -682,12 +686,12 @@
     .edit-textarea { width: 100%; height: 80px; border: 1px solid var(--primary); border-radius: 4px; padding: 8px; font-family: inherit; resize: none; }
 
     /* Level Strips */
-    .lvl-strip-a1 { border-left: 6px solid #8BC34A; }
-    .lvl-strip-a2 { border-left: 6px solid #4CAF50; }
-    .lvl-strip-b1 { border-left: 6px solid #29B6F6; }
-    .lvl-strip-b2 { border-left: 6px solid #1976D2; }
-    .lvl-strip-c1 { border-left: 6px solid #D32F2F; }
-    .lvl-strip-c2 { border-left: 6px solid #311B92; }
+    .lvl-strip-a1 { border-left: 10px solid #8BC34A; }
+    .lvl-strip-a2 { border-left: 10px solid #4CAF50; }
+    .lvl-strip-b1 { border-left: 10px solid #29B6F6; }
+    .lvl-strip-b2 { border-left: 10px solid #1976D2; }
+    .lvl-strip-c1 { border-left: 10px solid #D32F2F; }
+    .lvl-strip-c2 { border-left: 10px solid #311B92; }
 
     /* Grid View */
     .vocab-wrapper.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
@@ -732,11 +736,10 @@
     }
 
     /* Sentences Tab */
-    .sentences-list { display: flex; flex-direction: column; gap: 10px; }
-    .sentence-card { display: flex; justify-content: space-between; align-items: center; padding: 16px; }
-    .sent-main { display: flex; align-items: center; gap: 12px; flex: 1; }
-    .sent-de { font-size: 1.1rem; margin-bottom: 4px; }
-    .sent-trans { font-size: 0.9rem; opacity: 0.7; }
+    .sentences-list { display: flex; flex-direction: column; gap: 8px; }
+    /* Re-using .vocab-item and its sub-classes for sentences to unify styles */
+    .sent-de { font-size: 1.1rem; margin-bottom: 4px; font-weight: 500; color: var(--primary); }
+    .sent-trans { font-size: 0.9rem; opacity: 0.8; }
 
     /* Flashcard Styles */
     .session-overlay {

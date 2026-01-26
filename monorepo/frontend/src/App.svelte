@@ -83,6 +83,8 @@
     text-decoration: none; color: var(--on-surface); 
     font-size: 10px; display: flex; flex-direction: column; 
     align-items: center; opacity: 0.7; cursor: pointer;
+    outline: none;
+    -webkit-tap-highlight-color: transparent;
   }
   .nav-mobile .nav-item.active { 
     color: var(--primary); opacity: 1; 
