@@ -401,32 +401,30 @@
       <button class="mode-btn" style="cursor: not-allowed; opacity: 0.3;">{ui.speaking_small_talk} 🔒</button>
   </div>
 
-  <!-- Task Text Container -->
-  <div id="speaking-card-container">
-  {#if loading}
-    <div class="loading">{ui.speaking_loading}</div>
-  {:else if sentence}
-    <div class="task-text">
-      {sourceText}
-    </div>
+  <div class="game-content">
+    <!-- Task Text Container -->
+    <div id="speaking-card-container">
+    {#if loading}
+      <div class="loading">{ui.speaking_loading}</div>
+    {:else if sentence}
+      <div class="task-text">
+        {sourceText}
+      </div>
     {/if}
-  </div>
-
- 
+    </div>
 
     <div class="controls-container">
       <!-- Repeat Button -->
       <button class="side-btn {phase === 'feedback' ? 'visible' : ''}" onclick={repeatRound}>
         <span class="material-symbols-outlined">replay</span>
       </button>
-      <!-- Main Mic -->
-    <div class="mic-wrapper">
-      <div class="mic-ring" style="transform: translate(-50%, -50%) scale({visualizerScale}); display: {phase === 'recording' ? 'block' : 'none'}"></div>
-      
-      <button class="mic-btn {phase === 'recording' ? 'recording' : ''} {phase === 'processing' ? 'processing' : ''}" 
-              onclick={handleMainClick} disabled={phase === 'processing' || loading}>
 
-      
+      <!-- Main Mic -->
+      <div class="mic-wrapper">
+        <div class="mic-ring" style="transform: translate(-50%, -50%) scale({visualizerScale}); display: {phase === 'recording' ? 'block' : 'none'}"></div>
+        
+        <button class="mic-btn {phase === 'recording' ? 'recording' : ''} {phase === 'processing' ? 'processing' : ''}" 
+                onclick={handleMainClick} disabled={phase === 'processing' || loading}>
         {#if phase === 'processing'}
           <span class="material-symbols-outlined rotating">sync</span>
         {:else if phase === 'recording'}
@@ -436,33 +434,37 @@
         {:else}
           <span class="material-symbols-outlined icon-play">play_arrow</span>
         {/if}
-        
+        </button>
+      </div>
 
+      <!-- Fav Button -->
+      <button class="side-btn {phase === 'feedback' ? 'visible' : ''}" onclick={toggleFav} style="color: {isFav ? '#FFC107' : 'inherit'}">
+        <span class="material-symbols-outlined {isFav ? 'filled' : ''}">star</span>
       </button>
     </div>
-<!-- Fav Button -->
-    <button class="side-btn {phase === 'feedback' ? 'visible' : ''}" onclick={toggleFav} style="color: {isFav ? '#FFC107' : 'inherit'}">
-      <span class="material-symbols-outlined {isFav ? 'filled' : ''}">star</span>
-    </button>
-  </div>
 
-  <div class="feedback-area">
-      {#if phase === 'feedback'}
-        <div class="user-transcript" transition:fade>{transcript}</div>
-        <div class="correction-box" transition:fade>{correction}</div>
-      {/if}
-
-
+    <div class="feedback-area">
+        {#if phase === 'feedback'}
+          <div class="user-transcript" transition:fade>{transcript}</div>
+          <div class="correction-box" transition:fade>{correction}</div>
+        {/if}
+    </div>
   </div>
 </div>
 
 <style>
   .speak-container {
     display: flex; flex-direction: column; align-items: center; justify-content: center;
+    justify-content: flex-start; /* Align top */
     min-height: 70vh; text-align: center; position: relative;
+  }
+  .game-content {
+    flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; width: 100%;
+  }
   .mode-switch {
     display: flex; background: var(--surface); border: 1px solid var(--border);
-    border-radius: 20px; padding: 4px; margin-bottom: 40px;
+    border-radius: 20px; padding: 4px; 
+    margin: 0 auto 20px auto; /* Consistent with Vocab page */
   }
   .mode-btn {
     padding: 8px 24px; border-radius: 16px; border: none; background: transparent;
