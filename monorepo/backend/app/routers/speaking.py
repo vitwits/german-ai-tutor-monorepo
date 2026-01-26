@@ -107,3 +107,18 @@ async def remove_fav_sentence(req: RemoveFavSentenceRequest, db: AsyncSession = 
     )
     await db.commit()
     return {"ok": True}
+
+@router.post("/report_sentence")
+async def report_sentence(req: ReportSentenceRequest, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    # 1. Mark as reported globally
+    await db.execute(
+        update(Sentence).where(Sentence.id == req.id).values(reported=1)
+    )
+    # 2. Block for this user
+    # Check if already blocked to avoid PK constraint error (though insert or ignore is better, simple check works)
+    existing = await db.scalar(select(UserBlockedSentence).where(UserBlockedSentence.user_id == current_user.id, UserBlockedSentence.sentence_id == req.id))
+    if not existing:
+        db.add(UserBlockedSentence(user_id=current_user.id, sentence_id=req.id))
+    
+    await db.commit()
+    return {"ok": True}

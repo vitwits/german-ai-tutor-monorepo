@@ -6,6 +6,8 @@
 
   let lang = 'ukr';
   let vocabSize = 20;
+  let currentPassword = "";
+  let newPassword = "";
   let loading = false;
 
   $: ui = getUI($user?.interface_language || 'ukr');
@@ -36,6 +38,24 @@
     }
   }
 
+  async function changePassword() {
+    if (!currentPassword || !newPassword) return;
+    loading = true;
+    try {
+      await api.post("/auth/change_password", {
+        current_password: currentPassword,
+        new_password: newPassword
+      });
+      addToast("Password changed successfully", "success");
+      currentPassword = "";
+      newPassword = "";
+    } catch (e) {
+      addToast(e.response?.data?.detail || "Error changing password", "error");
+    } finally {
+      loading = false;
+    }
+  }
+
   function cancel() {
     history.back();
   }
@@ -56,6 +76,21 @@
     <label class="form-label" for="vss">{ui.vocab_session_size}</label>
     <input id="vss" type="number" class="form-control" bind:value={vocabSize} min="5" max="100">
   </div>
+
+  <hr style="margin: 30px 0; border: 0; border-top: 1px solid var(--border);">
+  
+  <h3>Security</h3>
+  <div class="form-group">
+    <label class="form-label" for="curr-pass">Current Password</label>
+    <input id="curr-pass" type="password" class="form-control" bind:value={currentPassword}>
+  </div>
+  <div class="form-group">
+    <label class="form-label" for="new-pass">New Password</label>
+    <input id="new-pass" type="password" class="form-control" bind:value={newPassword}>
+  </div>
+  <button class="btn-contained" style="background-color: #757575; width: 100%; margin-bottom: 20px;" on:click={changePassword} disabled={loading || !currentPassword || !newPassword}>
+    Change Password
+  </button>
 
   <div class="btn-group">
     <button class="btn-contained" on:click={save} disabled={loading}>

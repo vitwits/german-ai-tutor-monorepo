@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List
 from datetime import datetime
 
@@ -131,3 +131,7 @@ class UserSettingsUpdate(BaseModel):
 
 class UserLevelUpdate(BaseModel):
     level: str
+
+class UserPasswordUpdate(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=6)

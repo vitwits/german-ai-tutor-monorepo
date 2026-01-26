@@ -7,7 +7,7 @@ import logging
 
 from ..database import get_db
 from ..models import User
-from ..schemas import UserCreate, Token, UserRead, UserSettingsUpdate, UserLevelUpdate
+from ..schemas import UserCreate, Token, UserRead, UserSettingsUpdate, UserLevelUpdate, UserPasswordUpdate
 from ..security import get_password_hash, verify_password, create_access_token
 from ..dependencies import get_current_user
 
@@ -78,4 +78,13 @@ async def update_level(req: UserLevelUpdate, db: AsyncSession = Depends(get_db),
     if req.level in ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']:
         current_user.level = req.level
         await db.commit()
+    return {"ok": True}
+
+@router.post("/change_password")
+async def change_password(req: UserPasswordUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if not verify_password(req.current_password, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="Incorrect current password")
+    
+    current_user.password_hash = get_password_hash(req.new_password)
+    await db.commit()
     return {"ok": True}

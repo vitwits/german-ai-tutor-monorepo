@@ -3,6 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import os
 from .routers import auth, library, vocabulary, speaking, tts
+from .database import engine
+from .admin import setup_admin
 
 app = FastAPI(title="German AI Tutor API")
 
@@ -30,6 +32,9 @@ app.include_router(library.router)
 app.include_router(vocabulary.router)
 app.include_router(speaking.router)
 app.include_router(tts.router)
+
+# Setup Admin Panel
+setup_admin(app, engine)
 
 @app.get("/")
 def read_root():
