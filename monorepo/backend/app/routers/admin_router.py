@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select, and_
 import os
 import datetime
+import uuid
 from typing import Optional
 from datetime import timedelta
 
@@ -231,10 +232,43 @@ async def admin_index(
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/css/bootstrap.min.css" rel="stylesheet">
         <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-        {ADMIN_CSS}
+        <style>
+            * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+            body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto; background-color: #f5f7fa; }}
+            .navbar {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 30px; }}
+            .navbar-container {{ display: flex; align-items: center; justify-content: flex-start; padding: 0 30px; height: 50px; gap: 40px; }}
+            .navbar-brand {{ font-size: 1.5em; font-weight: 700; color: white; text-decoration: none; display: flex; align-items: center; gap: 10px; white-space: nowrap; }}
+            .navbar-brand:hover {{ color: #f0f0f0; }}
+            .nav-menu {{ display: flex; gap: 0; list-style: none; margin: 0; padding: 0; }}
+            .nav-item {{ position: relative; }}
+            .nav-link {{ color: rgba(255,255,255,0.9); text-decoration: none; padding: 15px 12px; font-size: 0.9em; font-weight: 500; transition: all 0.3s; border-bottom: 3px solid transparent; height: 50px; display: flex; align-items: center; white-space: nowrap; }}
+            .nav-link:hover {{ color: white; background-color: rgba(255,255,255,0.1); border-bottom-color: rgba(255,255,255,0.3); }}
+            .nav-link.active {{ color: white; background-color: rgba(255,255,255,0.15); border-bottom-color: white; }}
+            .nav-right {{ display: flex; gap: 8px; align-items: center; margin-left: auto; color: white; font-size: 0.85em; white-space: nowrap; }}
+            .nav-right a.nav-link {{ padding: 8px 12px; height: auto; border-bottom: none; }}
+            .container-main {{ max-width: 1400px; margin: 0 auto; padding: 0 30px; }}
+            h1 {{ font-size: 2em; color: #2c3e50; margin-bottom: 30px; font-weight: 700; }}
+            .stat-card {{ padding: 20px; text-align: center; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); background: white; border: 1px solid #e9ecef; }}
+            .stat-number {{ font-size: 2.5em; font-weight: 700; color: #667eea; margin-bottom: 10px; }}
+        </style>
     </head>
     <body>
-        {get_navbar_html('dashboard', current_user.email)}
+        <nav class="navbar">
+            <div class="navbar-container">
+                <a class="navbar-brand" href="/admin">🎓 Admin</a>
+                <ul class="nav-menu">
+                    <li class="nav-item"><a class="nav-link active" href="/admin">Dashboard</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/users">Users</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
+                </ul>
+                <div class="nav-right">
+                    <span title="{current_user.email}">{current_user.email.split("@")[0]}</span>
+                    <a class="nav-link" href="/admin/logout">Logout</a>
+                </div>
+            </div>
+        </nav>
         
         <div class="container-main">
             <h1>Dashboard</h1>
@@ -396,15 +430,16 @@ async def sentence_list(
             * {{ margin: 0; padding: 0; box-sizing: border-box; }}
             body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto; background-color: #f5f7fa; }}
             .navbar {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 30px; }}
-            .navbar-container {{ display: flex; align-items: center; justify-content: space-between; padding: 0 30px; height: 70px; }}
-            .navbar-brand {{ font-size: 1.5em; font-weight: 700; color: white; text-decoration: none; display: flex; align-items: center; gap: 10px; }}
+            .navbar-container {{ display: flex; align-items: center; justify-content: flex-start; padding: 0 30px; height: 50px; gap: 40px; }}
+            .navbar-brand {{ font-size: 1.5em; font-weight: 700; color: white; text-decoration: none; display: flex; align-items: center; gap: 10px; white-space: nowrap; }}
             .navbar-brand:hover {{ color: #f0f0f0; }}
-            .nav-menu {{ display: flex; gap: 0; list-style: none; flex: 1; margin-left: 40px; }}
+            .nav-menu {{ display: flex; gap: 0; list-style: none; margin: 0; padding: 0; }}
             .nav-item {{ position: relative; }}
-            .nav-link {{ color: rgba(255,255,255,0.9); text-decoration: none; padding: 25px 18px; font-size: 0.95em; font-weight: 500; transition: all 0.3s; border-bottom: 3px solid transparent; height: 70px; display: flex; align-items: center; }}
+            .nav-link {{ color: rgba(255,255,255,0.9); text-decoration: none; padding: 15px 12px; font-size: 0.9em; font-weight: 500; transition: all 0.3s; border-bottom: 3px solid transparent; height: 50px; display: flex; align-items: center; white-space: nowrap; }}
             .nav-link:hover {{ color: white; background-color: rgba(255,255,255,0.1); border-bottom-color: rgba(255,255,255,0.3); }}
             .nav-link.active {{ color: white; background-color: rgba(255,255,255,0.15); border-bottom-color: white; }}
-            .nav-right {{ display: flex; gap: 15px; align-items: center; margin-left: auto; color: white; }}
+            .nav-right {{ display: flex; gap: 8px; align-items: center; margin-left: auto; color: white; font-size: 0.85em; white-space: nowrap; }}
+            .nav-right a.nav-link {{ padding: 8px 12px; height: auto; border-bottom: none; }}
             .container-main {{ max-width: 1400px; margin: 0 auto; padding: 0 30px; }}
             h1 {{ font-size: 2em; color: #2c3e50; margin-bottom: 30px; font-weight: 700; }}
             .controls {{ margin: 30px 0; display: flex; gap: 15px; align-items: center; flex-wrap: wrap; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }}
@@ -428,7 +463,7 @@ async def sentence_list(
     <body>
         <nav class="navbar">
             <div class="navbar-container">
-                <a class="navbar-brand" href="/admin">🎓 German Tutor Admin</a>
+                <a class="navbar-brand" href="/admin">🎓 Admin</a>
                 <ul class="nav-menu">
                     <li class="nav-item"><a class="nav-link" href="/admin">Dashboard</a></li>
                     <li class="nav-item"><a class="nav-link active" href="/admin/sentence/list">Sentences</a></li>
@@ -437,8 +472,8 @@ async def sentence_list(
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
                 </ul>
                 <div class="nav-right">
-                    <span>{current_user.email}</span>
-                    <a class="nav-link" href="/admin/logout" style="padding: 10px 15px; border-bottom: none;">Logout</a>
+                    <span title="{current_user.email}">{current_user.email.split("@")[0]}</span>
+                    <a class="nav-link" href="/admin/logout">Logout</a>
                 </div>
             </div>
         </nav>
@@ -609,21 +644,29 @@ async def reported_sentences(
         audio_urls = [s.audio_uk, s.audio_en, s.audio_de]
         audio_urls = [f"'/static/audio/sentences/{url}'" for url in audio_urls if url]
         
+        uk_audio = f"'/static/audio/sentences/{s.audio_uk}'" if s.audio_uk else "''"
+        en_audio = f"'/static/audio/sentences/{s.audio_en}'" if s.audio_en else "''"
+        de_audio = f"'/static/audio/sentences/{s.audio_de}'" if s.audio_de else "''"
+        
         rows_html += f"""
-        <tr>
-            <td class="col-play"><button class="play-btn" onclick="playSequence(this, [{', '.join(audio_urls)}])">▶</button></td>
+        <tr data-audio-uk={uk_audio} data-audio-en={en_audio} data-audio-de={de_audio}>
+            <td class="col-play"><button class="play-btn" onclick="playSequence(this)">▶</button></td>
             <td>{s.text_de or ''}</td>
             <td>{s.text_en or ''}</td>
             <td>{s.text_uk or ''}</td>
             <td>{s.topic or ''}</td>
             <td>
                 <div style="display: flex; gap: 8px;">
-                    <a href="/admin/sentence/{s.id}/edit" class="btn btn-primary action-btn">Edit</a>
+                    <a href="/admin/sentence/{s.id}/edit" class="btn btn-primary action-btn" title="Edit">
+                        <span class="material-symbols-outlined">edit</span>
+                    </a>
                     <form action="/admin/sentence/{s.id}/unreport" method="POST" style="display:inline;">
-                        <button type="submit" class="btn btn-warning action-btn">Un-report</button>
+                        <button type="submit" class="btn btn-warning action-btn" title="Un-report">✓</button>
                     </form>
                     <form action="/admin/sentence/{s.id}/delete" method="POST" style="display:inline;">
-                        <button type="submit" class="btn btn-danger action-btn">Delete</button>
+                        <button type="submit" class="btn btn-danger action-btn" title="Delete">
+                            <span class="material-symbols-outlined">delete</span>
+                        </button>
                     </form>
                 </div>
             </td>
@@ -636,80 +679,158 @@ async def reported_sentences(
     <head>
         <title>Reported Sentences</title>
         <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/css/bootstrap.min.css" rel="stylesheet">
-        <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
         <style>
-            body {{ padding: 20px; }}
-            .navbar {{ background-color: #2c3e50; margin-bottom: 20px; }}
-            .action-btn {{ width: 36px; height: 36px; padding: 0; }}
-            .play-btn {{ background: #4CAF50; color: white; border: none; border-radius: 50%; width: 32px; height: 32px; cursor: pointer; }}
+            * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+            body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto; background-color: #f5f7fa; }}
+            .navbar {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 30px; }}
+            .navbar-container {{ display: flex; align-items: center; justify-content: flex-start; padding: 0 30px; height: 50px; gap: 40px; }}
+            .navbar-brand {{ font-size: 1.5em; font-weight: 700; color: white; text-decoration: none; display: flex; align-items: center; gap: 10px; white-space: nowrap; }}
+            .navbar-brand:hover {{ color: #f0f0f0; }}
+            .nav-menu {{ display: flex; gap: 0; list-style: none; margin: 0; padding: 0; }}
+            .nav-item {{ position: relative; }}
+            .nav-link {{ color: rgba(255,255,255,0.9); text-decoration: none; padding: 15px 12px; font-size: 0.9em; font-weight: 500; transition: all 0.3s; border-bottom: 3px solid transparent; height: 50px; display: flex; align-items: center; white-space: nowrap; }}
+            .nav-link:hover {{ color: white; background-color: rgba(255,255,255,0.1); border-bottom-color: rgba(255,255,255,0.3); }}
+            .nav-link.active {{ color: white; background-color: rgba(255,255,255,0.15); border-bottom-color: white; }}
+            .nav-right {{ display: flex; gap: 8px; align-items: center; margin-left: auto; color: white; font-size: 0.85em; white-space: nowrap; }}
+            .nav-right a.nav-link {{ padding: 8px 12px; height: auto; border-bottom: none; }}
+            .container-main {{ max-width: 1400px; margin: 0 auto; padding: 0 30px; }}
+            h1 {{ font-size: 2em; color: #2c3e50; margin-bottom: 30px; font-weight: 700; }}
+            .table-responsive {{ background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: hidden; }}
+            table {{ margin: 0; width: 100%; }}
+            table thead {{ background-color: #f8f9fa; border-bottom: 2px solid #e9ecef; }}
+            table th {{ padding: 15px; font-weight: 600; color: #2c3e50; text-align: left; }}
+            table td {{ padding: 15px; border-bottom: 1px solid #e9ecef; }}
+            table tbody tr:hover {{ background-color: #f8f9fa; }}
+            .playing-row {{ background-color: #e3f2fd !important; }}
+            .play-btn {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 50%; width: 38px; height: 38px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.8em; box-shadow: 0 2px 4px rgba(102,126,234,0.3); transition: all 0.2s; }}
+            .play-btn:hover {{ transform: scale(1.1); box-shadow: 0 4px 8px rgba(102,126,234,0.4); }}
+            .btn-primary {{ background: #667eea; border: none; color: white; }}
+            .btn-primary:hover {{ background: #5568d3; }}
+            .btn-danger {{ background: #f56565; border: none; color: white; }}
+            .btn-danger:hover {{ background: #e53e3e; }}
+            .btn-warning {{ background: #f39c12; border: none; color: white; }}
+            .btn-warning:hover {{ background: #d68910; }}
+            .action-btn {{ width: 36px; height: 36px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; }}
         </style>
     </head>
     <body>
-        <nav class="navbar navbar-dark bg-dark">
-            <a class="navbar-brand" href="/admin">🎓 DE Tutor Admin</a>
+        <nav class="navbar">
+            <div class="navbar-container">
+                <a class="navbar-brand" href="/admin">🎓 Admin</a>
+                <ul class="nav-menu">
+                    <li class="nav-item"><a class="nav-link" href="/admin">Dashboard</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="/admin/reported">Reported</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/users">Users</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
+                </ul>
+                <div class="nav-right">
+                    <span title="{current_user.email}">{current_user.email.split("@")[0]}</span>
+                    <a class="nav-link" href="/admin/logout">Logout</a>
+                </div>
+            </div>
         </nav>
-        <div class="container-fluid">
+        
+        <div class="container-main">
             <h1>Reported Sentences ({len(sentences)})</h1>
-            <table class="table table-striped">
-                <thead>
-                    <tr>
-                        <th>Play</th>
-                        <th>German</th>
-                        <th>English</th>
-                        <th>Ukrainian</th>
-                        <th>Topic</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>{rows_html}</tbody>
-            </table>
+            <div class="table-responsive">
+                <table class="table table-striped table-bordered table-hover">
+                    <thead>
+                        <tr>
+                            <th>Play</th>
+                            <th>German</th>
+                            <th>English</th>
+                            <th>Ukrainian</th>
+                            <th>Topic</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {rows_html}
+                    </tbody>
+                </table>
+            </div>
         </div>
+        
         <script>
             let currentAudio = null;
             let currentRow = null;
             let stopPlayback = false;
             
-            async function playSequence(btn, urls) {{
-                const isPauseAction = (currentRow === btn.closest('tr'));
-                if (currentAudio) currentAudio.pause();
+            async function playSequence(btn) {{
+                const rowElement = btn.closest('tr');
+                const isPauseAction = (currentRow === rowElement);
+                
+                if (currentAudio) {{
+                    currentAudio.pause();
+                    currentAudio.onended = null;
+                }}
+                
                 if (currentRow) {{
                     currentRow.classList.remove('playing-row');
                     const oldBtn = currentRow.querySelector('.play-btn');
                     if (oldBtn) oldBtn.innerHTML = '▶';
                 }}
+                
                 stopPlayback = true;
                 await new Promise(r => setTimeout(r, 50));
-                if (isPauseAction) {{ currentRow = null; currentAudio = null; return; }}
+                
+                if (isPauseAction) {{
+                    currentRow = null;
+                    currentAudio = null;
+                    return;
+                }}
+                
                 stopPlayback = false;
-                let activeRow = btn.closest('tr');
+                let activeRow = rowElement;
+                
                 while (activeRow && !stopPlayback) {{
-                    const currentBtn = activeRow.querySelector('.play-btn');
+                    const btn_elem = activeRow.querySelector('.play-btn');
+                    if (!btn_elem) break;
+                    
                     currentRow = activeRow;
                     activeRow.classList.add('playing-row');
-                    currentBtn.innerHTML = '⏸';
-                    for (const url of urls) {{
+                    btn_elem.innerHTML = '⏸';
+                    
+                    const row_urls = [];
+                    const uk_url = activeRow.getAttribute('data-audio-uk');
+                    const en_url = activeRow.getAttribute('data-audio-en');
+                    const de_url = activeRow.getAttribute('data-audio-de');
+                    
+                    if (uk_url && uk_url !== "''") row_urls.push(uk_url);
+                    if (en_url && en_url !== "''") row_urls.push(en_url);
+                    if (de_url && de_url !== "''") row_urls.push(de_url);
+                    
+                    for (const url of row_urls) {{
                         if (stopPlayback) break;
                         if (!url) continue;
+                        
                         await new Promise((resolve) => {{
                             currentAudio = new Audio(url);
                             currentAudio.onended = resolve;
                             currentAudio.onerror = resolve;
                             currentAudio.play();
                         }});
+                        
+                        if (stopPlayback) break;
                         await new Promise(r => setTimeout(r, 500));
                     }}
-                    activeRow.classList.remove('playing-row');
-                    currentBtn.innerHTML = '▶';
-                    currentRow = null;
-                    currentAudio = null;
                     
-                    // Move to next TR element, skip non-TR nodes
+                    if (stopPlayback) break;
+                    
+                    activeRow.classList.remove('playing-row');
+                    btn_elem.innerHTML = '▶';
+                    
                     do {{
                         activeRow = activeRow.nextElementSibling;
                     }} while (activeRow && activeRow.tagName !== 'TR');
                 }}
                 
+                currentRow = null;
+                currentAudio = null;
                 stopPlayback = false;
             }}
         </script>
@@ -734,9 +855,9 @@ async def admin_users(
         <tr>
             <td>{u.email}</td>
             <td>{u.level}</td>
-            <td>{u.credits}</td>
+            <td>{u.credits:.2f}</td>
             <td>{"Yes" if u.is_admin else "No"}</td>
-            <td><button class="btn btn-sm btn-primary">Edit</button></td>
+            <td><a href="/admin/user/{u.id}/edit" class="btn btn-sm btn-primary">Edit</a></td>
         </tr>
         """
     
@@ -746,30 +867,69 @@ async def admin_users(
     <head>
         <title>Users</title>
         <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/css/bootstrap.min.css" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
         <style>
-            body {{ padding: 20px; }}
-            .navbar {{ background-color: #2c3e50; margin-bottom: 20px; }}
+            * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+            body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto; background-color: #f5f7fa; }}
+            .navbar {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 30px; }}
+            .navbar-container {{ display: flex; align-items: center; justify-content: flex-start; padding: 0 30px; height: 50px; gap: 40px; }}
+            .navbar-brand {{ font-size: 1.5em; font-weight: 700; color: white; text-decoration: none; display: flex; align-items: center; gap: 10px; white-space: nowrap; }}
+            .navbar-brand:hover {{ color: #f0f0f0; }}
+            .nav-menu {{ display: flex; gap: 0; list-style: none; margin: 0; padding: 0; }}
+            .nav-item {{ position: relative; }}
+            .nav-link {{ color: rgba(255,255,255,0.9); text-decoration: none; padding: 15px 12px; font-size: 0.9em; font-weight: 500; transition: all 0.3s; border-bottom: 3px solid transparent; height: 50px; display: flex; align-items: center; white-space: nowrap; }}
+            .nav-link:hover {{ color: white; background-color: rgba(255,255,255,0.1); border-bottom-color: rgba(255,255,255,0.3); }}
+            .nav-link.active {{ color: white; background-color: rgba(255,255,255,0.15); border-bottom-color: white; }}
+            .nav-right {{ display: flex; gap: 8px; align-items: center; margin-left: auto; color: white; font-size: 0.85em; white-space: nowrap; }}
+            .nav-right a.nav-link {{ padding: 8px 12px; height: auto; border-bottom: none; }}
+            .container-main {{ max-width: 1400px; margin: 0 auto; padding: 0 30px; }}
+            h1 {{ font-size: 2em; color: #2c3e50; margin-bottom: 30px; font-weight: 700; }}
+            .table-responsive {{ background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: hidden; }}
+            table {{ margin: 0; width: 100%; }}
+            table thead {{ background-color: #f8f9fa; border-bottom: 2px solid #e9ecef; }}
+            table th {{ padding: 15px; font-weight: 600; color: #2c3e50; text-align: left; }}
+            table td {{ padding: 15px; border-bottom: 1px solid #e9ecef; }}
+            table tbody tr:hover {{ background-color: #f8f9fa; }}
+            .btn-primary {{ background: #667eea; border: none; color: white; }}
+            .btn-primary:hover {{ background: #5568d3; }}
         </style>
     </head>
     <body>
-        <nav class="navbar navbar-dark bg-dark">
-            <a class="navbar-brand" href="/admin">🎓 DE Tutor Admin</a>
+        <nav class="navbar">
+            <div class="navbar-container">
+                <a class="navbar-brand" href="/admin">🎓 Admin</a>
+                <ul class="nav-menu">
+                    <li class="nav-item"><a class="nav-link" href="/admin">Dashboard</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="/admin/users">Users</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
+                </ul>
+                <div class="nav-right">
+                    <span title="{current_user.email}">{current_user.email.split("@")[0]}</span>
+                    <a class="nav-link" href="/admin/logout">Logout</a>
+                </div>
+            </div>
         </nav>
-        <div class="container-fluid">
+        
+        <div class="container-main">
             <h1>Users ({len(users)})</h1>
-            <table class="table table-striped">
-                <thead>
-                    <tr>
-                        <th>Email</th>
-                        <th>Level</th>
-                        <th>Credits</th>
-                        <th>Admin</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>{rows_html}</tbody>
-            </table>
+            <div class="table-responsive">
+                <table class="table table-striped table-bordered table-hover">
+                    <thead>
+                        <tr>
+                            <th>Email</th>
+                            <th>Level</th>
+                            <th>Credits</th>
+                            <th>Admin</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>{rows_html}</tbody>
+                </table>
+            </div>
         </div>
     </body>
     </html>
@@ -777,7 +937,153 @@ async def admin_users(
     return html
 
 
-@router.post("/sentence/{sentence_id}/delete")
+@router.get("/user/{user_id}/edit", response_class=HTMLResponse)
+async def edit_user(
+    user_id: str,
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Edit user form"""
+    try:
+        # Validate UUID format but use string for DB query
+        uuid.UUID(user_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid user ID format")
+    
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Edit User</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/css/bootstrap.min.css" rel="stylesheet">
+        <style>
+            * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+            body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto; background-color: #f5f7fa; }}
+            .navbar {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 30px; }}
+            .navbar-container {{ display: flex; align-items: center; justify-content: flex-start; padding: 0 30px; height: 50px; gap: 40px; }}
+            .navbar-brand {{ font-size: 1.5em; font-weight: 700; color: white; text-decoration: none; display: flex; align-items: center; gap: 10px; white-space: nowrap; }}
+            .navbar-brand:hover {{ color: #f0f0f0; }}
+            .nav-menu {{ display: flex; gap: 0; list-style: none; margin: 0; padding: 0; }}
+            .nav-item {{ position: relative; }}
+            .nav-link {{ color: rgba(255,255,255,0.9); text-decoration: none; padding: 15px 12px; font-size: 0.9em; font-weight: 500; transition: all 0.3s; border-bottom: 3px solid transparent; height: 50px; display: flex; align-items: center; white-space: nowrap; }}
+            .nav-link:hover {{ color: white; background-color: rgba(255,255,255,0.1); border-bottom-color: rgba(255,255,255,0.3); }}
+            .nav-link.active {{ color: white; background-color: rgba(255,255,255,0.15); border-bottom-color: white; }}
+            .nav-right {{ display: flex; gap: 8px; align-items: center; margin-left: auto; color: white; font-size: 0.85em; white-space: nowrap; }}
+            .nav-right a.nav-link {{ padding: 8px 12px; height: auto; border-bottom: none; }}
+            .container-main {{ max-width: 600px; margin: 0 auto; padding: 0 30px; }}
+            h1 {{ font-size: 2em; color: #2c3e50; margin-bottom: 30px; font-weight: 700; }}
+            .card {{ box-shadow: 0 1px 3px rgba(0,0,0,0.05); border: none; }}
+            .form-group label {{ font-weight: 600; color: #2c3e50; }}
+            .form-control {{ border: 1px solid #ddd; border-radius: 6px; }}
+            .form-control:focus {{ border-color: #667eea; box-shadow: 0 0 0 0.2rem rgba(102,126,234,0.25); }}
+            .btn-primary {{ background: #667eea; border: none; color: white; }}
+            .btn-primary:hover {{ background: #5568d3; }}
+            .btn-secondary {{ background: #6c757d; border: none; color: white; }}
+            .btn-secondary:hover {{ background: #5a6268; }}
+        </style>
+    </head>
+    <body>
+        <nav class="navbar">
+            <div class="navbar-container">
+                <a class="navbar-brand" href="/admin">🎓 Admin</a>
+                <ul class="nav-menu">
+                    <li class="nav-item"><a class="nav-link" href="/admin">Dashboard</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="/admin/users">Users</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
+                </ul>
+                <div class="nav-right">
+                    <span title="{current_user.email}">{current_user.email.split("@")[0]}</span>
+                    <a class="nav-link" href="/admin/logout">Logout</a>
+                </div>
+            </div>
+        </nav>
+        
+        <div class="container-main">
+            <h1>Edit User #{user_id}</h1>
+            <div class="card">
+                <div class="card-body">
+                    <form method="POST" action="/admin/user/{user_id}/update">
+                        <div class="form-group">
+                            <label>Email</label>
+                            <input type="email" name="email" class="form-control" value="{user.email}" readonly>
+                        </div>
+                        <div class="form-group">
+                            <label>Level</label>
+                            <select name="level" class="form-control" required>
+                                <option value="">-- Select Level --</option>
+                                <option value="A1" {"selected" if user.level == "A1" else ""}>A1</option>
+                                <option value="A2" {"selected" if user.level == "A2" else ""}>A2</option>
+                                <option value="B1" {"selected" if user.level == "B1" else ""}>B1</option>
+                                <option value="B2" {"selected" if user.level == "B2" else ""}>B2</option>
+                                <option value="C1" {"selected" if user.level == "C1" else ""}>C1</option>
+                                <option value="C2" {"selected" if user.level == "C2" else ""}>C2</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Credits</label>
+                            <input type="number" name="credits" class="form-control" step="0.01" value="{user.credits}" required>
+                        </div>
+                        <div class="form-group">
+                            <div class="custom-control custom-checkbox">
+                                <input type="checkbox" class="custom-control-input" id="isAdmin" name="is_admin" value="true" {"checked" if user.is_admin else ""}>
+                                <label class="custom-control-label" for="isAdmin">
+                                    Is Admin
+                                </label>
+                            </div>
+                        </div>
+                        <div style="margin-top: 30px;">
+                            <button type="submit" class="btn btn-primary">Save</button>
+                            <a href="/admin/users" class="btn btn-secondary">Cancel</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    return html
+
+
+@router.post("/user/{user_id}/update")
+async def update_user(
+    user_id: str,
+    request: Request,
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update user"""
+    try:
+        # Validate UUID format but use string for DB query
+        uuid.UUID(user_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid user ID format")
+    
+    form = await request.form()
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    user.level = form.get("level", user.level)
+    user.credits = float(form.get("credits", user.credits))
+    user.is_admin = form.get("is_admin") == "true"
+    
+    await db.commit()
+    return RedirectResponse(url="/admin/users", status_code=302)
+
+
 async def delete_sentence(
     sentence_id: int,
     current_user: User = Depends(check_admin_access),
@@ -1070,7 +1376,7 @@ async def generate_view(
             elif batch.status == "generating_audio":
                 audio_btn = f'<button class="btn btn-sm btn-secondary" disabled style="cursor: not-allowed; opacity: 0.6;">⏳ Generating...</button>'
             else:  # audio_ready
-                audio_btn = f'<button class="btn btn-sm btn-success" onclick="generateAudio({batch.id})">🔊 Generate Audio</button>'
+                audio_btn = f'<button class="btn btn-sm btn-secondary" disabled style="cursor: not-allowed; opacity: 0.6;">✓ Audio Ready</button>'
         
         status_color = {
             "pending": "secondary",
@@ -1100,17 +1406,54 @@ async def generate_view(
     <head>
         <title>Generate Sentences</title>
         <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/css/bootstrap.min.css" rel="stylesheet">
         <style>
-            body {{ padding: 20px; }}
-            .navbar {{ background-color: #2c3e50; margin-bottom: 20px; }}
+            * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+            body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto; background-color: #f5f7fa; }}
+            .navbar {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 30px; }}
+            .navbar-container {{ display: flex; align-items: center; justify-content: flex-start; padding: 0 30px; height: 50px; gap: 40px; }}
+            .navbar-brand {{ font-size: 1.5em; font-weight: 700; color: white; text-decoration: none; display: flex; align-items: center; gap: 10px; white-space: nowrap; }}
+            .navbar-brand:hover {{ color: #f0f0f0; }}
+            .nav-menu {{ display: flex; gap: 0; list-style: none; margin: 0; padding: 0; }}
+            .nav-item {{ position: relative; }}
+            .nav-link {{ color: rgba(255,255,255,0.9); text-decoration: none; padding: 15px 12px; font-size: 0.9em; font-weight: 500; transition: all 0.3s; border-bottom: 3px solid transparent; height: 50px; display: flex; align-items: center; white-space: nowrap; }}
+            .nav-link:hover {{ color: white; background-color: rgba(255,255,255,0.1); border-bottom-color: rgba(255,255,255,0.3); }}
+            .nav-link.active {{ color: white; background-color: rgba(255,255,255,0.15); border-bottom-color: white; }}
+            .nav-right {{ display: flex; gap: 8px; align-items: center; margin-left: auto; color: white; font-size: 0.85em; white-space: nowrap; }}
+            .nav-right a.nav-link {{ padding: 8px 12px; height: auto; border-bottom: none; }}
+            .container-main {{ max-width: 1400px; margin: 0 auto; padding: 0 30px; }}
+            h1 {{ font-size: 2em; color: #2c3e50; margin-bottom: 30px; font-weight: 700; }}
+            .card {{ box-shadow: 0 1px 3px rgba(0,0,0,0.05); }}
+            .table-responsive {{ background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: hidden; }}
+            table {{ margin: 0; width: 100%; }}
+            table thead {{ background-color: #f8f9fa; border-bottom: 2px solid #e9ecef; }}
+            table th {{ padding: 15px; font-weight: 600; color: #2c3e50; text-align: left; }}
+            table td {{ padding: 15px; border-bottom: 1px solid #e9ecef; }}
+            table tbody tr:hover {{ background-color: #f8f9fa; }}
+            .btn-primary {{ background: #667eea; border: none; color: white; }}
+            .btn-primary:hover {{ background: #5568d3; }}
         </style>
     </head>
     <body>
-        <nav class="navbar navbar-dark bg-dark">
-            <a class="navbar-brand" href="/admin">🎓 DE Tutor Admin</a>
+        <nav class="navbar">
+            <div class="navbar-container">
+                <a class="navbar-brand" href="/admin">🎓 Admin</a>
+                <ul class="nav-menu">
+                    <li class="nav-item"><a class="nav-link" href="/admin">Dashboard</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/users">Users</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="/admin/generate">Generate</a></li>
+                </ul>
+                <div class="nav-right">
+                    <span title="{current_user.email}">{current_user.email.split("@")[0]}</span>
+                    <a class="nav-link" href="/admin/logout">Logout</a>
+                </div>
+            </div>
         </nav>
-        <div class="container">
+        
+        <div class="container-main">
             <h1>Generate Sentences & Audio</h1>
             
             <!-- Stage 1: Text Generation -->
