@@ -627,9 +627,9 @@
         <div class="fc-container">
         <!-- Top Controls -->
         <div class="fc-top-controls">
-            <div class="fc-mode-toggle">
-                <button class="fc-mode-opt {fcMode === 'study' ? 'active' : ''}" onclick={() => fcSetMode('study')}>{ui.fc_study_mode}</button>
-                <button class="fc-mode-opt {fcMode === 'review' ? 'active' : ''}" onclick={() => fcSetMode('review')}>{ui.fc_review_mode}</button>
+            <div class="mode-switch">
+                <button class="mode-btn" class:active={fcMode === 'study'} onclick={() => fcSetMode('study')}>{ui.fc_study_mode}</button>
+                <button class="mode-btn" class:active={fcMode === 'review'} onclick={() => fcSetMode('review')}>{ui.fc_review_mode}</button>
             </div>
         </div>
 
@@ -1102,6 +1102,11 @@
 
     .fc-face.fc-front { transform: rotateY(0deg); z-index: 2; }
     .fc-face.fc-back { transform: rotateY(180deg); z-index: 1; }
+
+    .fc-close-btn {
+        position: absolute; top: 24px; right: 24px; z-index: 3;
+        background: none; border: none; color: var(--on-surface); cursor: pointer; padding: 8px;
+    }
 
     .pagination { display: flex; justify-content: center; gap: 10px; margin-top: 20px; align-items: center; }
     .page-btn { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; }
