@@ -310,7 +310,7 @@
       if (!sentence) return;
       if (!confirm(ui.report_sentence + "?")) return;
       try {
-          await api.post('/api/report_sentence', { id: sentence.id });
+          await api.post('/report_sentence', { id: sentence.id });
           addToast(ui.sentence_reported || "Reported", "success");
           loadNext();
       } catch(e) { console.error(e); }

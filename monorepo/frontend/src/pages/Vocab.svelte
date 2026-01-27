@@ -152,7 +152,7 @@
       isFlipped = false;
 
       // 1. Play Front Audio
-      if (card.audio_de_url) await playAudioPromise(card.audio_de_url);
+      if (fcAudioEnabled && card.audio_de_url) await playAudioPromise(card.audio_de_url);
       else await new Promise(r => setTimeout(r, 1000));
       
       if (!fcIsPlaying) return;
@@ -165,7 +165,7 @@
       isFlipped = true;
 
       // 4. Play Back Audio (Translation)
-      if (card.audio_trans_urls && card.audio_trans_urls.length > 0) {
+      if (fcAudioEnabled && card.audio_trans_urls && card.audio_trans_urls.length > 0) {
           for (const url of card.audio_trans_urls) {
               if (!fcIsPlaying) break;
               await playAudioPromise(url);
@@ -343,7 +343,7 @@
       
       // 2. Set up delayed delete
       const deleteTimeout = setTimeout(() => {
-          const url = isSentence ? '/api/remove_fav_sentence' : '/api/remove_word';
+          const url = isSentence ? '/remove_fav_sentence' : '/remove_word';
           const payload = { id };
           if (!isSentence) payload.from_vocab = true;
           
