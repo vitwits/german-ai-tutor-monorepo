@@ -8,48 +8,48 @@
   import { confirmModal } from "../stores/confirm";
   
   // Data State
-  let items = [];
-  let loading = false;
-  let total = 0;
-  let page = 1;
-  let totalPages = 1;
+  let items = $state([]);
+  let loading = $state(false);
+  let total = $state(0);
+  let page = $state(1);
+  let totalPages = $state(1);
 
   // Filter State
-  let activeTab = 'words'; // 'words' | 'sentences'
-  let viewMode = 'list';   // 'list' | 'grid'
-  let selectedLevels = [];
+  let activeTab = $state('words'); // 'words' | 'sentences'
+  let viewMode = $state('list');   // 'list' | 'grid'
+  let selectedLevels = $state([]);
   const allLevels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
-  let expandedContexts = new Set(); // For list view context toggle
+  let expandedContexts = $state(new Set()); // For list view context toggle
   
   // Flashcard Session State
-  let showSession = false;
-  let sessionCards = [];
-  let currentCardIdx = 0;
-  let isFlipped = false;
-  let fcMode = 'study'; // 'study' | 'review'
-  let fcIsPlaying = false;
-  let fcReviewStarted = false;
-  let fcStats = { easy: 0, medium: 0, hard: 0 };
+  let showSession = $state(false);
+  let sessionCards = $state([]);
+  let currentCardIdx = $state(0);
+  let isFlipped = $state(false);
+  let fcMode = $state('study'); // 'study' | 'review'
+  let fcIsPlaying = $state(false);
+  let fcReviewStarted = $state(false);
+  let fcStats = $state({ easy: 0, medium: 0, hard: 0 });
   let fcLoopTimeout = null;
   let currentAudio = null;
-  let fcIsRandom = false;
+  let fcIsRandom = $state(false);
 
   // Player State (Sentences)
-  let showPlayer = false;
-  let playerPlaylist = [];
-  let playerIndex = 0;
-  let playerIsPlaying = false;
-  let playerIsLoop = false;
-  let playerIsShuffle = false;
+  let showPlayer = $state(false);
+  let playerPlaylist = $state([]);
+  let playerIndex = $state(0);
+  let playerIsPlaying = $state(false);
+  let playerIsLoop = $state(false);
+  let playerIsShuffle = $state(false);
   let playerAudio = null;
-  let playerCanvas;
+  let playerCanvas = $state();
   let playerAnimId;
   
   // Editing State
-  let editingId = null;
-  let editValue = "";
+  let editingId = $state(null);
+  let editValue = $state("");
 
-  $: ui = getUI($user?.interface_language || 'ukr');
+  let ui = $derived(getUI($user?.interface_language || 'ukr'));
 
   async function loadData() {
     loading = true;
@@ -304,7 +304,6 @@
           expandedContexts.clear();
           expandedContexts.add(id);
       }
-      expandedContexts = expandedContexts;
   }
 
   async function deleteItem(id, isSentence = false) {
@@ -358,7 +357,6 @@
       if (editingId) cancelEdit();
       if (expandedContexts.size > 0) {
           expandedContexts.clear();
-          expandedContexts = expandedContexts;
       }
   }
 
@@ -366,7 +364,6 @@
       if (editingId) cancelEdit();
       if (expandedContexts.size > 0) {
           expandedContexts.clear();
-          expandedContexts = expandedContexts;
       }
   }
 
@@ -574,8 +571,8 @@
 <div class="vocab-header-controls">
     <!-- Tabs -->
     <div class="mode-switch">
-        <button class="mode-btn {activeTab === 'words' ? 'active' : ''}" onclick={() => switchTab('words')}>{ui.vocab_words}</button>
-        <button class="mode-btn {activeTab === 'sentences' ? 'active' : ''}" onclick={() => switchTab('sentences')}>{ui.vocab_sentences}</button>
+        <button class="mode-btn" class:active={activeTab === 'words'} onclick={() => switchTab('words')}>{ui.vocab_words}</button>
+        <button class="mode-btn" class:active={activeTab === 'sentences'} onclick={() => switchTab('sentences')}>{ui.vocab_sentences}</button>
     </div>
 
     <div class="filters-row">
@@ -594,7 +591,7 @@
         <!-- Level Filters -->
         <div class="level-filters">
             {#each allLevels as lvl}
-                <button class="lvl-filter {selectedLevels.includes(lvl) ? 'active' : ''}" 
+                <button class="lvl-filter" class:active={selectedLevels.includes(lvl)} 
                         onclick={() => toggleLevel(lvl)}
                         data-lvl={lvl}>
                     {lvl}
@@ -605,10 +602,10 @@
         <!-- View Mode (Words only) -->
         {#if activeTab === 'words'}
             <div class="view-toggles">
-                <button class="view-btn {viewMode === 'list' ? 'active' : ''}" onclick={() => viewMode = 'list'}>
+                <button class="view-btn" class:active={viewMode === 'list'} onclick={() => viewMode = 'list'}>
                     <span class="material-symbols-outlined">view_list</span>
                 </button>
-                <button class="view-btn {viewMode === 'grid' ? 'active' : ''}" onclick={() => viewMode = 'grid'}>
+                <button class="view-btn" class:active={viewMode === 'grid'} onclick={() => viewMode = 'grid'}>
                     <span class="material-symbols-outlined">grid_view</span>
                 </button>
             </div>
@@ -627,9 +624,9 @@
         <div class="fc-container">
         <!-- Top Controls -->
         <div class="fc-top-controls">
-            <div class="mode-switch">
-                <button class="mode-btn" class:active={fcMode === 'study'} onclick={() => fcSetMode('study')}>{ui.fc_study_mode}</button>
-                <button class="mode-btn" class:active={fcMode === 'review'} onclick={() => fcSetMode('review')}>{ui.fc_review_mode}</button>
+            <div class="fc-mode-toggle">
+                <button class="fc-mode-opt" class:active={fcMode === 'study'} onclick={() => fcSetMode('study')}>{ui.fc_study_mode}</button>
+                <button class="fc-mode-opt" class:active={fcMode === 'review'} onclick={() => fcSetMode('review')}>{ui.fc_review_mode}</button>
             </div>
         </div>
 
@@ -660,7 +657,7 @@
             {/if}
 
             <!-- Додаємо умову відображення картки, щоб вона не перекривала кнопку старту в режимі Review -->
-            <div class="fc-card {isFlipped ? 'flipped' : ''}" style="display: {fcMode === 'review' && !fcReviewStarted ? 'none' : 'block'}">
+            <div class="fc-card" class:flipped={isFlipped} style="display: {fcMode === 'review' && !fcReviewStarted ? 'none' : 'block'}">
                 <div class="fc-face fc-front">
                     <span class="level-badge lvl-{sessionCards[currentCardIdx].level?.toLowerCase()}" style="position:absolute; top:20px; left:20px; z-index: 5;">
                         {sessionCards[currentCardIdx].level || '?'}
@@ -695,7 +692,7 @@
                     <button class="fc-play-btn" onclick={toggleFcPlay}>
                         <span class="material-symbols-outlined">{fcIsPlaying ? 'pause' : 'play_arrow'}</span>
                     </button>
-                    <button class="fc-icon-btn {fcIsRandom ? 'active' : ''}" onclick={toggleShuffle}>
+                    <button class="fc-icon-btn" class:active={fcIsRandom} onclick={toggleShuffle}>
                         <span class="material-symbols-outlined">shuffle</span>
                     </button>
                 </div>
@@ -705,7 +702,7 @@
                     <button class="fc-icon-btn active" onclick={(e) => { e.stopPropagation(); playAudio(sessionCards[currentCardIdx].audio_de_url); }}>
                         <span class="material-symbols-outlined">volume_up</span>
                     </button>
-                    <button class="fc-icon-btn {fcIsRandom ? 'active' : ''}" onclick={toggleShuffle}>
+                    <button class="fc-icon-btn" class:active={fcIsRandom} onclick={toggleShuffle}>
                         <span class="material-symbols-outlined">shuffle</span>
                     </button>
                 </div>
@@ -748,7 +745,7 @@
             <div class="player-sent-trans">{playerPlaylist[playerIndex]?.display_trans}</div>
             
             <div class="player-controls">
-                <button class="ctrl-btn ctrl-btn-sm {playerIsLoop ? 'active' : ''}" onclick={() => playerIsLoop = !playerIsLoop} title="Loop">
+                <button class="ctrl-btn ctrl-btn-sm" class:active={playerIsLoop} onclick={() => playerIsLoop = !playerIsLoop} title="Loop">
                     <span class="material-symbols-outlined">repeat</span>
                 </button>
                 <button class="ctrl-btn ctrl-btn-md" onclick={playPrev}>
@@ -760,7 +757,7 @@
                 <button class="ctrl-btn ctrl-btn-md" onclick={() => playNext(false)}>
                     <span class="material-symbols-outlined" style="font-size: 36px;">skip_next</span>
                 </button>
-                <button class="ctrl-btn ctrl-btn-sm {playerIsShuffle ? 'active' : ''}" onclick={() => playerIsShuffle = !playerIsShuffle} title="Mix">
+                <button class="ctrl-btn ctrl-btn-sm" class:active={playerIsShuffle} onclick={() => playerIsShuffle = !playerIsShuffle} title="Mix">
                     <span class="material-symbols-outlined">shuffle</span>
                 </button>
             </div>
@@ -772,7 +769,7 @@
     {#if activeTab === 'words'}
         <div class="vocab-wrapper {viewMode}">
             {#each items as w (w.id)}
-                <div class="vocab-item lvl-strip-{w.level?.toLowerCase()} {viewMode === 'grid' ? 'grid-card' : ''}"
+                <div class="vocab-item lvl-strip-{w.level?.toLowerCase()}" class:grid-card={viewMode === 'grid'}
                      role="button"
                      tabindex="0"
                      onkeydown={(e) => { if((e.key === 'Enter' || e.key === ' ') && viewMode==='grid' && !e.target.closest('button')) e.currentTarget.classList.toggle('flipped'); }}
@@ -796,7 +793,7 @@
                                         <button class="btn-text list-audio-btn" onclick={(e) => { e.stopPropagation(); playVocabPair(w.display, w.display_trans); }}>
                                             <span class="material-symbols-outlined">volume_up</span>
                                         </button>
-                                        <div class="vocab-text-area {editingId === w.id ? 'editing' : ''}">
+                                        <div class="vocab-text-area" class:editing={editingId === w.id}>
                                             <div class="word-text" 
                                                  role="button" 
                                                  tabindex="0" 
@@ -1044,17 +1041,17 @@
     }
     .session-header { padding: 20px; display: flex; justify-content: space-between; align-items: center; }
     
-    .flashcard-container {
-        flex: 1; perspective: 1000px; display: flex; align-items: center; justify-content: center; padding: 20px; position: relative;
+    .fc-card-area {
+        flex: 1; perspective: 1000px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; position: relative;
     }
-    .flashcard {
-        width: 100%; max-width: 400px; height: 340px; position: relative;
+    .fc-card {
+        width: 100%; max-width: 520px; height: 340px; position: relative;
         transform-style: preserve-3d; transition: transform 0.6s;
         cursor: pointer;
     }
-    .flashcard.flipped { transform: rotateY(180deg); }
+    .fc-card.flipped { transform: rotateY(180deg); }
 
-    .front, .back {
+    .fc-face {
         position: absolute; top: 0; left: 0; width: 100%; height: 100%;
         backface-visibility: hidden; -webkit-backface-visibility: hidden;
         background: var(--surface); border-radius: 20px;
@@ -1062,12 +1059,13 @@
         display: flex; flex-direction: column; align-items: center; justify-content: center;
         padding: 20px; text-align: center;
     }
-    .back { transform: rotateY(180deg); }
+    .fc-front { z-index: 2; transform: rotateY(0deg); }
+    .fc-back { transform: rotateY(180deg); }
 
-    .word { font-size: 2.5rem; font-weight: 700; margin-bottom: 10px; color: var(--on-surface); }
-    .hint { opacity: 0.5; font-size: 0.9rem; margin-top: 20px; }
-    .trans { font-size: 2rem; color: var(--primary); margin-bottom: 20px; }
-    .ctx { font-style: italic; opacity: 0.8; }
+    .fc-word { font-size: 2.5rem; font-weight: 700; margin-bottom: 10px; color: var(--on-surface); }
+    .fc-hint { opacity: 0.5; font-size: 0.9rem; margin-top: 20px; }
+    .fc-trans { font-size: 2rem; color: var(--primary); margin-bottom: 20px; }
+    .fc-ctx { font-style: italic; opacity: 0.8; }
 
     .controls { padding: 40px; display: flex; justify-content: center; gap: 20px; }
     .study-controls { display: flex; flex-direction: column; align-items: center; gap: 10px; }
@@ -1095,17 +1093,51 @@
     }
     .fc-start-overlay { position: absolute; z-index: 10; }
 
+    .fc-close-btn {
+        position: absolute; top: 24px; right: 24px; z-index: 2005;
+        background: none; border: none; color: var(--on-surface); cursor: pointer;
+        padding: 8px;
+    }
+
+    /* Top Toggle */
+    .fc-top-controls { padding: 20px; display: flex; justify-content: center; }
+    .fc-mode-toggle { background: rgba(0,0,0,0.05); border-radius: 20px; padding: 4px; display: flex; }
+    .fc-mode-opt {
+        padding: 8px 20px; border: none; background: transparent; border-radius: 16px;
+        font-weight: 500; cursor: pointer; color: var(--on-surface); opacity: 0.6;
+    }
+    .fc-mode-opt.active {
+        background: var(--surface); box-shadow: 0 2px 8px rgba(0,0,0,0.1); opacity: 1; color: var(--primary);
+    }
+
+    /* Progress Bar */
+    .fc-progress-wrapper { padding: 0 24px; margin-bottom: 10px; text-align: center; }
+    .fc-progress-track {
+        height: 12px; background: rgba(0,0,0,0.1); border-radius: 6px; overflow: hidden; margin-bottom: 4px;
+    }
+    .fc-progress-fill { height: 100%; background: var(--primary); width: 0%; transition: width 0.3s; }
+    .fc-progress-text { font-size: 0.8rem; opacity: 0.6; }
+
+    /* Bottom Controls */
+    .fc-bottom-controls {
+        padding: 24px; min-height: 160px; display: flex; align-items: center; justify-content: center;
+    }
+    .fc-ctrl-row { display: flex; align-items: center; gap: 24px; width: 100%; justify-content: center; }
+    
+    .fc-icon-btn {
+        width: 48px; height: 48px; border-radius: 50%; border: 1px solid var(--border);
+        background: var(--surface); color: var(--on-surface); cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        transition: all 0.2s;
+    }
+    .fc-icon-btn:active { transform: scale(0.95); }
+    .fc-icon-btn.active { color: var(--primary); border-color: var(--primary); background: rgba(25, 118, 210, 0.05); }
+
+    .fc-study-hint-text { text-align: center; margin-top: 10px; font-weight: 500; opacity: 0.7; font-size: 0.9rem; color: var(--on-surface); }
+
     .btn-audio {
         background: none; border: 1px solid var(--border); border-radius: 50%; width: 40px; height: 40px;
         color: var(--primary);
-    }
-
-    .fc-face.fc-front { transform: rotateY(0deg); z-index: 2; }
-    .fc-face.fc-back { transform: rotateY(180deg); z-index: 1; }
-
-    .fc-close-btn {
-        position: absolute; top: 24px; right: 24px; z-index: 3;
-        background: none; border: none; color: var(--on-surface); cursor: pointer; padding: 8px;
     }
 
     .pagination { display: flex; justify-content: center; gap: 10px; margin-top: 20px; align-items: center; }
