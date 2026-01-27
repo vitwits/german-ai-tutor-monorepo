@@ -55,6 +55,10 @@ export const fetchUser = async () => {
         const res = await api.get('/auth/me');
         user.set(res.data);
     } catch (e) {
-        logout();
+        // Розлогінюємо тільки якщо токен невалідний (401).
+        // Ігноруємо помилки мережі (наприклад, при перезавантаженні сервера).
+        if (e.response && e.response.status === 401) {
+            logout();
+        }
     }
 };

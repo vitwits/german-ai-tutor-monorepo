@@ -691,13 +691,13 @@
                     {/if}
                 </div>
             </div>
-
-            {#if fcMode === 'study'}
-            <div class="fc-study-hint-text">
-                {ui.fc_study_hint}
-            </div>
-            {/if}
         </div>
+
+        {#if fcMode === 'study'}
+        <div class="fc-study-hint-text">
+            {ui.fc_study_hint}
+        </div>
+        {/if}
 
         <div class="fc-bottom-controls">
             {#if fcMode === 'study'}
@@ -706,7 +706,7 @@
                         <span class="material-symbols-outlined">volume_up</span>
                     </button>
                     <button class="fc-play-btn" onclick={toggleFcPlay}>
-                        <span class="material-symbols-outlined">{fcIsPlaying ? 'pause' : 'play_arrow'}</span>
+                        <span class="material-symbols-outlined" style="font-size: 50px">{fcIsPlaying ? 'pause' : 'play_arrow'}</span>
                     </button>
                     <button class="fc-icon-btn" class:active={fcIsRandom} onclick={toggleShuffle}>
                         <span class="material-symbols-outlined">shuffle</span>
@@ -1088,7 +1088,7 @@
     .easy { background: #4CAF50; }
 
     .fc-play-btn {
-        width: 72px; height: 72px; border-radius: 50%; border: none;
+        width: 82px; height: 82px; border-radius: 50%; border: none;
         background: var(--primary); color: white; cursor: pointer;
         display: flex; align-items: center; justify-content: center;
         box-shadow: 0 4px 12px rgba(25, 118, 210, 0.3);
@@ -1107,7 +1107,7 @@
     }
 
     /* Top Toggle */
-    .fc-top-controls { padding: 20px; display: flex; justify-content: center; }
+    .fc-top-controls { padding: 30px; display: flex; justify-content: center; }
     .fc-mode-toggle { background: rgba(0,0,0,0.05); border-radius: 20px; padding: 4px; display: flex; }
     .fc-mode-opt {
         padding: 8px 20px; border: none; background: transparent; border-radius: 16px;
@@ -1190,7 +1190,7 @@
 
     .fc-study-hint-text { 
         text-align: center; 
-        margin-top: 10px; 
+        margin-top: 40px; 
         font-weight: 500; 
         opacity: 0.7; 
         font-size: 0.9rem; 
