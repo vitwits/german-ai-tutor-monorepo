@@ -24,6 +24,7 @@
   // Flashcard Session State
   let showSession = $state(false);
   let sessionCards = $state([]);
+  let originalSessionCards = $state([]);
   let currentCardIdx = $state(0);
   let isFlipped = $state(false);
   let fcMode = $state('study'); // 'study' | 'review'
@@ -33,6 +34,7 @@
   let fcLoopTimeout = null;
   let currentAudio = null;
   let fcIsRandom = $state(false);
+  let fcAudioEnabled = $state(true);
 
   // Player State (Sentences)
   let showPlayer = $state(false);
@@ -106,6 +108,7 @@
         
         const res = await api.get(`/vocab/session?limit=${limit}&levels=${levels}`);
         sessionCards = res.data;
+        originalSessionCards = [...res.data];
         
         if (sessionCards.length > 0) {
             showSession = true;
@@ -123,6 +126,22 @@
     } finally {
         loading = false;
     }
+  }
+
+  function fcClose() {
+      showSession = false;
+      fcIsPlaying = false;
+      if (fcLoopTimeout) clearTimeout(fcLoopTimeout);
+      if (currentAudio) currentAudio.pause();
+  }
+
+  function fcSetMode(mode) {
+      fcMode = mode;
+      // Reset logic when switching modes if needed
+      if (mode === 'review') {
+          fcIsPlaying = false;
+          if (fcLoopTimeout) clearTimeout(fcLoopTimeout);
+      }
   }
 
   // Study Loop (Auto-play)
@@ -200,6 +219,10 @@
       isFlipped = false;
   }
 
+  function toggleFcAudio() {
+      fcAudioEnabled = !fcAudioEnabled;
+  }
+
   function prevCard() {
       if (fcLoopTimeout) clearTimeout(fcLoopTimeout);
       if (currentAudio) currentAudio.pause();
@@ -231,15 +254,19 @@
 
   function toggleShuffle() {
       fcIsRandom = !fcIsRandom;
-      // Logic for shuffle would go here (shuffling sessionCards array)
-      // For now just toggling UI state
       if (fcIsRandom) {
-          sessionCards = [...sessionCards].sort(() => Math.random() - 0.5);
-          currentCardIdx = 0;
-          isFlipped = false;
+          let array = [...sessionCards];
+          for (let i = array.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [array[i], array[j]] = [array[j], array[i]];
+          }
+          sessionCards = array;
       } else {
-          // Ideally restore original order, but for simplicity just restart
+          sessionCards = [...originalSessionCards];
       }
+      currentCardIdx = 0;
+      isFlipped = false;
+      fcReviewStarted = false;
   }
 
   // --- AUDIO & UTILS ---
@@ -504,7 +531,7 @@
       if (!showSession) return;
       
       if (e.key === 'Escape') {
-          showSession = false;
+          fcClose();
           return;
       }
 
@@ -567,16 +594,13 @@
   }
 </script>
 
-<!-- HEADER & CONTROLS -->
 <div class="vocab-header-controls">
-    <!-- Tabs -->
     <div class="mode-switch">
         <button class="mode-btn" class:active={activeTab === 'words'} onclick={() => switchTab('words')}>{ui.vocab_words}</button>
         <button class="mode-btn" class:active={activeTab === 'sentences'} onclick={() => switchTab('sentences')}>{ui.vocab_sentences}</button>
     </div>
 
     <div class="filters-row">
-        <!-- Practice Button -->
         {#if activeTab === 'words'}
             <button class="btn-contained practice-btn" onclick={startSession}>
                 <span class="material-symbols-outlined">school</span> {ui.fc_start_review}
@@ -588,7 +612,6 @@
             </button>
         {/if}
 
-        <!-- Level Filters -->
         <div class="level-filters">
             {#each allLevels as lvl}
                 <button class="lvl-filter" class:active={selectedLevels.includes(lvl)} 
@@ -599,7 +622,6 @@
             {/each}
         </div>
 
-        <!-- View Mode (Words only) -->
         {#if activeTab === 'words'}
             <div class="view-toggles">
                 <button class="view-btn" class:active={viewMode === 'list'} onclick={() => viewMode = 'list'}>
@@ -614,7 +636,6 @@
 </div>
 
 {#if showSession}
-    <!-- FLASHCARD OVERLAY -->
     <div class="session-overlay" role="dialog" aria-modal="true">
         <button class="fc-close-btn" onclick={fcClose} aria-label="Close">
             <span class="material-symbols-outlined" style="font-size: 32px;">close</span>
@@ -622,7 +643,6 @@
         </button>
 
         <div class="fc-container">
-        <!-- Top Controls -->
         <div class="fc-top-controls">
             <div class="fc-mode-toggle">
                 <button class="fc-mode-opt" class:active={fcMode === 'study'} onclick={() => fcSetMode('study')}>{ui.fc_study_mode}</button>
@@ -630,7 +650,6 @@
             </div>
         </div>
 
-        <!-- Progress Bar (Review Only) -->
         {#if fcMode === 'review'}
         <div class="fc-progress-wrapper">
             <div class="fc-progress-track">
@@ -640,7 +659,6 @@
         </div>
         {/if}
 
-        <!-- Card Area -->
         <div class="fc-card-area" 
              onclick={flipCard} 
              onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && flipCard()}
@@ -656,7 +674,6 @@
                 </div>
             {/if}
 
-            <!-- Додаємо умову відображення картки, щоб вона не перекривала кнопку старту в режимі Review -->
             <div class="fc-card" class:flipped={isFlipped} style="display: {fcMode === 'review' && !fcReviewStarted ? 'none' : 'block'}">
                 <div class="fc-face fc-front">
                     <span class="level-badge lvl-{sessionCards[currentCardIdx].level?.toLowerCase()}" style="position:absolute; top:20px; left:20px; z-index: 5;">
@@ -682,11 +699,10 @@
             {/if}
         </div>
 
-        <!-- Bottom Controls -->
         <div class="fc-bottom-controls">
             {#if fcMode === 'study'}
                 <div class="fc-ctrl-row">
-                    <button class="fc-icon-btn active" onclick={(e) => { e.stopPropagation(); playAudio(sessionCards[currentCardIdx].audio_de_url); }}>
+                    <button class="fc-icon-btn" class:active={fcAudioEnabled} onclick={(e) => { e.stopPropagation(); toggleFcAudio(); }}>
                         <span class="material-symbols-outlined">volume_up</span>
                     </button>
                     <button class="fc-play-btn" onclick={toggleFcPlay}>
@@ -697,9 +713,8 @@
                     </button>
                 </div>
             {:else if !fcReviewStarted}
-                <!-- Review Pre-start -->
                 <div class="fc-ctrl-row">
-                    <button class="fc-icon-btn active" onclick={(e) => { e.stopPropagation(); playAudio(sessionCards[currentCardIdx].audio_de_url); }}>
+                    <button class="fc-icon-btn" class:active={fcAudioEnabled} onclick={(e) => { e.stopPropagation(); toggleFcAudio(); }}>
                         <span class="material-symbols-outlined">volume_up</span>
                     </button>
                     <button class="fc-icon-btn" class:active={fcIsRandom} onclick={toggleShuffle}>
@@ -731,7 +746,6 @@
         </div>
     </div>
 {:else}
-    <!-- PLAYER OVERLAY -->
     {#if showPlayer}
     <div class="player-overlay">
         <canvas bind:this={playerCanvas} class="player-canvas"></canvas>
@@ -765,7 +779,6 @@
     </div>
     {/if}
 
-    <!-- MAIN CONTENT -->
     {#if activeTab === 'words'}
         <div class="vocab-wrapper {viewMode}">
             {#each items as w (w.id)}
@@ -781,7 +794,6 @@
                      onmouseenter={handleCardEnter}>
                     
                     <div class="vocab-card-inner">
-                        <!-- FRONT / MAIN -->
                         <div class="vocab-face vocab-front">
                             {#if viewMode === 'grid'}
                                 <span class="level-badge lvl-{w.level?.toLowerCase()}" style="position:absolute; top:12px; left:12px;">{w.level}</span>
@@ -812,7 +824,6 @@
                                     {#if viewMode === 'list'}
                                         <div class="list-tools" style="display:flex; align-items:center; gap: 8px;">
                                             {#if editingId === w.id}
-                                                <!-- Edit Mode -->
                                                 <button class="btn-text" style="color:var(--primary); padding:0; min-width:32px;" onclick={(e) => { e.stopPropagation(); saveEdit(w.id); }}>
                                                     <span class="material-symbols-outlined">check</span>
                                                 </button>
@@ -820,7 +831,6 @@
                                                     <span class="material-symbols-outlined">close</span>
                                                 </button>
                                             {:else}
-                                                <!-- Normal Mode -->
                                                 <button class="btn-text" style="color:var(--primary); opacity:0.7; padding:0; min-width:32px;" onclick={(e) => { e.stopPropagation(); startEdit(w.id, w.display_trans); }}>
                                                     <span class="material-symbols-outlined">edit</span>
                                                 </button>
@@ -866,7 +876,6 @@
                             {/if}
                         </div>
 
-                        <!-- BACK (Grid Only) -->
                         {#if viewMode === 'grid'}
                             <div class="vocab-face vocab-back">
                                 <div class="vocab-back-scroll">
@@ -884,7 +893,6 @@
             {/each}
         </div>
     {:else}
-        <!-- SENTENCES TAB -->
         <div class="sentences-list">
             {#each items as s (s.id)}
                 <div class="vocab-item">
@@ -909,7 +917,6 @@
         </div>
     {/if}
 
-    <!-- Pagination -->
     {#if totalPages > 1}
         <div class="pagination">
             <button class="page-btn" disabled={page===1} onclick={() => changePage(page-1)}>&lt;</button>
@@ -1179,5 +1186,14 @@
     .close-player-btn {
         position: absolute; top: 24px; right: 24px; z-index: 3;
         background: none; border: none; color: var(--on-surface); cursor: pointer; padding: 8px;
+    }
+
+    .fc-study-hint-text { 
+        text-align: center; 
+        margin-top: 10px; 
+        font-weight: 500; 
+        opacity: 0.7; 
+        font-size: 0.9rem; 
+        color: var(--on-surface); 
     }
 </style>
