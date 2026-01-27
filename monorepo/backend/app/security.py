@@ -14,10 +14,26 @@ SECRET_KEY = os.getenv("SECRET_KEY", "dev-key-change-this-in-prod")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 днів
 
+# For new passwords, use bcrypt
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=12)
 
 def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
+    """Verify password - supports both werkzeug.security (scrypt) and bcrypt formats"""
+    if not hashed_password:
+        return False
+    
+    # First try passlib (for bcrypt hashes)
+    try:
+        return pwd_context.verify(plain_password, hashed_password)
+    except Exception:
+        pass
+    
+    # Fall back to werkzeug for scrypt hashes (old format)
+    try:
+        from werkzeug.security import check_password_hash
+        return check_password_hash(hashed_password, plain_password)
+    except Exception:
+        return False
 
 def get_password_hash(password):
     return pwd_context.hash(password)

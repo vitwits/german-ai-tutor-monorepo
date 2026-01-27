@@ -74,9 +74,9 @@ class Sentence(Base):
     text_de: Mapped[Optional[str]] = mapped_column(String)
     text_en: Mapped[Optional[str]] = mapped_column(String)
     text_uk: Mapped[Optional[str]] = mapped_column(String)
-    audio_de: Mapped[Optional[str]] = mapped_column(String)
-    audio_en: Mapped[Optional[str]] = mapped_column(String)
-    audio_uk: Mapped[Optional[str]] = mapped_column(String)
+    audio_de: Mapped[Optional[str]] = mapped_column(String)  # Шлях на аудіо (relative), напр. "a1/0164_de.ogg"
+    audio_en: Mapped[Optional[str]] = mapped_column(String)  # Шлях на аудіо (relative)
+    audio_uk: Mapped[Optional[str]] = mapped_column(String)  # Шлях на аудіо (relative)
     level: Mapped[Optional[str]] = mapped_column(String)
     topic: Mapped[Optional[str]] = mapped_column(String)
     reported: Mapped[int] = mapped_column(Integer, default=0)
