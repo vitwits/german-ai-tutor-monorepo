@@ -35,6 +35,10 @@
   let currentAudio = null;
   let fcIsRandom = $state(false);
   let fcAudioEnabled = $state(true);
+  
+  // Session Completion Splash Screen
+  let showSessionSplash = $state(false);
+  let sessionScore = $state(0);
 
   // Player State (Sentences)
   let showPlayer = $state(false);
@@ -156,6 +160,32 @@
       }
   }
 
+  function closeSplash() {
+      showSessionSplash = false;
+      loadData();
+  }
+
+  function continueSplash() {
+      showSessionSplash = false;
+      // Перезагружаємо сесію з тією ж конфігурацією
+      startSession();
+  }
+
+  function launchConfetti() {
+      const colors = ['#FFC107', '#2196F3', '#4CAF50', '#F44336', '#9C27B0'];
+      const container = document.getElementById('vocab-splash');
+      if (!container) return;
+      
+      for (let i = 0; i < 50; i++) {
+          const el = document.createElement('div');
+          el.classList.add('vocab-confetti');
+          el.style.left = Math.random() * 100 + '%';
+          el.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+          el.style.animation = `fall ${Math.random() * 3 + 2}s linear forwards`;
+          container.appendChild(el);
+      }
+  }
+
   // Study Loop (Auto-play)
   async function runStudyLoop() {
       if (!fcIsPlaying || !showSession || fcMode !== 'study') return;
@@ -270,10 +300,20 @@
             currentCardIdx++;
             playAudio(sessionCards[currentCardIdx].audio_de_url);
         } else {
-            // Кінець сесії Review
-            alert(ui.fc_session_complete);
+            // Кінець сесії Review - показуємо splash screen
+            showSessionSplash = true;
+            // Розраховуємо score тільки для Review режиму
+            if (fcMode === 'review') {
+                const total = fcStats.easy + fcStats.medium + fcStats.hard;
+                const score = total > 0 ? Math.round((fcStats.easy / total) * 100) : 0;
+                sessionScore = score;
+                
+                // Запускаємо конфеті якщо perfect (100% easy або всі карти rated)
+                if (score === 100) {
+                    setTimeout(launchConfetti, 300);
+                }
+            }
             showSession = false;
-            loadData();
         }
     } catch (e) {
         console.error(e);
@@ -790,6 +830,29 @@
         </div>
     </div>
 {:else}
+    {#if showSessionSplash}
+    <div id="vocab-splash">
+        <h2 style="margin-bottom: 30px;">{ui.fc_session_complete}</h2>
+        
+        {#if fcMode === 'review'}
+            <div class="score-circle" style="width: 160px; height: 160px; margin-bottom: 20px;">
+                <svg viewBox="0 0 160 160">
+                    <circle class="score-circle-bg" cx="80" cy="80" r="69"></circle>
+                    <circle class="score-circle-fg" cx="80" cy="80" r="69" style="stroke-dashoffset: {434 - (sessionScore / 100) * 434}; stroke: {sessionScore >= 80 ? '#4CAF50' : sessionScore >= 50 ? '#FFC107' : '#f44336'};"></circle>
+                </svg>
+                <span id="splash-score">{sessionScore.toFixed(0)}%</span>
+            </div>
+            <div style="font-size: 1.2rem; margin-bottom: 40px; opacity: 0.8;">{ui.your_score}</div>
+        {:else}
+            <div style="font-size: 1.2rem; margin-bottom: 40px; opacity: 0.8;">{ui.study_completed}</div>
+        {/if}
+        
+        <div style="display: flex; gap: 20px;">
+            <button class="btn-contained" style="background: white; color: black;" onclick={closeSplash}>{ui.done_btn}</button>
+            <button class="btn-contained" onclick={continueSplash}>{ui.continue_btn}</button>
+        </div>
+    </div>
+    {/if}
     {#if showPlayer}
     <div class="player-overlay">
         <canvas bind:this={playerCanvas} class="player-canvas"></canvas>
@@ -1352,5 +1415,36 @@
         opacity: 0.7; 
         font-size: 0.9rem; 
         color: var(--on-surface); 
+    }
+
+    /* Session Splash Screen */
+    #vocab-splash {
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(8px);
+        z-index: 10000; display: flex; flex-direction: column;
+        align-items: center; justify-content: center; color: white;
+    }
+
+    .score-circle {
+        display: flex; align-items: center; justify-content: center; position: relative;
+    }
+    .score-circle svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+    .score-circle circle { fill: none; stroke-width: 22; stroke-linecap: round; }
+    .score-circle-bg { stroke: #333; opacity: 0.1; }
+    .score-circle-fg {
+        stroke-dasharray: 434;
+        transition: stroke-dashoffset 1.5s ease-out;
+    }
+    #splash-score { font-size: 2.5rem; font-weight: 700; position: absolute; color: white; }
+
+    /* Confetti Animation */
+    :global(.vocab-confetti) { 
+        position: fixed; width: 10px; height: 10px; z-index: 10001; pointer-events: none; top: -20px;
+    }
+    @keyframes fall {
+        to {
+            transform: translateY(100vh) rotateZ(360deg);
+            opacity: 0;
+        }
     }
 </style>
