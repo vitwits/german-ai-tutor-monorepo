@@ -177,8 +177,15 @@ def get_tts_audio(text, lang='de'):
     voice = texttospeech.VoiceSelectionParams(language_code=language_code, name=name)
     audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.OGG_OPUS)
     
-    response = tts_client.synthesize_speech(input=s_input, voice=voice, audio_config=audio_config)
-    return response.audio_content
+    try:
+        response = tts_client.synthesize_speech(input=s_input, voice=voice, audio_config=audio_config)
+        if not response or not response.audio_content:
+            print(f"ERROR: TTS returned empty response for text='{text}', lang={lang}")
+            return None
+        return response.audio_content
+    except Exception as e:
+        print(f"ERROR in get_tts_audio: {str(e)} for text='{text}', lang={lang}")
+        return None
 
 def evaluate_audio_with_gemini(original_text, audio_bytes, interface_lang, mime_type='audio/webm'):
     """Оцінює аудіо-файл через Gemini. Відновлено гнучку логіку вчителя."""

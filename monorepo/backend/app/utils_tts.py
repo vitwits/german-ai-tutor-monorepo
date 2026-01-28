@@ -5,8 +5,7 @@ from . import services, billing
 from .models import TTSLog
 
 # Шлях до папки static/audio (відносно цього файлу)
-# Ми виходимо з monorepo/backend/app -> monorepo/backend -> monorepo -> ROOT -> static
-# Це дозволяє використовувати ВЖЕ ІСНУЮЧИЙ кеш зе старого проекту
+# Структура: monorepo/backend/app/utils_tts.py -> monorepo/backend/static/audio/cache
 STATIC_AUDIO_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../static/audio"))
 CACHE_DIR = os.path.join(STATIC_AUDIO_DIR, "cache")
 
@@ -103,4 +102,5 @@ async def get_cached_or_generate_tts(
             
         return web_path
     
+    print(f"ERROR: Failed to generate TTS audio for '{text}' in {lang}")
     return None

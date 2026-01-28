@@ -132,7 +132,10 @@ async def vocab_session(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    query = select(Vocabulary).where(Vocabulary.user_id == current_user.id)
+    query = select(Vocabulary).where(
+        Vocabulary.user_id == current_user.id,
+        Vocabulary.is_favorite == 1  # Показуємо тільки улюблені слова
+    )
     
     if levels:
         lvl_list = [l for l in levels.split(',') if l]
@@ -153,6 +156,7 @@ async def vocab_session(
         trans = w.ua if target_lang == 'uk' else w.en
         
         # Отримуємо аудіо (тільки з кешу, generate=False)
+        # ВАЖЛИВО: читаємо з w.display (що озвучувалося при генерації), а не w.origin!
         audio_de = await get_cached_or_generate_tts(w.display, 'de', current_user.id, db, generate=False)
         
         trans_urls = []
@@ -227,8 +231,8 @@ async def quick_translate(
     word_data['ua'] = remove_duplicate_parts(word_data.get('ua'))
     word_data['en'] = remove_duplicate_parts(word_data.get('en'))
 
-    # 3. Generate Audio (German) - весь текст без розбиття
-    if not await get_cached_or_generate_tts(req.text, 'de', current_user.id, db, log_stats=True):
+    # 3. Generate Audio (German) - озвучуємо оброблене слово від Gemini, а не оригінал!
+    if not await get_cached_or_generate_tts(word_data['display'], 'de', current_user.id, db, log_stats=True):
         return {"ok": False, "error_key": "audio_failed"}
 
     # 3.1 Generate Audio (Ukrainian) - розбиваємо на частини
