@@ -246,7 +246,7 @@
       }
   }
 
-  function flipCard() {
+  async function flipCard() {
     // Study режим: не дозволяємо flip (це auto-play)
     if (fcMode === 'study') return;
     
@@ -254,9 +254,13 @@
     if (!fcReviewStarted) return;
     isFlipped = !isFlipped;
     if (isFlipped) {
-        // Play translation audio
+        // Play translation audio (all parts sequentially)
         const card = sessionCards[currentCardIdx];
-        if (card.audio_trans_urls?.length) playAudio(card.audio_trans_urls[0]);
+        if (card.audio_trans_urls?.length) {
+            for (const url of card.audio_trans_urls) {
+                await playAudioPromise(url);
+            }
+        }
     }
   }
 
