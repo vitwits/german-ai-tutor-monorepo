@@ -10,8 +10,58 @@
   let currentPassword = "";
   let newPassword = "";
   let loading = false;
+  let interfaceFont = typeof window !== 'undefined' ? localStorage.getItem('interfaceFont') || 'Roboto (default)' : 'Roboto (default)';
+  let textFont = typeof window !== 'undefined' ? localStorage.getItem('textFont') || 'Merriweather' : 'Merriweather';
+
+  const fontOptions = [
+    'Roboto (default)',
+    'Inter',
+    'Montserrat',
+    'Roboto Flex',
+    'Merriweather',
+    'Fira Code',
+    'JetBrains Mono',
+    'Manrope',
+    'PT Sans',
+    'Exo 2',
+    'Lora',
+    'Intel One Mono',
+    'Cascadia Code',
+    'Ubuntu Mono'
+  ];
+  
+  // Map display names to actual font values
+  const fontMap = {
+    'Roboto (default)': 'Roboto',
+    'Inter': 'Inter',
+    'Montserrat': 'Montserrat',
+    'Roboto Flex': 'Roboto Flex',
+    'Merriweather': 'Merriweather',
+    'Fira Code': 'Fira Code',
+    'JetBrains Mono': 'JetBrains Mono',
+    'Manrope': 'Manrope',
+    'PT Sans': 'PT Sans',
+    'Exo 2': 'Exo 2',
+    'Lora': 'Lora',
+    'Intel One Mono': 'Intel One Mono',
+    'Cascadia Code': 'Cascadia Code',
+    'Ubuntu Mono': 'Ubuntu Mono'
+  };
 
   $: ui = getUI($user?.interface_language || 'ukr');
+
+  // Apply fonts to document when they change + save to localStorage
+  $: if (interfaceFont) {
+    const actualFont = fontMap[interfaceFont] || interfaceFont;
+    document.documentElement.style.setProperty('--font-interface', `'${actualFont}'`);
+    localStorage.setItem('interfaceFont', interfaceFont);
+  }
+  
+  $: if (textFont) {
+    const actualFont = fontMap[textFont] || textFont;
+    document.documentElement.style.setProperty('--font-text', `'${actualFont}'`);
+    localStorage.setItem('textFont', textFont);
+  }
 
   // Reactive statement to initialize and update local state when user store changes
   $: if ($user) {
@@ -92,6 +142,39 @@
       <option value={100}>100</option>
     </select>
   </div>
+
+  <hr style="margin: 30px 0; border: 0; border-top: 1px solid var(--border);">
+
+  <h3>Font Testing (Тестування шрифтів)</h3>
+  
+  <div class="form-group">
+    <label class="form-label" for="interface-font">Interface & Headings Font</label>
+    <select id="interface-font" class="form-control" bind:value={interfaceFont}>
+      {#each fontOptions as font}
+        <option value={font} selected={interfaceFont === font}>{font}</option>
+      {/each}
+    </select>
+    <div style="margin-top: 8px; padding: 8px; background: rgba(0,0,0,0.02); border-radius: 4px; font-family: {fontMap[interfaceFont] || interfaceFont};">
+      ✓ {interfaceFont} - The quick brown fox jumps
+    </div>
+  </div>
+
+  <div class="form-group">
+    <label class="form-label" for="text-font">Text & Words Font</label>
+    <select id="text-font" class="form-control" bind:value={textFont}>
+      {#each fontOptions as font}
+        <option value={font} selected={textFont === font}>{font}</option>
+      {/each}
+    </select>
+    <div style="margin-top: 8px; padding: 8px; background: rgba(0,0,0,0.02); border-radius: 4px; font-family: {fontMap[textFont] || textFont};">
+      ✓ {textFont} - Der schnelle Fuchs springt
+    </div>
+  </div>
+
+  <p style="font-size: 0.9rem; opacity: 0.7; margin-top: 16px;">
+    <strong>Примітка:</strong> Вибрані шрифти зберігаються у браузері і застосовуються на всіх сторінках.
+    Навіть якщо ви закриєте Settings або оновите сторінку, шрифти залишатимуться сохраненими.
+  </p>
 
   <hr style="margin: 30px 0; border: 0; border-top: 1px solid var(--border);">
   

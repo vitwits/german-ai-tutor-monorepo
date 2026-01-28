@@ -275,7 +275,25 @@
         }
     }
 
-    // --- WORD COUNT LIMIT ---
+    if (!textStr || textStr.length > 50) {
+        showPopup = false;
+        return;
+    }
+
+    const sentenceEl = event.target.closest('.de-line');
+    if (!sentenceEl) {
+        showPopup = false;
+        return;
+    }
+
+    const textSpan = sentenceEl.querySelector('.de-text');
+    const transRow = sentenceEl.querySelector('.trans-row');
+    
+    // Перевіряємо, чи виділення **ТОЧНО** в .de-text (а не в .trans-row)
+    if (!textSpan || !textSpan.contains(selection.anchorNode)) return;
+    if (transRow && transRow.contains(selection.anchorNode)) return;
+
+    // --- WORD COUNT LIMIT (тільки для .de-text) ---
     const wordCount = textStr.split(/\s+/).filter(w => w.length > 0).length;
     if (wordCount > 4) {
         addToast(ui.selection_limited_toast, "warning");
@@ -293,20 +311,6 @@
              return;
         }
     }
-
-    if (!textStr || textStr.length > 50) {
-        showPopup = false;
-        return;
-    }
-
-    const sentenceEl = event.target.closest('.de-line');
-    if (!sentenceEl) {
-        showPopup = false;
-        return;
-    }
-
-    const textSpan = sentenceEl.querySelector('.de-text');
-    if (!textSpan || !textSpan.contains(selection.anchorNode)) return;
 
     const range = selection.getRangeAt(0);
     const rect = range.getBoundingClientRect();
@@ -919,7 +923,7 @@
     .toolbar { display:flex; align-items:center; gap:12px; margin-bottom:24px; flex-wrap:wrap; }
     
     .de-line { padding:8px 0; border-bottom:1px solid var(--border); transition: background-color 0.3s; }
-    .de-text { font-size:1.1rem; font-weight:400; line-height:1.6; }
+    .de-text { font-size:1.1rem; font-weight:400; line-height:1.6; font-family: var(--font-text); }
     .highlight-sentence { background-color: rgba(255, 235, 59, 0.3); border-radius: 4px; }
     
     .trans-row { color:var(--primary); padding-left:44px; font-size:1rem; margin-top:4px; }
@@ -954,7 +958,7 @@
     .vocab-item {
         display:flex; justify-content:space-between; align-items:center; padding:12px 16px;
         border:1px solid var(--border); border-radius: var(--radius); background: var(--surface);
-        box-shadow: var(--shadow);
+        box-shadow: var(--shadow); font-family: var(--font-text);
     }
     
     .edit-input { 
@@ -963,6 +967,7 @@
         background: transparent; 
         font: inherit; 
         font-size: 0.85rem; 
+        font-family: var(--font-text);
         outline: none; 
         padding: 0; 
         margin: 0; 

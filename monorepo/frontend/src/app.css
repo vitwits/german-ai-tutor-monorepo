@@ -1,9 +1,16 @@
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Inter:wght@400;500;600;700&family=Montserrat:wght@400;500;600;700&family=Roboto+Flex:wght@400;500;600;700&family=Merriweather:wght@400;700&family=Fira+Code:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Manrope:wght@400;500;600;700&family=PT+Sans:wght@400;700&family=Exo+2:wght@400;500;600;700&family=Lora:wght@400;600;700&family=Intel+One+Mono:wght@400;500;700&family=Cascadia+Code:wght@400;500;600;700&family=Ubuntu+Mono:wght@400;700&display=swap');
+
 :root {
   --bg: #F5F5F5; --surface: #FFFFFF; --on-surface: #212121;
   --primary: #1976D2; --on-primary: #FFFFFF;
   --secondary: #FFC107; --border: #E0E0E0;
   --shadow: 0 2px 4px rgba(0,0,0,0.1); --radius: 10px;
-  font-family: 'Roboto', sans-serif;
+  
+  /* Font variables for testing */
+  --font-interface: 'Roboto', sans-serif;
+  --font-text: 'Merriweather', serif;
+  
+  font-family: var(--font-interface);
 }
 
 body.dark-mode {
@@ -16,7 +23,7 @@ body {
   color: var(--on-surface);
   margin: 0;
   line-height: 1.5;
-  font-family: 'Roboto', sans-serif;
+  font-family: var(--font-interface);
   overflow-y: scroll; /* Завжди показувати скролбар, щоб уникнути зсуву макету */
 }
 
@@ -26,7 +33,7 @@ body {
 
 /* Buttons & Links */
 button, a.btn-contained, a.btn-text, .btn-contained, .btn-text { 
-  border-radius: var(--radius); font-family: 'Roboto', sans-serif; 
+  border-radius: var(--radius); font-family: var(--font-interface); 
   font-size: 0.875rem; font-weight: 500; text-transform: uppercase; 
   cursor: pointer; border: none; padding: 0 16px; height: 36px; 
   display: inline-flex; align-items: center; gap: 8px; text-decoration: none; 
@@ -125,6 +132,11 @@ body.dark-mode select.form-control {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%239CA3AF' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
 }
 .form-control:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.1); }
+
+/* Text content uses text font variable */
+.de-text, .vocab-item, .learned {
+  font-family: var(--font-text);
+}
 
 /* Global Animations */
 @keyframes fall {
