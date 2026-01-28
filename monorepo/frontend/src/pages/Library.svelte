@@ -15,7 +15,16 @@
   // Filters
   let showFav = false;
   let selectedLevels = [];
+  let searchQuery = '';
   const allLevels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+  
+  let searchTimeout;
+  
+  function onSearchChange() {
+    clearTimeout(searchTimeout);
+    page = 1; // Reset to first page when searching
+    searchTimeout = setTimeout(loadLibrary, 300); // Debounce search
+  }
 
   $: ui = getUI($user?.interface_language || 'ukr');
 
@@ -25,7 +34,8 @@
       const params = {
         page,
         fav: showFav ? 1 : 0,
-        levels: selectedLevels.join(',')
+        levels: selectedLevels.join(','),
+        search: searchQuery
       };
       const res = await api.get("/library", { params });
       texts = res.data.texts;
@@ -99,7 +109,8 @@
 </script>
 
 <div class="library-header">
-    <h2 style="margin: 0;">{ui.my_texts}</h2>
+    <input type="text" class="search-input" placeholder="{ui.search || 'Search...'}" 
+           bind:value={searchQuery} oninput={onSearchChange} />
     <div class="filters">
         <button class="icon-btn {showFav ? 'active-fav' : ''}" onclick={toggleFavFilter}>
             <span class="material-symbols-outlined {showFav ? 'filled' : ''}">favorite</span>
@@ -154,6 +165,17 @@
     .library-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
     .filters { display: flex; gap: 12px; align-items: center; }
     .level-filters { display: flex; gap: 4px; }
+    
+    .search-input { 
+        padding: 8px 12px; 
+        border: 1px solid var(--border); 
+        border-radius: var(--radius); 
+        background: var(--surface);
+        color: var(--on-surface);
+        font-size: 0.95rem;
+        min-width: 200px;
+    }
+    .search-input::placeholder { opacity: 0.5; }
     
     /* minmax(320px, 1fr) гарантує 3 колонки на ширині 1200px (3 * 320 + відступи < 1200) */
     .texts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }

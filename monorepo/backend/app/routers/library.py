@@ -56,6 +56,7 @@ async def get_library(
     per_page: int = 18,
     fav: bool = False,
     levels: str = None,
+    search: str = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -71,6 +72,11 @@ async def get_library(
         if level_list:
             query = query.where(Text.level.in_(level_list))
             count_query = count_query.where(Text.level.in_(level_list))
+
+    if search:
+        search_pattern = f"%{search}%"
+        query = query.where(Text.title.like(search_pattern))
+        count_query = count_query.where(Text.title.like(search_pattern))
 
     total_count_res = await db.execute(count_query)
     total_count = total_count_res.scalar_one()

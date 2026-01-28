@@ -65,11 +65,22 @@ async def get_vocab_list(
         # Логіка для улюблених речень
         query = select(Sentence, UserFavoriteSentence.id.label("fav_id"), UserFavoriteSentence.created_at)\
             .join(UserFavoriteSentence, Sentence.id == UserFavoriteSentence.sentence_id)\
-            .where(UserFavoriteSentence.user_id == current_user.id)\
-            .order_by(UserFavoriteSentence.created_at.desc())\
-            .offset(offset).limit(per_page)
-            
+            .where(UserFavoriteSentence.user_id == current_user.id)
+        
         count_query = select(func.count()).select_from(UserFavoriteSentence).where(UserFavoriteSentence.user_id == current_user.id)
+        
+        if q:
+            search_pattern = f"%{q}%"
+            query = query.where(or_(Sentence.text_de.like(search_pattern), Sentence.text_uk.like(search_pattern), Sentence.text_en.like(search_pattern)))
+            count_query = count_query.where(or_(Sentence.text_de.like(search_pattern), Sentence.text_uk.like(search_pattern), Sentence.text_en.like(search_pattern)))
+        
+        if levels:
+            lvl_list = [l for l in levels.split(',') if l in ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']]
+            if lvl_list:
+                query = query.where(Sentence.level.in_(lvl_list))
+                count_query = count_query.where(Sentence.level.in_(lvl_list))
+        
+        query = query.order_by(UserFavoriteSentence.created_at.desc()).offset(offset).limit(per_page)
         
         total = (await db.execute(count_query)).scalar_one()
         rows = (await db.execute(query)).all()

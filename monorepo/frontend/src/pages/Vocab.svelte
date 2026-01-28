@@ -18,8 +18,11 @@
   let activeTab = $state('words'); // 'words' | 'sentences'
   let viewMode = $state('list');   // 'list' | 'grid'
   let selectedLevels = $state([]);
+  let searchQuery = $state('');
   const allLevels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
   let expandedContexts = $state(new Set()); // For list view context toggle
+  
+  let searchTimeout;
   
   // Flashcard Session State
   let showSession = $state(false);
@@ -64,7 +67,8 @@
         const params = {
             page,
             mode: activeTab,
-            levels: selectedLevels.join(',')
+            levels: selectedLevels.join(','),
+            q: searchQuery
         };
         const res = await api.get('/vocab', { params });
         items = res.data.items;
@@ -77,9 +81,16 @@
     }
   }
 
+  function onSearchChange() {
+    clearTimeout(searchTimeout);
+    page = 1;
+    searchTimeout = setTimeout(loadData, 300);
+  }
+
   function switchTab(tab) {
       activeTab = tab;
       page = 1;
+      searchQuery = '';
       items = [];
       loadData();
   }
@@ -747,6 +758,9 @@
             </button>
         {/if}
 
+        <input type="text" class="search-input" placeholder="{ui.search || 'Search...'}" 
+               bind:value={searchQuery} oninput={onSearchChange} />
+
         <div class="level-filters">
             {#each allLevels as lvl}
                 <button class="lvl-filter" class:active={selectedLevels.includes(lvl)} 
@@ -1118,6 +1132,17 @@
         color: var(--on-surface); font-weight: 500; cursor: pointer; opacity: 0.6;
     }
     .mode-btn.active { background: var(--primary); color: var(--on-primary); opacity: 1; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+
+    .search-input { 
+        padding: 8px 12px; 
+        border: 1px solid var(--border); 
+        border-radius: var(--radius); 
+        background: var(--surface);
+        color: var(--on-surface);
+        font-size: 0.95rem;
+        min-width: 200px;
+    }
+    .search-input::placeholder { opacity: 0.5; }
 
     .filters-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
     .practice-btn { background: var(--secondary); color: #000; height: 32px; font-size: 0.85rem; }
