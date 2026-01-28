@@ -47,6 +47,7 @@
     border-left: 4px solid var(--primary); font-size: 0.9rem; font-weight: 500;
   }
   .toast.error { border-left-color: #d32f2f; }
+  .toast.warning { border-left-color: #FFC107; }
   .toast.success { border-left-color: #4CAF50; }
   .close-btn { background: none; border: none; font-size: 1.2rem; cursor: pointer; padding: 0; color: inherit; opacity: 0.6; }
 

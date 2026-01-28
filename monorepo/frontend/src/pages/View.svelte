@@ -50,6 +50,9 @@
   let selectionContext = "";
   let selectionSentenceIndex = -1;
   let selectionStartIndex = -1;
+  let isTranslating = false; // Показать loader во время перевода
+  let activeTranslationText = ""; // Отслеживание текущего перевода
+  let popupHideTimeout; // Таймер для скриття попапу
 
   let showLearnedPopup = false;
   let learnedPopupContent = "";
@@ -224,6 +227,12 @@
   }
 
   function handleMouseUp(event) {
+    // Блокируем выделение нового слова во время перевода
+    if (isTranslating) {
+        showPopup = false;
+        return;
+    }
+
     if (event.target.closest('button') || event.target.closest('#pop') || event.target.classList.contains('learned')) return;
 
     const selection = window.getSelection();
@@ -310,9 +319,40 @@
     selectionContext = sentenceEl.dataset.text;
     selectionSentenceIndex = parseInt(sentenceEl.dataset.index);
     showPopup = true;
+    
+    // Скидаємо попередній таймер якщо існує
+    if (popupHideTimeout) clearTimeout(popupHideTimeout);
+    
+    // Запускаємо таймер на 2 секунди для автоматичного скриття
+    popupHideTimeout = setTimeout(() => {
+        if (showPopup && !isTranslating) {
+            showPopup = false;
+        }
+    }, 2000);
+  }
+
+  function onPopupMouseEnter() {
+    // Скасовуємо таймер прихованого коли курсор над попапом
+    if (popupHideTimeout) {
+        clearTimeout(popupHideTimeout);
+        popupHideTimeout = null;
+    }
+  }
+
+  function onPopupMouseLeave() {
+    // Запускаємо таймер прихованого коли курсор покидає попап (2 секунди)
+    popupHideTimeout = setTimeout(() => {
+        showPopup = false;
+    }, 2000);
   }
 
   async function quickTranslate() {
+    // Блокируем двойное нажатие
+    if (isTranslating) return;
+    
+    isTranslating = true;
+    activeTranslationText = selectedText;
+    
     try {
         const res = await api.post('/quick_translate', {
             text: selectedText,
@@ -328,11 +368,16 @@
             addToast(ui.word_added, "success");
             loadText(); // Reload to show highlight
         } else {
-            addToast(ui[res.data.error_key] || ui.translation_failed_msg, "error");
+            // Показуємо "word_exists" як попередження (жовте), а не помилку (червоне)
+            const toastType = res.data.error_key === 'word_exists' ? 'warning' : 'error';
+            addToast(ui[res.data.error_key] || ui.translation_failed_msg, toastType);
         }
     } catch (e) {
         console.error(e);
         addToast(ui.error_generic, "error");
+    } finally {
+        isTranslating = false;
+        activeTranslationText = "";
     }
   }
 
@@ -775,8 +820,20 @@
 
     <!-- POPUPS -->
     {#if showPopup}
-        <button type="button" id="pop" style={popupStyle} onclick={(e) => { e.stopPropagation(); quickTranslate(); }}>
-            {ui.add_translation}
+        <button 
+            type="button" 
+            id="pop" 
+            style={popupStyle} 
+            onclick={(e) => { e.stopPropagation(); quickTranslate(); }} 
+            disabled={isTranslating}
+            onmouseenter={onPopupMouseEnter}
+            onmouseleave={onPopupMouseLeave}
+        >
+            {#if isTranslating}
+                <span class="loader-spinner"></span>
+            {:else}
+                {ui.add_translation}
+            {/if}
         </button>
     {/if}
 
@@ -925,5 +982,30 @@
     .btn-danger {
         background-color: #d32f2f;
         color: white;
+    }
+
+    /* Loader Spinner */
+    .loader-spinner {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border: 2px solid rgba(0, 0, 0, 0.1);
+        border-radius: 50%;
+        border-top-color: var(--primary);
+        animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    #pop {
+        transition: opacity 0.3s ease-out;
+    }
+
+    #pop:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        pointer-events: none;
     }
 </style>
