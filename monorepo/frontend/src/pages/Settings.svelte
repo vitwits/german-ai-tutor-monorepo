@@ -17,7 +17,7 @@
   $: if ($user) {
     lang = $user.interface_language || 'ukr';
     vocabSize = $user.vocab_session_size || 20;
-    studyBatchSize = $user.study_batch_size || 50;
+    studyBatchSize = $user.study_batch_size || 20;
   }
 
   async function save() {
@@ -90,7 +90,6 @@
       <option value={20}>20</option>
       <option value={50}>50</option>
       <option value={100}>100</option>
-      <option value={200}>200</option>
     </select>
   </div>
 

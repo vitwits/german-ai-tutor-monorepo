@@ -22,7 +22,7 @@ class User(Base):
     vocab_view_mode: Mapped[Optional[str]] = mapped_column(String, default='list')
     vocab_per_page: Mapped[Optional[int]] = mapped_column(Integer, default=20)
     vocab_session_size: Mapped[Optional[int]] = mapped_column(Integer, default=20)
-    study_batch_size: Mapped[Optional[int]] = mapped_column(Integer, default=50)
+    study_batch_size: Mapped[Optional[int]] = mapped_column(Integer, default=20)
 
 class Text(Base):
     __tablename__ = "texts"
