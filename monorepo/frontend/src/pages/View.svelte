@@ -966,7 +966,7 @@
         border: none; 
         background: transparent; 
         font: inherit; 
-        font-size: 0.85rem; 
+        font-size: 1.1rem; 
         font-family: var(--font-text);
         outline: none; 
         padding: 0; 
