@@ -26,6 +26,11 @@
   let playingIndex = -1; // Index of sentence currently playing in Play All
   let currentAudio = null;
   
+  // Edit State
+  let editingId = null;
+  let editValue = "";
+  let editingFieldType = ''; // 'ua' or 'en'
+  
   // Quiz State
   let currentQIndex = 0;
   let quizScore = 0;
@@ -653,6 +658,32 @@
       addToast(ui.word_deleted || 'Word removed', "info", undo, 5000);
   }
 
+  function startEdit(wid, currentVal, fieldType) {
+      editingId = wid;
+      editValue = currentVal;
+      editingFieldType = fieldType;
+  }
+
+  function cancelEdit() {
+      editingId = null;
+      editValue = "";
+      editingFieldType = '';
+  }
+
+  async function saveEdit(wid) {
+      try {
+          await api.post('/update_word', { id: wid, translation: editValue });
+          vocab = vocab.map(v => {
+              if (v.id === wid) {
+                  const fieldName = editingFieldType === 'ua' ? 'ua' : 'en';
+                  return { ...v, [fieldName]: editValue };
+              }
+              return v;
+          });
+          editingId = null;
+      } catch(e) { addToast(ui.error_saving || "Error saving", "error"); }
+  }
+
   onMount(loadText);
   
   // Global click listener for learned words popup
@@ -734,23 +765,41 @@
                     <div class="card" style="text-align:center; opacity:0.6;">{ui.empty_vocab_prompt}</div>
                 {/if}
                 {#each vocab as v}
-                    <div class="vocab-item" onclick={() => toggleVocabFav(v.id)} role="button" tabindex="0" onkeydown={(e) => e.key === 'Enter' && toggleVocabFav(v.id)}>
+                    <div class="vocab-item" role="button" tabindex="0">
                         <div style="display:flex; align-items:center; gap:12px; flex: 1; min-width: 0;">
                             <button class="btn-text" onclick={(e) => { e.stopPropagation(); playVocabPair(v.display, $user.interface_language === 'ukr' ? v.ua : v.en); }}>
                                 <span class="material-symbols-outlined" style="font-size:18px;">volume_up</span>
                             </button>
-                            <div style="overflow: hidden; text-overflow: ellipsis;">
+                            <div style="overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0;">
                                 <span style="font-weight: 500; color: var(--primary); font-size: 1.1rem; cursor: pointer;" onclick={(e) => { e.stopPropagation(); scrollToWord(v.id); }} role="button" tabindex="0" onkeydown={(e) => e.key === 'Enter' && scrollToWord(v.id)}>{v.display}</span>
-                                <div style="font-size:0.85rem; opacity:0.7; margin-top:6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{$user.interface_language === 'ukr' ? v.ua : v.en}</div>
+                                <div style="font-size:0.85rem; opacity:0.7; margin-top:6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                    {#if editingId === v.id && editingFieldType === ($user.interface_language === 'ukr' ? 'ua' : 'en')}
+                                        <input type="text" class="edit-input" bind:value={editValue} onclick={(e) => e.stopPropagation()} onkeydown={(e) => { e.stopPropagation(); if(e.key === 'Enter') saveEdit(v.id); }} />
+                                    {:else}
+                                        {$user.interface_language === 'ukr' ? v.ua : v.en}
+                                    {/if}
+                                </div>
                             </div>
                         </div>
                         <div style="display: flex; align-items: center; gap: 0;">
                             <button class="btn-text" onclick={(e) => { e.stopPropagation(); toggleVocabFav(v.id); }} style="color: {v.is_favorite ? '#FFC107' : 'inherit'}; min-width: 32px; padding: 0;">
                                 <span class="material-symbols-outlined {v.is_favorite ? 'filled' : ''}">star</span>
                             </button>
-                            <button class="btn-text" onclick={(e) => { e.stopPropagation(); removeWord(v.id); }} style="color:red; min-width: 32px; padding: 0;">
-                                <span class="material-symbols-outlined">delete</span>
-                            </button>
+                            {#if editingId === v.id}
+                                <button class="btn-text" style="color:var(--primary); padding:0; min-width:32px;" onclick={(e) => { e.stopPropagation(); saveEdit(v.id); }}>
+                                    <span class="material-symbols-outlined">check</span>
+                                </button>
+                                <button class="btn-text" style="padding:0; min-width:32px;" onclick={(e) => { e.stopPropagation(); cancelEdit(); }}>
+                                    <span class="material-symbols-outlined">close</span>
+                                </button>
+                            {:else}
+                                <button class="btn-text" style="color:var(--primary); opacity:0.7; padding:0; min-width:32px;" onclick={(e) => { e.stopPropagation(); startEdit(v.id, $user.interface_language === 'ukr' ? v.ua : v.en, $user.interface_language === 'ukr' ? 'ua' : 'en'); }}>
+                                    <span class="material-symbols-outlined">edit</span>
+                                </button>
+                                <button class="btn-text" onclick={(e) => { e.stopPropagation(); removeWord(v.id); }} style="color:red; min-width: 32px; padding: 0;">
+                                    <span class="material-symbols-outlined">delete</span>
+                                </button>
+                            {/if}
                         </div>
                     </div>
                 {/each}
@@ -905,7 +954,20 @@
         display:flex; justify-content:space-between; align-items:center; padding:12px 16px;
         border:1px solid var(--border); border-radius: var(--radius); background: var(--surface);
         box-shadow: var(--shadow);
-        cursor: pointer;
+    }
+    
+    .edit-input { 
+        width: 100%; 
+        border: none; 
+        background: transparent; 
+        font: inherit; 
+        font-size: 0.85rem; 
+        outline: none; 
+        padding: 0; 
+        margin: 0; 
+        color: inherit; 
+        border-bottom: 1px solid var(--primary); 
+        border-radius: 0;
     }
 
     /* Quiz */

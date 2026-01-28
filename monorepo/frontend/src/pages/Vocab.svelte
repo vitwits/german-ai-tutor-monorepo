@@ -758,7 +758,7 @@
             </button>
         {/if}
 
-        <input type="text" class="search-input" placeholder="{ui.search || 'Search...'}" 
+        <input type="text" class="search-input" placeholder={ui.search || 'Search...'} 
                bind:value={searchQuery} oninput={onSearchChange} />
 
         <div class="level-filters">

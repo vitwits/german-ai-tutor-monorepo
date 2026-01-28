@@ -97,6 +97,8 @@ export const UI_STRINGS = {
         'speaking_small_talk': 'Розмова',
         'sentence_removed_fav': 'Речення видалено',
         'text_deleted': 'Текст видалено',
+        'search': 'Пошук...',
+        'error_saving': 'Помилка збереження',
     },
     'eng': {
         'settings': 'Settings',
@@ -196,6 +198,8 @@ export const UI_STRINGS = {
         'speaking_small_talk': 'Dialogue',
         'sentence_removed_fav': 'Sentence removed',
         'text_deleted': 'Text deleted',
+        'search': 'Search...',
+        'error_saving': 'Error saving',
     
     }
 };

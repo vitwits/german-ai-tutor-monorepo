@@ -109,7 +109,7 @@
 </script>
 
 <div class="library-header">
-    <input type="text" class="search-input" placeholder="{ui.search || 'Search...'}" 
+    <input type="text" class="search-input" placeholder={ui.search || 'Search...'} 
            bind:value={searchQuery} oninput={onSearchChange} />
     <div class="filters">
         <button class="icon-btn {showFav ? 'active-fav' : ''}" onclick={toggleFavFilter}>
