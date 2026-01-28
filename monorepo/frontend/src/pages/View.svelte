@@ -70,6 +70,9 @@
   // Reactive UI strings
   $: ui = getUI($user?.interface_language || 'ukr');
 
+  // Re-load text when id changes (only if user is loaded)
+  $: if (id && $user) loadText();
+
   async function loadText() {
     loading = true;
     try {
@@ -683,8 +686,6 @@
           editingId = null;
       } catch(e) { addToast(ui.error_saving || "Error saving", "error"); }
   }
-
-  onMount(loadText);
   
   // Global click listener for learned words popup
   onMount(() => {
