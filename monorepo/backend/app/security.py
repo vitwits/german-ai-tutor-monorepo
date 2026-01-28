@@ -12,7 +12,8 @@ load_dotenv(os.path.join(MONOREPO_ROOT, ".env"))
 # Секретний ключ має бути в .env, тут фолбек для розробки
 SECRET_KEY = os.getenv("SECRET_KEY", "dev-key-change-this-in-prod")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 днів
+ACCESS_TOKEN_EXPIRE_MINUTES = 60  # 1 година
+REFRESH_TOKEN_EXPIRE_DAYS = 30  # 30 днів
 
 # For new passwords, use bcrypt
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=12)
@@ -43,10 +44,17 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
+        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     
     # Додаємо exp claim
     to_encode.update({"exp": expire})
     
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+def create_refresh_token(data: dict):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    to_encode.update({"exp": expire, "type": "refresh"})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt

@@ -8,7 +8,7 @@ import logging
 from ..database import get_db
 from ..models import User
 from ..schemas import UserCreate, Token, UserRead, UserSettingsUpdate, UserLevelUpdate, UserPasswordUpdate
-from ..security import get_password_hash, verify_password, create_access_token
+from ..security import get_password_hash, verify_password, create_access_token, create_refresh_token
 from ..dependencies import get_current_user
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -34,9 +34,10 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
         await db.commit()
         await db.refresh(new_user)
         
-        # Generate token
+        # Generate tokens
         access_token = create_access_token(data={"sub": new_user.email, "uid": new_user.id})
-        return {"access_token": access_token, "token_type": "bearer"}
+        refresh_token = create_refresh_token(data={"sub": new_user.email, "uid": new_user.id})
+        return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
     except Exception as e:
         logging.error(f"REGISTRATION FAILED: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error during registration.")
@@ -59,7 +60,8 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSessi
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password")
 
     access_token = create_access_token(data={"sub": user.email, "uid": user.id})
-    return {"access_token": access_token, "token_type": "bearer"}
+    refresh_token = create_refresh_token(data={"sub": user.email, "uid": user.id})
+    return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
 
 @router.get("/me", response_model=UserRead)
 async def read_users_me(current_user: User = Depends(get_current_user)):
@@ -89,3 +91,33 @@ async def change_password(req: UserPasswordUpdate, db: AsyncSession = Depends(ge
     current_user.password_hash = get_password_hash(req.new_password)
     await db.commit()
     return {"ok": True}
+
+@router.post("/refresh", response_model=Token)
+async def refresh_token(refresh_token_req: dict, db: AsyncSession = Depends(get_db)):
+    """Refresh access token using refresh token"""
+    from ..security import SECRET_KEY, ALGORITHM
+    from jose import JWTError, jwt
+    
+    refresh_token = refresh_token_req.get('refresh_token')
+    if not refresh_token:
+        raise HTTPException(status_code=400, detail="refresh_token required")
+    
+    try:
+        payload = jwt.decode(refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        token_type: str = payload.get("type")
+        
+        if email is None or token_type != "refresh":
+            raise HTTPException(status_code=401, detail="Invalid refresh token")
+        
+        # Get user
+        result = await db.execute(select(User).where(User.email == email))
+        user = result.scalar_one_or_none()
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
+        
+        # Generate new access token
+        new_access_token = create_access_token(data={"sub": user.email, "uid": user.id})
+        return {"access_token": new_access_token, "token_type": "bearer"}
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")

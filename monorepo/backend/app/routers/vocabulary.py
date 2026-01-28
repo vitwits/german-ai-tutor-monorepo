@@ -172,33 +172,32 @@ async def vocab_session(
         )
         new_words = new_q.scalars().all()
         
-        # Розділяємо NEW на FREQUENT (study_view_count >= 3) та INFREQUENT
-        new_frequent = [w for w in new_words if w.study_view_count >= 3]
-        new_infrequent = [w for w in new_words if w.study_view_count < 3]
-        
-        # Категорія 3: FUTURE (next_review > now)
-        future = await db.execute(
-            base_query.where(Vocabulary.next_review > now)
-            .order_by(func.random())
+        # Категорія 3: FUTURE (next_review > now) з study_view_count > 0
+        future_reviewed = await db.execute(
+            base_query.where(
+                Vocabulary.next_review > now,
+                Vocabulary.study_view_count > 0
+            )
+            .order_by(Vocabulary.study_view_count.desc())
         )
-        future_words = future.scalars().all()
+        future_reviewed_words = future_reviewed.scalars().all()
         
-        # Розділяємо FUTURE на FREQUENT (study_view_count >= 5) та INFREQUENT
-        future_frequent = [w for w in future_words if w.study_view_count >= 5]
-        # future_infrequent = [w for w in future_words if w.study_view_count < 5]
+        # ===== ЛОГІКА ПРІОРИТЕТІВ =====
+        # Якщо є OVERDUE - показуємо їх + нові
+        if overdue_words:
+            # Сортуємо NEW за study_view_count (який вже переглядав в Study, той першим)
+            new_words_sorted = sorted(new_words, key=lambda w: w.study_view_count, reverse=True)
+            words = overdue_words + new_words_sorted
         
-        # Об'єднуємо по пріоритетам:
-        # 1. OVERDUE (ваговий коефіцієнт 10)
-        # 2. NEW + FREQUENT (вага 8)
-        # 3. NEW + INFREQUENT (вага 5)
-        # 4. FUTURE + FREQUENT (вага 3)
+        # Якщо OVERDUE немає, але є NEW - показуємо нові + future_reviewed
+        elif new_words:
+            # Сортуємо NEW за study_view_count
+            new_words_sorted = sorted(new_words, key=lambda w: w.study_view_count, reverse=True)
+            words = new_words_sorted + future_reviewed_words
         
-        words = (
-            overdue_words +
-            new_frequent +
-            new_infrequent +
-            future_frequent
-        )
+        # Fallback: якщо немає ні OVERDUE ні NEW - показуємо future_reviewed
+        else:
+            words = future_reviewed_words
     
     # Застосуємо limit/offset
     words = words[offset : offset + limit]

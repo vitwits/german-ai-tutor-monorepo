@@ -630,9 +630,14 @@
 
     <div class="filters-row">
         {#if activeTab === 'words'}
-            <button class="btn-contained practice-btn" onclick={startSession}>
-                <span class="material-symbols-outlined">school</span> {ui.fc_start_review}
-            </button>
+            <div style="display: flex; gap: 10px;">
+                <button class="btn-contained practice-btn" onclick={() => { fcMode = 'study'; startSession(); }}>
+                    <span class="material-symbols-outlined">headphones</span> {ui.mode_training}
+                </button>
+                <button class="btn-contained practice-btn" onclick={() => { fcMode = 'review'; startSession(); }}>
+                    <span class="material-symbols-outlined">school</span> {ui.mode_test}
+                </button>
+            </div>
         {:else}
             <button class="btn-contained practice-btn" onclick={openPlayer}>
                 <span class="material-symbols-outlined">play_arrow</span>
@@ -672,10 +677,6 @@
 
         <div class="fc-container">
             <div class="fc-top-controls">
-                <div class="fc-mode-toggle">
-                    <button class="fc-mode-opt" class:active={fcMode === 'study'} onclick={() => fcSetMode('study')}>{ui.fc_study_mode}</button>
-                    <button class="fc-mode-opt" class:active={fcMode === 'review'} onclick={() => fcSetMode('review')}>{ui.fc_review_mode}</button>
-                </div>
             </div>
 
             {#if fcMode === 'review'}

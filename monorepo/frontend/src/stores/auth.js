@@ -5,6 +5,7 @@ import { router } from 'tinro';
 // Стан
 export const user = writable(null);
 export const token = writable(localStorage.getItem('token') || null);
+export const refreshToken = writable(localStorage.getItem('refresh_token') || null);
 export const isAuthenticated = writable(!!localStorage.getItem('token'));
 
 // Дії
@@ -17,10 +18,13 @@ export const login = async (email, password) => {
 
         const res = await api.post('/auth/login', formData);
         const accessToken = res.data.access_token;
+        const refreshTokenVal = res.data.refresh_token;
         
         token.set(accessToken);
+        refreshToken.set(refreshTokenVal);
         isAuthenticated.set(true);
         localStorage.setItem('token', accessToken);
+        localStorage.setItem('refresh_token', refreshTokenVal);
         
         await fetchUser();
         router.goto('/');
@@ -33,7 +37,18 @@ export const login = async (email, password) => {
 
 export const register = async (email, password) => {
     try {
-        await api.post('/auth/register', { email, password });
+        const res = await api.post('/auth/register', { email, password });
+        const accessToken = res.data.access_token;
+        const refreshTokenVal = res.data.refresh_token;
+        
+        token.set(accessToken);
+        refreshToken.set(refreshTokenVal);
+        isAuthenticated.set(true);
+        localStorage.setItem('token', accessToken);
+        localStorage.setItem('refresh_token', refreshTokenVal);
+        
+        await fetchUser();
+        router.goto('/');
         return { ok: true };
     } catch (e) {
         console.error(e);
@@ -43,9 +58,11 @@ export const register = async (email, password) => {
 
 export const logout = () => {
     token.set(null);
+    refreshToken.set(null);
     user.set(null);
     isAuthenticated.set(false);
     localStorage.removeItem('token');
+    localStorage.removeItem('refresh_token');
     router.goto('/login');
 };
 
