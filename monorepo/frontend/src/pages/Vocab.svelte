@@ -268,8 +268,13 @@
       if (fcLoopTimeout) clearTimeout(fcLoopTimeout);
       if (currentAudio) currentAudio.pause();
       currentCardIdx = (currentCardIdx + 1) % sessionCards.length;
-      fcIsPlaying = false; // Stop auto-play on manual nav
       isFlipped = false;
+      // Якщо було включено в Study - продовжуємо цикл з наступним словом
+      if (fcMode === 'study' && fcIsPlaying) {
+          runStudyLoop();
+      } else {
+          fcIsPlaying = false;
+      }
   }
 
   function toggleFcAudio() {
@@ -280,8 +285,13 @@
       if (fcLoopTimeout) clearTimeout(fcLoopTimeout);
       if (currentAudio) currentAudio.pause();
       currentCardIdx = (currentCardIdx - 1 + sessionCards.length) % sessionCards.length;
-      fcIsPlaying = false;
       isFlipped = false;
+      // Якщо було включено в Study - продовжуємо цикл з попереднім словом
+      if (fcMode === 'study' && fcIsPlaying) {
+          runStudyLoop();
+      } else {
+          fcIsPlaying = false;
+      }
   }
 
   async function rateCard(rating) {
@@ -327,18 +337,26 @@
   function toggleShuffle() {
       fcIsRandom = !fcIsRandom;
       if (fcIsRandom) {
-          let array = [...sessionCards];
-          for (let i = array.length - 1; i > 0; i--) {
+          // Беремо слова ПІСЛЯ поточного (currentCardIdx + 1)
+          const restCards = sessionCards.slice(currentCardIdx + 1);
+          
+          // Перемішуємо їх
+          let shuffled = [...restCards];
+          for (let i = shuffled.length - 1; i > 0; i--) {
               const j = Math.floor(Math.random() * (i + 1));
-              [array[i], array[j]] = [array[j], array[i]];
+              [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
           }
-          sessionCards = array;
+          
+          // З'єднуємо: до-поточне + поточне + перемішане-після
+          sessionCards = [
+              ...sessionCards.slice(0, currentCardIdx + 1),
+              ...shuffled
+          ];
       } else {
+          // Повертаємось до оригіналу
           sessionCards = [...originalSessionCards];
       }
-      currentCardIdx = 0;
-      isFlipped = false;
-      fcReviewStarted = false;
+      // Не скидаємо isFlipped - нехай картка залишається в тому стані де була
   }
 
   // --- AUDIO & UTILS ---
@@ -779,20 +797,20 @@
             {/if}
 
             <div class="fc-bottom-controls">
-                {#if !isFlipped}
-                    {#if fcMode === 'study'}
-                        <div class="fc-ctrl-row">
-                            <button class="fc-icon-btn" class:active={fcAudioEnabled} onclick={(e) => { e.stopPropagation(); toggleFcAudio(); }}>
-                                <span class="material-symbols-outlined">volume_up</span>
-                            </button>
-                            <button class="fc-play-btn" onclick={toggleFcPlay}>
-                                <span class="material-symbols-outlined">{fcIsPlaying ? 'pause' : 'play_arrow'}</span>
-                            </button>
-                            <button class="fc-icon-btn" class:active={fcIsRandom} onclick={toggleShuffle}>
-                                <span class="material-symbols-outlined">shuffle</span>
-                            </button>
-                        </div>
-                    {:else if !fcReviewStarted}
+                {#if fcMode === 'study'}
+                    <div class="fc-ctrl-row">
+                        <button class="fc-icon-btn" class:active={fcAudioEnabled} onclick={(e) => { e.stopPropagation(); toggleFcAudio(); }}>
+                            <span class="material-symbols-outlined">volume_up</span>
+                        </button>
+                        <button class="fc-play-btn" onclick={toggleFcPlay}>
+                            <span class="material-symbols-outlined">{fcIsPlaying ? 'pause' : 'play_arrow'}</span>
+                        </button>
+                        <button class="fc-icon-btn" class:active={fcIsRandom} onclick={toggleShuffle}>
+                            <span class="material-symbols-outlined">shuffle</span>
+                        </button>
+                    </div>
+                {:else if !isFlipped}
+                    {#if !fcReviewStarted}
                         <div class="fc-ctrl-row">
                             <button class="fc-icon-btn" class:active={fcAudioEnabled} onclick={(e) => { e.stopPropagation(); toggleFcAudio(); }}>
                                 <span class="material-symbols-outlined">volume_up</span>
