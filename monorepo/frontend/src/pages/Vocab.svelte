@@ -643,86 +643,102 @@
         </button>
 
         <div class="fc-container">
-        <div class="fc-top-controls">
-            <div class="fc-mode-toggle">
-                <button class="fc-mode-opt" class:active={fcMode === 'study'} onclick={() => fcSetMode('study')}>{ui.fc_study_mode}</button>
-                <button class="fc-mode-opt" class:active={fcMode === 'review'} onclick={() => fcSetMode('review')}>{ui.fc_review_mode}</button>
+            <div class="fc-top-controls">
+                <div class="fc-mode-toggle">
+                    <button class="fc-mode-opt" class:active={fcMode === 'study'} onclick={() => fcSetMode('study')}>{ui.fc_study_mode}</button>
+                    <button class="fc-mode-opt" class:active={fcMode === 'review'} onclick={() => fcSetMode('review')}>{ui.fc_review_mode}</button>
+                </div>
             </div>
-        </div>
 
-        {#if fcMode === 'review'}
-        <div class="fc-progress-wrapper">
-            <div class="fc-progress-track">
-                <div class="fc-progress-fill" style="width: {(currentCardIdx / sessionCards.length) * 100}%"></div>
-            </div>
-            <div class="fc-progress-text">{currentCardIdx} / {sessionCards.length}</div>
-        </div>
-        {/if}
-
-        <div class="fc-card-area" 
-             onclick={flipCard} 
-             onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && flipCard()}
-             role="button" 
-             tabindex="0">
-             
-            {#if fcMode === 'review' && !fcReviewStarted}
-                <div class="fc-start-overlay">
-                    <button class="fc-start-btn" onclick={(e) => { e.stopPropagation(); startReview(); }}>
-                        <span class="material-symbols-outlined">play_arrow</span>
-                    </button>
-                    <div style="margin-top: 24px; opacity: 0.8; font-weight: 500; font-size: 1.2rem;">{ui.fc_start_review}</div>
+            {#if fcMode === 'review'}
+                <div class="fc-progress-wrapper">
+                    <div class="fc-progress-track">
+                        <div class="fc-progress-fill" style="width: {(currentCardIdx / sessionCards.length) * 100}%"></div>
+                    </div>
+                    <div class="fc-progress-text">{currentCardIdx + 1} / {sessionCards.length}</div>
                 </div>
             {/if}
 
-            <div class="fc-card" class:flipped={isFlipped} style="display: {fcMode === 'review' && !fcReviewStarted ? 'none' : 'block'}">
-                <div class="fc-face fc-front">
-                    <span class="level-badge lvl-{sessionCards[currentCardIdx].level?.toLowerCase()}" style="position:absolute; top:20px; left:20px; z-index: 5;">
-                        {sessionCards[currentCardIdx].level || '?'}
-                    </span>
-                    <div class="fc-word">{sessionCards[currentCardIdx].display}</div>
-                    {#if fcMode === 'review'}
-                        <div class="fc-hint">{ui.fc_tap_to_flip} {ui.fc_press_space}</div>
-                    {/if}
-                </div>
-                <div class="fc-face fc-back">
-                    <div class="fc-trans">{sessionCards[currentCardIdx].trans}</div>
-                    {#if fcMode === 'review' || !fcIsPlaying}
-                        <div class="fc-ctx">{sessionCards[currentCardIdx].ctx}</div>
-                    {/if}
+            <div class="fc-card-area">
+                {#if fcMode === 'review' && !fcReviewStarted}
+                    <div class="fc-start-overlay">
+                        <button class="fc-start-btn" onclick={(e) => { e.stopPropagation(); startReview(); }}>
+                            <span class="material-symbols-outlined">play_arrow</span>
+                        </button>
+                        <div style="margin-top: 24px; opacity: 0.8; font-weight: 500; font-size: 1.2rem;">{ui.fc_start_review}</div>
+                    </div>
+                {/if}
+
+                <div class="fc-card" 
+                     class:flipped={isFlipped} 
+                     onclick={flipCard}
+                     onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && flipCard()}
+                     role="button" 
+                     tabindex="0"
+                     style="display: {fcMode === 'review' && !fcReviewStarted ? 'none' : 'block'}">
+                    
+                    <div class="fc-face fc-front">
+                        <span class="level-badge lvl-{sessionCards[currentCardIdx].level?.toLowerCase()}" style="position:absolute; top:20px; left:20px; z-index: 5;">
+                            {sessionCards[currentCardIdx].level || '?'}
+                        </span>
+                        <div class="fc-word">{sessionCards[currentCardIdx].display}</div>
+                    </div>
+
+                    <div class="fc-face fc-back">
+                        <div class="fc-trans">{sessionCards[currentCardIdx].trans}</div>
+                        {#if fcMode === 'review' || !fcIsPlaying}
+                            <div class="fc-ctx">{sessionCards[currentCardIdx].ctx}</div>
+                        {/if}
+                    </div>
                 </div>
             </div>
-        </div>
 
-        {#if fcMode === 'study'}
-        <div class="fc-study-hint-text">
-            {ui.fc_study_hint}
-        </div>
-        {/if}
+            {#if fcMode === 'review' && fcReviewStarted}
+                <div class="fc-review-hint-text">
+                    {ui.fc_review_hint}
+                </div>
+            {/if}
 
-        <div class="fc-bottom-controls">
             {#if fcMode === 'study'}
-                <div class="fc-ctrl-row">
-                    <button class="fc-icon-btn" class:active={fcAudioEnabled} onclick={(e) => { e.stopPropagation(); toggleFcAudio(); }}>
-                        <span class="material-symbols-outlined">volume_up</span>
-                    </button>
-                    <button class="fc-play-btn" onclick={toggleFcPlay}>
-                        <span class="material-symbols-outlined" style="font-size: 50px">{fcIsPlaying ? 'pause' : 'play_arrow'}</span>
-                    </button>
-                    <button class="fc-icon-btn" class:active={fcIsRandom} onclick={toggleShuffle}>
-                        <span class="material-symbols-outlined">shuffle</span>
-                    </button>
+                <div class="fc-study-hint-text">
+                    {ui.fc_study_hint}
                 </div>
-            {:else if !fcReviewStarted}
-                <div class="fc-ctrl-row">
-                    <button class="fc-icon-btn" class:active={fcAudioEnabled} onclick={(e) => { e.stopPropagation(); toggleFcAudio(); }}>
-                        <span class="material-symbols-outlined">volume_up</span>
-                    </button>
-                    <button class="fc-icon-btn" class:active={fcIsRandom} onclick={toggleShuffle}>
-                        <span class="material-symbols-outlined">shuffle</span>
-                    </button>
-                </div>
-            {:else if fcReviewStarted}
-                {#if isFlipped}
+            {/if}
+
+            <div class="fc-bottom-controls">
+                {#if !isFlipped}
+                    {#if fcMode === 'study'}
+                        <div class="fc-ctrl-row">
+                            <button class="fc-icon-btn" class:active={fcAudioEnabled} onclick={(e) => { e.stopPropagation(); toggleFcAudio(); }}>
+                                <span class="material-symbols-outlined">volume_up</span>
+                            </button>
+                            <button class="fc-play-btn" onclick={toggleFcPlay}>
+                                <span class="material-symbols-outlined">{fcIsPlaying ? 'pause' : 'play_arrow'}</span>
+                            </button>
+                            <button class="fc-icon-btn" class:active={fcIsRandom} onclick={toggleShuffle}>
+                                <span class="material-symbols-outlined">shuffle</span>
+                            </button>
+                        </div>
+                    {:else if !fcReviewStarted}
+                        <div class="fc-ctrl-row">
+                            <button class="fc-icon-btn" class:active={fcAudioEnabled} onclick={(e) => { e.stopPropagation(); toggleFcAudio(); }}>
+                                <span class="material-symbols-outlined">volume_up</span>
+                            </button>
+                            <button class="fc-icon-btn" class:active={fcIsRandom} onclick={toggleShuffle}>
+                                <span class="material-symbols-outlined">shuffle</span>
+                            </button>
+                        </div>
+                    {:else if fcReviewStarted && !isFlipped}
+                        <div class="fc-ctrl-row">
+                            <button class="fc-icon-btn" class:active={fcAudioEnabled} onclick={(e) => { e.stopPropagation(); toggleFcAudio(); }}>
+                                <span class="material-symbols-outlined">volume_up</span>
+                            </button>
+                            <button class="fc-icon-btn" class:active={fcIsRandom} onclick={toggleShuffle}>
+                                <span class="material-symbols-outlined">shuffle</span>
+                            </button>
+                        </div>
+                    {/if}
+                {:else if fcReviewStarted && isFlipped}
                     <div class="fc-ctrl-row" style="gap: 20px;">
                         <button class="fc-rate-btn hard" onclick={() => rateCard('hard')}>
                             <span class="material-symbols-outlined">sentiment_very_dissatisfied</span>
@@ -741,8 +757,7 @@
                         </button>
                     </div>
                 {/if}
-            {/if}
-        </div>
+            </div>
         </div>
     </div>
 {:else}
@@ -927,6 +942,23 @@
 {/if}
 
 <style>
+    /* Global focus outline reset */
+    :global(*) {
+        outline: none !important;
+    }
+    :global(*:focus), :global(*:focus-visible) {
+        outline: none !important;
+        box-shadow: none !important;
+    }
+    :global(button), :global(input), :global(textarea), :global(select) {
+        outline: none !important;
+    }
+    :global(button:focus), :global(input:focus), :global(textarea:focus), :global(select:focus),
+    :global(button:focus-visible), :global(input:focus-visible), :global(textarea:focus-visible), :global(select:focus-visible) {
+        outline: none !important;
+        box-shadow: none !important;
+    }
+
     /* Controls */
     .vocab-header-controls { margin-bottom: 20px; }
     .mode-switch {
@@ -1045,59 +1077,155 @@
     .session-overlay {
         position: fixed; top: 0; left: 0; width: 100%; height: 100%;
         background: var(--bg); z-index: 2000; display: flex; flex-direction: column;
+        align-items: center; justify-content: flex-start;
+        scrollbar-gutter: stable;
     }
-    .session-header { padding: 20px; display: flex; justify-content: space-between; align-items: center; }
-    
+
+    .fc-close-btn {
+        position: absolute; top: 24px; right: 24px; z-index: 2005;
+        background: none; border: none; color: var(--on-surface); cursor: pointer; padding: 8px;
+    }
+
+    .fc-container {
+        width: 100%; max-width: 600px; height: 100%;
+        display: flex; flex-direction: column;
+        background: transparent;
+        padding: 20px;
+        box-sizing: border-box;
+    }
+
+    .fc-top-controls { padding: 20px; display: flex; justify-content: center; }
+    .fc-mode-toggle { background: rgba(0,0,0,0.05); border-radius: 20px; padding: 4px; display: flex; }
+    .fc-mode-opt {
+        padding: 8px 20px; border: none; background: transparent; border-radius: 16px;
+        font-weight: 500; cursor: pointer; color: var(--on-surface); opacity: 0.6;
+    }
+    .fc-mode-opt.active {
+        background: var(--surface); box-shadow: 0 2px 8px rgba(0,0,0,0.1); opacity: 1; color: var(--primary);
+    }
+
+    /* Progress Bar */
+    .fc-progress-wrapper { padding: 0 24px; margin-bottom: 10px; text-align: center; }
+    .fc-progress-track {
+        height: 12px; background: rgba(0,0,0,0.1); border-radius: 6px; overflow: hidden; margin-bottom: 4px;
+    }
+    .fc-progress-fill { height: 100%; background: var(--primary); width: 0%; transition: width 0.3s; }
+    .fc-progress-text { font-size: 0.8rem; opacity: 0.6; }
+
+    /* Card Area */
     .fc-card-area {
-        flex: 1; perspective: 1000px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; position: relative;
+        flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+        perspective: 1000px; position: relative;
+        width: 100%;
     }
+
     .fc-card {
-        width: 100%; max-width: 520px; height: 340px; position: relative;
-        transform-style: preserve-3d; transition: transform 0.6s;
+        width: 100%; height: 340px;
+        position: relative; transform-style: preserve-3d; transition: transform 0.6s;
         cursor: pointer;
+        background: transparent;
+        box-sizing: border-box;
+        outline: none;
+        border: none;
     }
+
+    .fc-card:focus { outline: none; }
+    .fc-card:focus-visible { outline: none; }
+
     .fc-card.flipped { transform: rotateY(180deg); }
 
     .fc-face {
-        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        position: absolute; width: 100%; height: 100%;
         backface-visibility: hidden; -webkit-backface-visibility: hidden;
         background: var(--surface); border-radius: 20px;
         box-shadow: 0 10px 30px rgba(0,0,0,0.1); border: 1px solid var(--border);
         display: flex; flex-direction: column; align-items: center; justify-content: center;
         padding: 20px; text-align: center;
+        box-sizing: border-box;
+        overflow: hidden;
     }
+
     .fc-front { z-index: 2; transform: rotateY(0deg); }
     .fc-back { transform: rotateY(180deg); }
 
-    .fc-word { font-size: 2.5rem; font-weight: 700; margin-bottom: 10px; color: var(--on-surface); }
-    .fc-hint { opacity: 0.5; font-size: 0.9rem; margin-top: 20px; }
-    .fc-trans { font-size: 2rem; color: var(--primary); margin-bottom: 20px; }
-    .fc-ctx { font-style: italic; opacity: 0.8; }
+    .fc-word { font-size: 2.5rem; font-weight: 700; color: var(--on-surface); margin-bottom: 10px; }
+    .fc-trans { font-size: 2rem; margin-bottom: 20px; color: var(--primary); font-weight: 600; }
+    .fc-ctx { font-style: italic; opacity: 0.9; font-size: 1.3rem; line-height: 1.5; color: var(--on-surface); }
+    .fc-hint { position: absolute; bottom: 20px; opacity: 0.4; font-size: 0.8rem; }
 
-    .controls { padding: 40px; display: flex; justify-content: center; gap: 20px; }
-    .study-controls { display: flex; flex-direction: column; align-items: center; gap: 10px; }
-    
-    .btn-rate {
-        width: 80px; height: 80px; border-radius: 50%; border: none; color: white; font-weight: 600; cursor: pointer;
+    /* Start Overlay for Review Mode */
+    .fc-start-overlay {
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
         display: flex; flex-direction: column; align-items: center; justify-content: center;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.2); transition: transform 0.1s;
+        z-index: 10;
     }
-    .btn-rate:active { transform: scale(0.95); }
-    .hard { background: #F44336; }
-    .medium { background: #FFC107; color: black; }
-    .easy { background: #4CAF50; }
+
+    .fc-start-btn {
+        width: 120px; height: 120px; border-radius: 50%; background: var(--primary);
+        color: white; border: none; cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        box-shadow: 0 8px 20px rgba(25, 118, 210, 0.4);
+        transition: transform 0.2s;
+    }
+
+    .fc-start-btn:active { transform: scale(0.95); }
+    .fc-start-btn span { font-size: 64px; }
+
+    /* Hint Text */
+    .fc-study-hint-text {
+        margin-top: 40px; text-align: center; font-weight: 500; opacity: 0.7; font-size: 0.9rem; color: var(--on-surface);
+    }
+
+    .fc-review-hint-text {
+        margin-top: 40px; text-align: center; font-weight: 500; opacity: 0.7; font-size: 0.9rem; color: var(--on-surface);
+    }
+
+    /* Bottom Controls */
+    .fc-bottom-controls {
+        padding: 24px; min-height: 160px; display: flex; align-items: center; justify-content: center;
+    }
+
+    .fc-ctrl-row { display: flex; align-items: center; gap: 24px; width: 100%; justify-content: center; }
+
+    .fc-icon-btn {
+        width: 48px; height: 48px; border-radius: 50%; border: 1px solid var(--border);
+        background: var(--surface); color: var(--on-surface); cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        transition: all 0.2s;
+    }
+
+    .fc-icon-btn:active { transform: scale(0.95); }
+    .fc-icon-btn.active { color: var(--primary); border-color: var(--primary); background: rgba(25, 118, 210, 0.05); }
 
     .fc-play-btn {
-        width: 82px; height: 82px; border-radius: 50%; border: none;
+        width: 72px; height: 72px; border-radius: 50%; border: none;
         background: var(--primary); color: white; cursor: pointer;
         display: flex; align-items: center; justify-content: center;
         box-shadow: 0 4px 12px rgba(25, 118, 210, 0.3);
+        transition: transform 0.1s;
     }
-    .fc-start-btn {
-        width: 100px; height: 100px; border-radius: 50%; background: var(--primary);
-        color: white; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center;
-        box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+
+    .fc-play-btn:active { transform: scale(0.95); }
+    .fc-play-btn span { font-size: 36px; }
+
+    .fc-rate-btn {
+        width: 100px; height: 100px; border-radius: 50%; border: none; font-weight: 600; cursor: pointer;
+        font-size: 0.9rem; transition: transform 0.1s; display: flex; flex-direction: column;
+        align-items: center; justify-content: center; gap: 4px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
     }
+
+    .fc-rate-btn:active { transform: scale(0.95); }
+    .fc-rate-btn.hard { background: #FF5252; color: white; }
+    .fc-rate-btn.mid { background: #FFC107; color: #333; }
+    .fc-rate-btn.easy { background: #4CAF50; color: white; }
+
+    .kb-hint { font-size: 0.7rem; opacity: 0.6; margin-top: 4px; font-weight: normal; }
+
+    .fc-study-hint-text { text-align: center; margin-top: 10px; font-weight: 500; opacity: 0.7; font-size: 0.9rem; color: var(--on-surface); }
+
+    .fc-stats-grid { display: flex; gap: 30px; justify-content: center; margin: 30px 0; }
+    .stat-item { display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 1.2rem; font-weight: bold; }
     .fc-start-overlay { position: absolute; z-index: 10; }
 
     .fc-close-btn {
