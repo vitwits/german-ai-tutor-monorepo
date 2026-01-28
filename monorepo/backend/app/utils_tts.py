@@ -6,9 +6,41 @@ from .models import TTSLog
 
 # Шлях до папки static/audio (відносно цього файлу)
 # Ми виходимо з monorepo/backend/app -> monorepo/backend -> monorepo -> ROOT -> static
-# Це дозволяє використовувати ВЖЕ ІСНУЮЧИЙ кеш зі старого проекту
+# Це дозволяє використовувати ВЖЕ ІСНУЮЧИЙ кеш зе старого проекту
 STATIC_AUDIO_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../static/audio"))
 CACHE_DIR = os.path.join(STATIC_AUDIO_DIR, "cache")
+
+def delete_sentence_audio_cache(text: str, lang: str = 'de') -> bool:
+    """
+    Видаляє кешоване аудіо речення (використовується при видаленні тексту).
+    Речення кешуються в /static/audio/cache/{lang}/{shard}/{hash}.ogg
+    
+    Args:
+        text: Текст речення
+        lang: Мова (за замовчуванням 'de' для речень у текстах)
+    
+    Returns:
+        True якщо файл був видалений, False якщо файлу не було
+    """
+    if not text:
+        return False
+    
+    # Нормалізація та хешування (ідентично до get_cached_or_generate_tts)
+    clean_text = text.lower().strip()
+    file_hash = hashlib.md5(clean_text.encode('utf-8')).hexdigest()
+    shard = file_hash[:2]
+    
+    filepath = os.path.join(CACHE_DIR, lang, shard, f"{file_hash}.ogg")
+    
+    if os.path.exists(filepath):
+        try:
+            os.remove(filepath)
+            return True
+        except Exception as e:
+            print(f"Error deleting audio cache: {e}")
+            return False
+    
+    return False
 
 async def get_cached_or_generate_tts(
     text: str, 

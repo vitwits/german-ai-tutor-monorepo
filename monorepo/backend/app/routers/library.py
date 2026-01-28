@@ -10,6 +10,7 @@ from ..models import User, Text, Vocabulary, GrammarExplanation, QuizResult
 from ..schemas import TextGenerateRequest, TextReadSchema, ToggleFavRequest, GrammarExplainRequest, QuizResultRequest, VocabWordSchema
 from ..dependencies import get_current_user
 from .. import services, billing
+from ..utils_tts import delete_sentence_audio_cache
 
 router = APIRouter(prefix="/api", tags=["library"])
 
@@ -112,8 +113,65 @@ async def delete_text(
     if not text or text.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Text not found")
     
+    # 1. Видаляємо кеш аудіо для всіх речень цього тексту
+    try:
+        sentences = json.loads(text.content_json) if text.content_json else []
+        for sentence in sentences:
+            sentence_text = sentence.get('de', '')
+            if sentence_text:
+                delete_sentence_audio_cache(sentence_text, lang='de')
+    except Exception as e:
+        print(f"Error deleting sentence audio cache: {e}")
+    
+    # 2. Видаляємо результати квізу для цього тексту
+    await db.execute(
+        select(QuizResult).where(
+            QuizResult.text_id == text_id,
+            QuizResult.user_id == current_user.id
+        )
+    )
+    quiz_results = (await db.execute(
+        select(QuizResult).where(
+            QuizResult.text_id == text_id,
+            QuizResult.user_id == current_user.id
+        )
+    )).scalars().all()
+    
+    for result in quiz_results:
+        await db.delete(result)
+    
+    # 3. Видаляємо пояснення граматики для цього тексту
+    await db.execute(
+        select(GrammarExplanation).where(
+            GrammarExplanation.text_id == text_id
+        )
+    )
+    grammar_exps = (await db.execute(
+        select(GrammarExplanation).where(
+            GrammarExplanation.text_id == text_id
+        )
+    )).scalars().all()
+    
+    for exp in grammar_exps:
+        await db.delete(exp)
+    
+    # 4. Видаляємо слова що привязані ТІЛЬКИ до цього тексту (is_favorite=0)
+    # Слова з is_favorite=1 залишаються, але text_id стає NULL
+    vocab_items = (await db.execute(
+        select(Vocabulary).where(
+            Vocabulary.text_id == text_id,
+            Vocabulary.user_id == current_user.id
+        )
+    )).scalars().all()
+    
+    for vocab in vocab_items:
+        if vocab.is_favorite == 0:
+            await db.delete(vocab)
+        else:
+            vocab.text_id = None  # Зберігаємо улюблене слово, але без прив'язки до тексту
+    
+    # 5. Видаляємо сам текст
     await db.delete(text)
-    # Cascading deletes for vocab etc. should be handled by DB schema or manually here
     await db.commit()
     return {"ok": True}
 

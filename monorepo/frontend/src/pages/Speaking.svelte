@@ -5,6 +5,7 @@
   import { fade } from "svelte/transition";
   import api from "../lib/api";
   import { addToast } from "../stores/toast";
+  import { confirmModal } from "../stores/confirm";
   import { user } from "../stores/auth";
   import { getUI } from "../lib/ui";
 
@@ -308,7 +309,19 @@
   
   async function reportSentence() {
       if (!sentence) return;
-      if (!confirm(ui.report_sentence + "?")) return;
+      
+      const isUkr = $user?.interface_language === 'ukr';
+      const title = isUkr ? "Повідомити про проблему?" : "Report issue?";
+      const message = isUkr 
+          ? "Ця вправа буде позначена як проблемна для адміністраторів, і ви більше не будете її бачити."
+          : "This exercise will be reported to administrators and won't appear for you again.";
+      const okText = isUkr ? "Повідомити" : "Report";
+      const cancelText = isUkr ? "Скасувати" : "Cancel";
+      
+      const confirmed = await confirmModal.ask(title, message, okText, cancelText, true);
+      
+      if (!confirmed) return;
+      
       try {
           await api.post('/report_sentence', { id: sentence.id });
           addToast(ui.sentence_reported || "Reported", "success");

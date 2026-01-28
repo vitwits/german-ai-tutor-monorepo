@@ -21,6 +21,7 @@ async def speaking_next(
     
     query = select(Sentence).where(
         Sentence.level == current_user.level,
+        Sentence.reported == 0,  # Исключаем reported sentences для всех пользователей
         Sentence.id.not_in(blocked_sub)
     ).order_by(func.random()).limit(1)
     
@@ -28,8 +29,13 @@ async def speaking_next(
     sentence = result.scalar_one_or_none()
     
     if not sentence:
-        # Fallback
-        result = await db.execute(select(Sentence).order_by(func.random()).limit(1))
+        # Fallback: берем любую речение (но не reported и не blocked)
+        result = await db.execute(
+            select(Sentence).where(
+                Sentence.reported == 0,
+                Sentence.id.not_in(blocked_sub)
+            ).order_by(func.random()).limit(1)
+        )
         sentence = result.scalar_one_or_none()
         
     if not sentence:

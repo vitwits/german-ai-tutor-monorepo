@@ -227,18 +227,24 @@ async def quick_translate(
     word_data['ua'] = remove_duplicate_parts(word_data.get('ua'))
     word_data['en'] = remove_duplicate_parts(word_data.get('en'))
 
-    # 3. Generate Audio (German)
+    # 3. Generate Audio (German) - весь текст без розбиття
     if not await get_cached_or_generate_tts(req.text, 'de', current_user.id, db, log_stats=True):
         return {"ok": False, "error_key": "audio_failed"}
 
-    # 3.1 Generate Audio (Translation)
-    target_lang = 'uk' if current_user.interface_language == 'ukr' else 'en'
-    trans_text = word_data.get('ua') if target_lang == 'uk' else word_data.get('en')
-    
-    if trans_text:
-        parts = [p.strip() for p in re.split(r'[,;]', trans_text) if p.strip()]
+    # 3.1 Generate Audio (Ukrainian) - розбиваємо на частини
+    uk_text = word_data.get('ua')
+    if uk_text:
+        parts = [p.strip() for p in re.split(r'[,;]', uk_text) if p.strip()]
         for part in parts:
-            if not await get_cached_or_generate_tts(part, target_lang, current_user.id, db, log_stats=True):
+            if not await get_cached_or_generate_tts(part, 'uk', current_user.id, db, log_stats=True):
+                return {"ok": False, "error_key": "audio_failed"}
+    
+    # 3.2 Generate Audio (English) - розбиваємо на частини
+    en_text = word_data.get('en')
+    if en_text:
+        parts = [p.strip() for p in re.split(r'[,;]', en_text) if p.strip()]
+        for part in parts:
+            if not await get_cached_or_generate_tts(part, 'en', current_user.id, db, log_stats=True):
                 return {"ok": False, "error_key": "audio_failed"}
     
     # 4. Save

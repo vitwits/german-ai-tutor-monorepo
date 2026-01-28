@@ -12,7 +12,7 @@ from typing import Optional
 from datetime import timedelta
 
 from ..database import get_db
-from ..models import User, Sentence, SentenceBatch, TempSentence
+from ..models import User, Sentence, SentenceBatch, TempSentence, TTSLog
 from ..dependencies import get_current_user
 from ..security import verify_password, create_access_token
 
@@ -211,6 +211,209 @@ async def admin_logout():
     return response
 
 
+@router.get("/caching-stats", response_class=HTMLResponse)
+async def caching_stats(
+    period: str = Query("all", regex="^(today|month|all)$"),
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """TTS Caching Statistics"""
+    query = select(TTSLog.language, TTSLog.source, func.count(TTSLog.id), func.sum(TTSLog.chars))
+    
+    # Apply period filter
+    if period == "today":
+        start_date = datetime.datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        query = query.where(TTSLog.created_at >= start_date)
+    elif period == "month":
+        today = datetime.datetime.utcnow()
+        start_date = today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        query = query.where(TTSLog.created_at >= start_date)
+    
+    result = await db.execute(query.group_by(TTSLog.language, TTSLog.source))
+    rows = result.all()
+    
+    # Process data
+    stats_map = {}
+    for lang, source, count, chars in rows:
+        if lang not in stats_map:
+            stats_map[lang] = {"api_req": 0, "api_chars": 0, "cache_req": 0, "cache_chars": 0}
+        
+        c_val = int(chars) if chars else 0
+        if source == "api":
+            stats_map[lang]["api_req"] += count
+            stats_map[lang]["api_chars"] += c_val
+        else:
+            stats_map[lang]["cache_req"] += count
+            stats_map[lang]["cache_chars"] += c_val
+    
+    # Build stats list
+    lang_map = {"de": ("German", "🇩🇪"), "en": ("English", "🇬🇧"), "uk": ("Ukrainian", "🇺🇦")}
+    data = []
+    grand = {"api_req": 0, "api_chars": 0, "cache_req": 0, "cache_chars": 0, "total_req": 0, "total_chars": 0}
+    
+    for lang_code in ["de", "en", "uk"]:
+        s = stats_map.get(lang_code, {"api_req": 0, "api_chars": 0, "cache_req": 0, "cache_chars": 0})
+        
+        total_req = s["api_req"] + s["cache_req"]
+        total_chars = s["api_chars"] + s["cache_chars"]
+        pct = 0
+        if total_req > 0:
+            pct = round((s["cache_req"] / total_req) * 100, 1)
+        
+        lang_name, emoji = lang_map.get(lang_code, (lang_code.upper(), ""))
+        
+        data.append({
+            "lang_code": lang_code,
+            "lang_name": lang_name,
+            "emoji": emoji,
+            "api_req": s["api_req"],
+            "api_chars": s["api_chars"],
+            "cache_req": s["cache_req"],
+            "cache_chars": s["cache_chars"],
+            "total_req": total_req,
+            "total_chars": total_chars,
+            "pct": pct
+        })
+        
+        grand["api_req"] += s["api_req"]
+        grand["api_chars"] += s["api_chars"]
+        grand["cache_req"] += s["cache_req"]
+        grand["cache_chars"] += s["cache_chars"]
+        grand["total_req"] += total_req
+        grand["total_chars"] += total_chars
+    
+    grand_pct = 0
+    if grand["total_req"] > 0:
+        grand_pct = round((grand["cache_req"] / grand["total_req"]) * 100, 1)
+    
+    # Build rows HTML
+    rows_html = ""
+    for s in data:
+        rows_html += f"""
+        <tr>
+            <td style="font-weight: bold;">{s["emoji"]} {s["lang_name"]}</td>
+            <td style="text-align: center;">{s["api_req"]} <span style="color: #999;">({s["api_chars"]:,})</span></td>
+            <td style="text-align: center; color: #2e7d32; font-weight: bold;">{s["cache_req"]} <span style="color: #999; font-weight: normal;">({s["cache_chars"]:,})</span></td>
+            <td style="text-align: center;">{s["total_req"]} <span style="color: #999;">({s["total_chars"]:,})</span></td>
+            <td>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="flex: 1; height: 24px; background: #e0e0e0; border-radius: 4px; position: relative; overflow: hidden;">
+                        <div style="height: 100%; background: linear-gradient(90deg, #4caf50, #45a049); width: {s["pct"]}%; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; font-weight: bold;">
+                            {s["pct"]}%
+                        </div>
+                    </div>
+                </div>
+            </td>
+        </tr>
+        """
+    
+    # Total row
+    rows_html += f"""
+        <tr style="background-color: #f5f5f5; font-weight: bold; border-top: 2px solid #ddd;">
+            <td>TOTAL</td>
+            <td style="text-align: center;">{grand["api_req"]} <span style="color: #999;">({grand["api_chars"]:,})</span></td>
+            <td style="text-align: center; color: #2e7d32;">{grand["cache_req"]} <span style="color: #999; font-weight: normal;">({grand["cache_chars"]:,})</span></td>
+            <td style="text-align: center;">{grand["total_req"]} <span style="color: #999;">({grand["total_chars"]:,})</span></td>
+            <td>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="flex: 1; height: 24px; background: #e0e0e0; border-radius: 4px; position: relative; overflow: hidden;">
+                        <div style="height: 100%; background: linear-gradient(90deg, #2196F3, #1976D2); width: {grand_pct}%; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; font-weight: bold;">
+                            {grand_pct}%
+                        </div>
+                    </div>
+                </div>
+            </td>
+        </tr>
+        """
+    
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/css/bootstrap.min.css" rel="stylesheet">
+        <style>
+            * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+            body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto; background-color: #f5f7fa; }}
+            .navbar {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 30px; }}
+            .navbar-container {{ display: flex; align-items: center; justify-content: flex-start; padding: 0 30px; height: 50px; gap: 40px; }}
+            .navbar-brand {{ font-size: 1.5em; font-weight: 700; color: white; text-decoration: none; display: flex; align-items: center; gap: 10px; white-space: nowrap; }}
+            .navbar-brand:hover {{ color: #f0f0f0; }}
+            .nav-menu {{ display: flex; gap: 0; list-style: none; margin: 0; padding: 0; }}
+            .nav-item {{ position: relative; }}
+            .nav-link {{ color: rgba(255,255,255,0.9); text-decoration: none; padding: 15px 12px; font-size: 0.9em; font-weight: 500; transition: all 0.3s; border-bottom: 3px solid transparent; height: 50px; display: flex; align-items: center; white-space: nowrap; }}
+            .nav-link:hover {{ color: white; background-color: rgba(255,255,255,0.1); border-bottom-color: rgba(255,255,255,0.3); }}
+            .nav-link.active {{ color: white; background-color: rgba(255,255,255,0.15); border-bottom-color: white; }}
+            .nav-right {{ display: flex; gap: 8px; align-items: center; margin-left: auto; color: white; font-size: 0.85em; white-space: nowrap; }}
+            .nav-right a.nav-link {{ padding: 8px 12px; height: auto; border-bottom: none; }}
+            .container-main {{ max-width: 1400px; margin: 0 auto; padding: 0 30px; }}
+            h1 {{ font-size: 2em; color: #2c3e50; margin-bottom: 10px; font-weight: 700; }}
+            .subtitle {{ color: #999; font-size: 0.9em; margin-bottom: 30px; }}
+            .period-buttons {{ margin-bottom: 30px; display: flex; gap: 10px; }}
+            .period-btn {{ padding: 8px 16px; border: 1px solid #ddd; background: white; border-radius: 6px; cursor: pointer; text-decoration: none; color: #333; font-weight: 500; transition: all 0.2s; }}
+            .period-btn:hover {{ border-color: #667eea; color: #667eea; }}
+            .period-btn.active {{ background: #667eea; color: white; border-color: #667eea; }}
+            .table-responsive {{ background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: hidden; }}
+            table {{ margin: 0; width: 100%; border-collapse: collapse; }}
+            table thead {{ background-color: #f8f9fa; border-bottom: 2px solid #e9ecef; }}
+            table th {{ padding: 15px; font-weight: 600; color: #2c3e50; text-align: left; }}
+            table td {{ padding: 15px; border-bottom: 1px solid #e9ecef; }}
+            table tbody tr:hover {{ background-color: #fafafa; }}
+        </style>
+    </head>
+    <body>
+        <nav class="navbar">
+            <div class="navbar-container">
+                <a class="navbar-brand" href="/admin">🎓 Admin</a>
+                <ul class="nav-menu">
+                    <li class="nav-item"><a class="nav-link" href="/admin">Dashboard</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/users">Users</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
+                </ul>
+                <div class="nav-right">
+                    <span title="{current_user.email}">{current_user.email.split("@")[0]}</span>
+                    <a class="nav-link" href="/admin/logout">Logout</a>
+                </div>
+            </div>
+        </nav>
+        
+        <div class="container-main">
+            <h1>TTS Caching Statistics</h1>
+            <p class="subtitle">Efficiency of local audio caching vs Google TTS API calls.</p>
+            
+            <div class="period-buttons">
+                <a href="?period=today" class="period-btn {'active' if period == 'today' else ''}">Today</a>
+                <a href="?period=month" class="period-btn {'active' if period == 'month' else ''}">This Month</a>
+                <a href="?period=all" class="period-btn {'active' if period == 'all' else ''}">All Time</a>
+            </div>
+            
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="vertical-align: middle;">Language</th>
+                            <th style="text-align: center;">Google TTS (API)<br><small style="font-weight: normal; color: #999;">Requests (Tokens)</small></th>
+                            <th style="text-align: center;">Cached<br><small style="font-weight: normal; color: #999;">Requests (Tokens)</small></th>
+                            <th style="text-align: center;">Total<br><small style="font-weight: normal; color: #999;">Requests (Tokens)</small></th>
+                            <th>Cache Efficiency (%)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {rows_html}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    return html
+
+
 @router.get("/", response_class=HTMLResponse)
 async def admin_index(
     current_user: User = Depends(check_admin_access),
@@ -262,6 +465,7 @@ async def admin_index(
                     <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/users">Users</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
                 </ul>
                 <div class="nav-right">
                     <span title="{current_user.email}">{current_user.email.split("@")[0]}</span>
@@ -470,6 +674,7 @@ async def sentence_list(
                     <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/users">Users</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
                 </ul>
                 <div class="nav-right">
                     <span title="{current_user.email}">{current_user.email.split("@")[0]}</span>
@@ -726,6 +931,7 @@ async def reported_sentences(
                     <li class="nav-item"><a class="nav-link active" href="/admin/reported">Reported</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/users">Users</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
                 </ul>
                 <div class="nav-right">
                     <span title="{current_user.email}">{current_user.email.split("@")[0]}</span>
@@ -906,6 +1112,7 @@ async def admin_users(
                     <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
                     <li class="nav-item"><a class="nav-link active" href="/admin/users">Users</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
                 </ul>
                 <div class="nav-right">
                     <span title="{current_user.email}">{current_user.email.split("@")[0]}</span>
@@ -1000,6 +1207,7 @@ async def edit_user(
                     <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
                     <li class="nav-item"><a class="nav-link active" href="/admin/users">Users</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
                 </ul>
                 <div class="nav-right">
                     <span title="{current_user.email}">{current_user.email.split("@")[0]}</span>
@@ -1084,6 +1292,7 @@ async def update_user(
     return RedirectResponse(url="/admin/users", status_code=302)
 
 
+@router.post("/sentence/{sentence_id}/delete")
 async def delete_sentence(
     sentence_id: int,
     current_user: User = Depends(check_admin_access),
@@ -1107,10 +1316,11 @@ async def delete_sentence(
             except Exception as e:
                 print(f"Error deleting file {full_path}: {e}")
     
+    # Видалити саму речення
     await db.delete(sentence)
     await db.commit()
     
-    return {"ok": True}
+    return RedirectResponse(url="/admin/reported", status_code=302)
 
 
 @router.post("/sentence/{sentence_id}/unreport")
@@ -1445,6 +1655,7 @@ async def generate_view(
                     <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/users">Users</a></li>
                     <li class="nav-item"><a class="nav-link active" href="/admin/generate">Generate</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
                 </ul>
                 <div class="nav-right">
                     <span title="{current_user.email}">{current_user.email.split("@")[0]}</span>
