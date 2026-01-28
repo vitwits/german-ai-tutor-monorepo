@@ -35,6 +35,7 @@
   let currentAudio = null;
   let fcIsRandom = $state(false);
   let fcAudioEnabled = $state(true);
+  let fcStudyLoop = $state(false); // Цикличное воспроизведение в режиме Study
   
   // Session Completion Splash Screen
   let showSessionSplash = $state(false);
@@ -102,6 +103,15 @@
 
   // --- FLASHCARD LOGIC ---
 
+  function shuffleArray(arr) {
+      const shuffled = [...arr];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      return shuffled;
+  }
+
   async function startSession() {
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     loading = true;
@@ -113,8 +123,8 @@
         
         // Передаємо mode параметр - Study або Review
         const res = await api.get(`/vocab/session?mode=${fcMode}&limit=${limit}&levels=${levels}`);
-        sessionCards = res.data;
-        originalSessionCards = [...res.data];
+        sessionCards = shuffleArray(res.data);
+        originalSessionCards = [...sessionCards];
         
         if (sessionCards.length > 0) {
             showSession = true;
@@ -122,8 +132,9 @@
             isFlipped = false;
             fcStats = { easy: 0, medium: 0, hard: 0 };
             fcIsPlaying = false;
+            fcStudyLoop = false; // Цикл отключен по умолчанию
             fcReviewStarted = fcMode === 'review' ? false : true; // Study auto-plays, Review needs manual start
-            fcIsRandom = false;
+            fcIsRandom = true; // Завжди рандомний порядок
         } else {
             addToast("No words found for session", "info");
         }
@@ -147,6 +158,7 @@
       
       showSession = false;
       fcIsPlaying = false;
+      fcStudyLoop = false;
       if (fcLoopTimeout) clearTimeout(fcLoopTimeout);
       if (currentAudio) currentAudio.pause();
   }
@@ -223,8 +235,24 @@
       if (!fcIsPlaying) return;
 
       // 6. Next
-      currentCardIdx = (currentCardIdx + 1) % sessionCards.length;
-      runStudyLoop();
+      const nextIdx = currentCardIdx + 1;
+      
+      // Если достигли конца списка
+      if (nextIdx >= sessionCards.length) {
+          if (fcStudyLoop) {
+              // Цикл включен - продолжаем с начала
+              currentCardIdx = 0;
+              runStudyLoop();
+          } else {
+              // Цикл отключен - закрыть сессию и показать сплеш
+              await fcClose();
+              sessionScore = 100; // 100% для Study (все слова просмотрены)
+              showSessionSplash = true;
+          }
+      } else {
+          currentCardIdx = nextIdx;
+          runStudyLoop();
+      }
   }
 
   function toggleFcPlay() {
@@ -267,13 +295,38 @@
   function nextCard() {
       if (fcLoopTimeout) clearTimeout(fcLoopTimeout);
       if (currentAudio) currentAudio.pause();
-      currentCardIdx = (currentCardIdx + 1) % sessionCards.length;
+      
+      // В Study режиме: не циклируем при ручном переключении, если цикл отключен
+      if (fcMode === 'study') {
+          const nextIdx = currentCardIdx + 1;
+          if (nextIdx >= sessionCards.length) {
+              fcIsPlaying = false;
+              fcClose();
+              sessionScore = 100;
+              showSessionSplash = true;
+              return;
+          }
+          currentCardIdx = nextIdx;
+      } else {
+          // Review режим: циклируем как обычно
+          currentCardIdx = (currentCardIdx + 1) % sessionCards.length;
+      }
+      
       isFlipped = false;
+      
       // Якщо було включено в Study - продовжуємо цикл з наступним словом
       if (fcMode === 'study' && fcIsPlaying) {
           runStudyLoop();
       } else {
           fcIsPlaying = false;
+      }
+      
+      // Перевіримо, чи ми в Study режимі і досягли кінця списку
+      if (fcMode === 'study' && currentCardIdx >= sessionCards.length - 1 && !fcStudyLoop) {
+          fcIsPlaying = false;
+          fcClose();
+          sessionScore = 100;
+          showSessionSplash = true;
       }
   }
 
@@ -284,7 +337,19 @@
   function prevCard() {
       if (fcLoopTimeout) clearTimeout(fcLoopTimeout);
       if (currentAudio) currentAudio.pause();
-      currentCardIdx = (currentCardIdx - 1 + sessionCards.length) % sessionCards.length;
+      
+      // В Study режиме: не циклируем при ручном переключении
+      if (fcMode === 'study') {
+          const prevIdx = currentCardIdx - 1;
+          if (prevIdx < 0) {
+              fcIsPlaying = false;
+              return;
+          }
+          currentCardIdx = prevIdx;
+      } else {
+          // Review режим: циклируем как обычно
+          currentCardIdx = (currentCardIdx - 1 + sessionCards.length) % sessionCards.length;
+      }
       isFlipped = false;
       // Якщо було включено в Study - продовжуємо цикл з попереднім словом
       if (fcMode === 'study' && fcIsPlaying) {
@@ -332,31 +397,6 @@
     } catch (e) {
         console.error(e);
     }
-  }
-
-  function toggleShuffle() {
-      fcIsRandom = !fcIsRandom;
-      if (fcIsRandom) {
-          // Беремо слова ПІСЛЯ поточного (currentCardIdx + 1)
-          const restCards = sessionCards.slice(currentCardIdx + 1);
-          
-          // Перемішуємо їх
-          let shuffled = [...restCards];
-          for (let i = shuffled.length - 1; i > 0; i--) {
-              const j = Math.floor(Math.random() * (i + 1));
-              [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-          }
-          
-          // З'єднуємо: до-поточне + поточне + перемішане-після
-          sessionCards = [
-              ...sessionCards.slice(0, currentCardIdx + 1),
-              ...shuffled
-          ];
-      } else {
-          // Повертаємось до оригіналу
-          sessionCards = [...originalSessionCards];
-      }
-      // Не скидаємо isFlipped - нехай картка залишається в тому стані де була
   }
 
   // --- AUDIO & UTILS ---
@@ -805,8 +845,8 @@
                         <button class="fc-play-btn" onclick={toggleFcPlay}>
                             <span class="material-symbols-outlined">{fcIsPlaying ? 'pause' : 'play_arrow'}</span>
                         </button>
-                        <button class="fc-icon-btn" class:active={fcIsRandom} onclick={toggleShuffle}>
-                            <span class="material-symbols-outlined">shuffle</span>
+                        <button class="fc-icon-btn" class:active={fcStudyLoop} onclick={(e) => { e.stopPropagation(); fcStudyLoop = !fcStudyLoop; }}>
+                            <span class="material-symbols-outlined">repeat</span>
                         </button>
                     </div>
                 {:else if !isFlipped}
@@ -815,17 +855,11 @@
                             <button class="fc-icon-btn" class:active={fcAudioEnabled} onclick={(e) => { e.stopPropagation(); toggleFcAudio(); }}>
                                 <span class="material-symbols-outlined">volume_up</span>
                             </button>
-                            <button class="fc-icon-btn" class:active={fcIsRandom} onclick={toggleShuffle}>
-                                <span class="material-symbols-outlined">shuffle</span>
-                            </button>
                         </div>
                     {:else}
                         <div class="fc-ctrl-row">
                             <button class="fc-icon-btn" class:active={fcAudioEnabled} onclick={(e) => { e.stopPropagation(); toggleFcAudio(); }}>
                                 <span class="material-symbols-outlined">volume_up</span>
-                            </button>
-                            <button class="fc-icon-btn" class:active={fcIsRandom} onclick={toggleShuffle}>
-                                <span class="material-symbols-outlined">shuffle</span>
                             </button>
                         </div>
                     {/if}
