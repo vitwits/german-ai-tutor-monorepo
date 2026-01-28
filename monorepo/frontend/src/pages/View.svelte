@@ -714,7 +714,7 @@
             </h2>
             
             <div class="toolbar">
-                <span class="level-badge lvl-{text.level.toLowerCase()}">{text.level}</span>
+                <span class="level-badge lvl-{text.level.toLowerCase()}" style="margin-right: 12px;">{text.level}</span>
                 
                 <button class="badge-btn" onclick={() => showTrans = !showTrans}>
                     <span class="material-symbols-outlined">{showTrans ? 'visibility_off' : 'translate'}</span>
