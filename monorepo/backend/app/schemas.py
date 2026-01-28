@@ -71,6 +71,11 @@ class VocabWordSchema(BaseModel):
     sentence_index: Optional[int]
     start_index: Optional[int]
     end_index: Optional[int]
+    interval: Optional[float] = None
+    ease_factor: Optional[float] = None
+    next_review: Optional[datetime] = None
+    last_reviewed: Optional[datetime] = None
+    study_view_count: Optional[int] = 0
     display_trans: Optional[str] = None
 
     class Config:
@@ -128,6 +133,7 @@ class QuizResultRequest(BaseModel):
 class UserSettingsUpdate(BaseModel):
     interface_language: Optional[str] = None
     vocab_session_size: Optional[int] = None
+    study_batch_size: Optional[int] = None
 
 class UserLevelUpdate(BaseModel):
     level: str

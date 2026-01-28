@@ -70,6 +70,7 @@ async def read_users_me(current_user: User = Depends(get_current_user)):
 async def update_settings(req: UserSettingsUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     if req.interface_language: current_user.interface_language = req.interface_language
     if req.vocab_session_size: current_user.vocab_session_size = req.vocab_session_size
+    if req.study_batch_size: current_user.study_batch_size = req.study_batch_size
     await db.commit()
     return {"ok": True}
 

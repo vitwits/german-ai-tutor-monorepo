@@ -22,6 +22,7 @@ class User(Base):
     vocab_view_mode: Mapped[Optional[str]] = mapped_column(String, default='list')
     vocab_per_page: Mapped[Optional[int]] = mapped_column(Integer, default=20)
     vocab_session_size: Mapped[Optional[int]] = mapped_column(Integer, default=20)
+    study_batch_size: Mapped[Optional[int]] = mapped_column(Integer, default=50)
 
 class Text(Base):
     __tablename__ = "texts"
@@ -58,6 +59,9 @@ class Vocabulary(Base):
     ease_factor: Mapped[float] = mapped_column(Float, default=2.5)
     next_review: Mapped[Optional[datetime]] = mapped_column(DateTime)
     last_reviewed: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    
+    # Study tracking
+    study_view_count: Mapped[int] = mapped_column(Integer, default=0)
 
 class GrammarExplanation(Base):
     __tablename__ = "grammar_explanations"

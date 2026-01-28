@@ -126,28 +126,82 @@ async def get_vocab_list(
 
 @router.get("/vocab/session")
 async def vocab_session(
+    mode: str = "study",  # 'study' або 'review'
     levels: str = None,
     limit: int = 50,
-    q: str = None,
+    offset: int = 0,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    query = select(Vocabulary).where(
+    """
+    Study Mode: рандомна вибірка всіх улюблених слів
+    Review Mode: розумна вибірка - OVERDUE > NEW+FREQUENT > NEW+INFREQUENT > FUTURE+FREQUENT
+    """
+    
+    now = datetime.utcnow()
+    base_query = select(Vocabulary).where(
         Vocabulary.user_id == current_user.id,
-        Vocabulary.is_favorite == 1  # Показуємо тільки улюблені слова
+        Vocabulary.is_favorite == 1
     )
     
     if levels:
         lvl_list = [l for l in levels.split(',') if l]
-        if lvl_list: query = query.where(Vocabulary.level.in_(lvl_list))
+        if lvl_list: 
+            base_query = base_query.where(Vocabulary.level.in_(lvl_list))
     
-    # Сортування: спочатку прострочені (next_review < now), потім нові (next_review NULL)
-    query = query.order_by(
-        func.coalesce(Vocabulary.next_review, datetime.utcnow()).asc()
-    ).limit(limit)
+    # ========== STUDY MODE: Випадкова вибірка всіх слів ==========
+    if mode == "study":
+        # Отримуємо ВСІ слова та сортуємо рандомно
+        query = base_query.order_by(func.random())
+        result = await db.execute(query)
+        words = result.scalars().all()
+        
+    # ========== REVIEW MODE: Розумна вибірка за пріоритетами ==========
+    else:
+        # Категорія 1: OVERDUE (next_review < now)
+        overdue = await db.execute(
+            base_query.where(Vocabulary.next_review < now)
+            .order_by(Vocabulary.next_review.asc())
+        )
+        overdue_words = overdue.scalars().all()
+        
+        # Категорія 2: NEW (next_review IS NULL)
+        new_q = await db.execute(
+            base_query.where(Vocabulary.next_review.is_(None))
+            .order_by(func.random())
+        )
+        new_words = new_q.scalars().all()
+        
+        # Розділяємо NEW на FREQUENT (study_view_count >= 3) та INFREQUENT
+        new_frequent = [w for w in new_words if w.study_view_count >= 3]
+        new_infrequent = [w for w in new_words if w.study_view_count < 3]
+        
+        # Категорія 3: FUTURE (next_review > now)
+        future = await db.execute(
+            base_query.where(Vocabulary.next_review > now)
+            .order_by(func.random())
+        )
+        future_words = future.scalars().all()
+        
+        # Розділяємо FUTURE на FREQUENT (study_view_count >= 5) та INFREQUENT
+        future_frequent = [w for w in future_words if w.study_view_count >= 5]
+        # future_infrequent = [w for w in future_words if w.study_view_count < 5]
+        
+        # Об'єднуємо по пріоритетам:
+        # 1. OVERDUE (ваговий коефіцієнт 10)
+        # 2. NEW + FREQUENT (вага 8)
+        # 3. NEW + INFREQUENT (вага 5)
+        # 4. FUTURE + FREQUENT (вага 3)
+        
+        words = (
+            overdue_words +
+            new_frequent +
+            new_infrequent +
+            future_frequent
+        )
     
-    result = await db.execute(query)
-    words = result.scalars().all()
+    # Застосуємо limit/offset
+    words = words[offset : offset + limit]
     
     cards = []
     target_lang = 'uk' if current_user.interface_language == 'ukr' else 'en'
@@ -155,8 +209,7 @@ async def vocab_session(
     for w in words:
         trans = w.ua if target_lang == 'uk' else w.en
         
-        # Отримуємо аудіо (тільки з кешу, generate=False)
-        # ВАЖЛИВО: читаємо з w.display (що озвучувалося при генерації), а не w.origin!
+        # Отримуємо аудіо (тільки з кешу)
         audio_de = await get_cached_or_generate_tts(w.display, 'de', current_user.id, db, generate=False)
         
         trans_urls = []
@@ -166,17 +219,53 @@ async def vocab_session(
                 url = await get_cached_or_generate_tts(part, target_lang, current_user.id, db, generate=False)
                 if url: trans_urls.append(url)
 
-        cards.append({
+        card_data = {
             "id": w.id,
             "display": w.display,
             "trans": trans,
             "ctx": w.ctx,
             "level": w.level,
             "audio_de_url": audio_de,
-            "audio_trans_urls": trans_urls
-        })
+            "audio_trans_urls": trans_urls,
+            "interval": w.interval,
+            "ease_factor": w.ease_factor,
+            "next_review": w.next_review,
+            "last_reviewed": w.last_reviewed,
+        }
+        
+        # Для Review режиму додаємо інформацію про статус
+        if mode == "review":
+            card_data["study_view_count"] = w.study_view_count
+        
+        cards.append(card_data)
         
     return cards
+
+@router.post("/vocab/record_study_views")
+async def record_study_views(
+    word_ids: list[str],
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Записує, що юзер переглядав ці слова в режимі Study.
+    Інкрементує study_view_count для кожного слова.
+    """
+    if not word_ids:
+        return {"ok": True, "updated": 0}
+    
+    # Інкрементуємо study_view_count для всіх слів
+    await db.execute(
+        update(Vocabulary)
+        .where(
+            Vocabulary.id.in_(word_ids),
+            Vocabulary.user_id == current_user.id
+        )
+        .values(study_view_count=Vocabulary.study_view_count + 1)
+    )
+    
+    await db.commit()
+    return {"ok": True, "updated": len(word_ids)}
 
 @router.post("/vocab/update_progress")
 async def update_progress(req: VocabProgressRequest, db: AsyncSession = Depends(get_db)):

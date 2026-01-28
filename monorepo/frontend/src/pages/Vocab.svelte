@@ -102,11 +102,13 @@
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     loading = true;
     try {
-        // If study mode, fetch more for infinite feel
-        const limit = fcMode === 'study' ? 100 : ($user?.vocab_session_size || 20);
+        const limit = fcMode === 'study' 
+            ? ($user?.study_batch_size || 50)  // Study: використовуємо study_batch_size
+            : ($user?.vocab_session_size || 20); // Review: використовуємо vocab_session_size
         const levels = selectedLevels.join(',');
         
-        const res = await api.get(`/vocab/session?limit=${limit}&levels=${levels}`);
+        // Передаємо mode параметр - Study або Review
+        const res = await api.get(`/vocab/session?mode=${fcMode}&limit=${limit}&levels=${levels}`);
         sessionCards = res.data;
         originalSessionCards = [...res.data];
         
@@ -116,7 +118,7 @@
             isFlipped = false;
             fcStats = { easy: 0, medium: 0, hard: 0 };
             fcIsPlaying = false;
-            fcReviewStarted = false;
+            fcReviewStarted = fcMode === 'review' ? false : true; // Study auto-plays, Review needs manual start
             fcIsRandom = false;
         } else {
             addToast("No words found for session", "info");
@@ -128,7 +130,17 @@
     }
   }
 
-  function fcClose() {
+  async function fcClose() {
+      // Для Study режиму: записуємо всі переглянуті слова в БД
+      if (fcMode === 'study' && sessionCards.length > 0) {
+          try {
+              const wordIds = sessionCards.map(card => card.id);
+              await api.post('/vocab/record_study_views', wordIds);
+          } catch (e) {
+              console.error('Failed to record study views:', e);
+          }
+      }
+      
       showSession = false;
       fcIsPlaying = false;
       if (fcLoopTimeout) clearTimeout(fcLoopTimeout);
@@ -146,7 +158,7 @@
 
   // Study Loop (Auto-play)
   async function runStudyLoop() {
-      if (!fcIsPlaying || !showSession) return;
+      if (!fcIsPlaying || !showSession || fcMode !== 'study') return;
       
       const card = sessionCards[currentCardIdx];
       isFlipped = false;
@@ -186,6 +198,7 @@
   }
 
   function toggleFcPlay() {
+      if (fcMode !== 'study') return; // Тільки для Study режиму
       fcIsPlaying = !fcIsPlaying;
       if (fcIsPlaying) runStudyLoop();
       else {
@@ -195,13 +208,19 @@
   }
 
   function startReview() {
-      fcReviewStarted = true;
-      // Play first audio
-      playAudio(sessionCards[currentCardIdx].audio_de_url);
+      // Тільки для Review режиму - починаємо з першого слова
+      if (fcMode === 'review') {
+          fcReviewStarted = true;
+          currentCardIdx = 0;
+          playAudio(sessionCards[currentCardIdx]?.audio_de_url);
+      }
   }
 
   function flipCard() {
-    if (fcMode === 'study') return; // Auto only
+    // Study режим: не дозволяємо flip (це auto-play)
+    if (fcMode === 'study') return;
+    
+    // Review режим: flip карточки
     if (!fcReviewStarted) return;
     isFlipped = !isFlipped;
     if (isFlipped) {
@@ -233,6 +252,15 @@
 
   async function rateCard(rating) {
     const card = sessionCards[currentCardIdx];
+    
+    // === STUDY MODE: Просто продовжуємо, без обновлення БД ===
+    if (fcMode === 'study') {
+        currentCardIdx = (currentCardIdx + 1) % sessionCards.length;
+        isFlipped = false;
+        return;
+    }
+    
+    // === REVIEW MODE: Обновлюємо SM-2 та переходимо до наступного ===
     fcStats[rating]++;
     try {
         await api.post('/vocab/update_progress', { id: card.id, rating });
@@ -242,7 +270,7 @@
             currentCardIdx++;
             playAudio(sessionCards[currentCardIdx].audio_de_url);
         } else {
-            // End of session
+            // Кінець сесії Review
             alert(ui.fc_session_complete);
             showSession = false;
             loadData();
@@ -728,7 +756,7 @@
                                 <span class="material-symbols-outlined">shuffle</span>
                             </button>
                         </div>
-                    {:else if fcReviewStarted && !isFlipped}
+                    {:else}
                         <div class="fc-ctrl-row">
                             <button class="fc-icon-btn" class:active={fcAudioEnabled} onclick={(e) => { e.stopPropagation(); toggleFcAudio(); }}>
                                 <span class="material-symbols-outlined">volume_up</span>
@@ -738,7 +766,7 @@
                             </button>
                         </div>
                     {/if}
-                {:else if fcReviewStarted && isFlipped}
+                {:else if fcMode === 'review' && fcReviewStarted && isFlipped}
                     <div class="fc-ctrl-row" style="gap: 20px;">
                         <button class="fc-rate-btn hard" onclick={() => rateCard('hard')}>
                             <span class="material-symbols-outlined">sentiment_very_dissatisfied</span>

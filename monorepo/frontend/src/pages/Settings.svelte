@@ -6,6 +6,7 @@
 
   let lang = 'ukr';
   let vocabSize = 20;
+  let studyBatchSize = 50;
   let currentPassword = "";
   let newPassword = "";
   let loading = false;
@@ -16,6 +17,7 @@
   $: if ($user) {
     lang = $user.interface_language || 'ukr';
     vocabSize = $user.vocab_session_size || 20;
+    studyBatchSize = $user.study_batch_size || 50;
   }
 
   async function save() {
@@ -23,11 +25,12 @@
     try {
       await api.post("/auth/settings", {
         interface_language: lang,
-        vocab_session_size: vocabSize
+        vocab_session_size: vocabSize,
+        study_batch_size: studyBatchSize
       });
       
       // Оновлюємо локальний стан користувача миттєво
-      user.update(u => ({ ...u, interface_language: lang, vocab_session_size: vocabSize }));
+      user.update(u => ({ ...u, interface_language: lang, vocab_session_size: vocabSize, study_batch_size: studyBatchSize }));
       addToast(ui.settings_saved || "Settings saved", "success");
       history.back();
     } catch (e) {
@@ -74,7 +77,21 @@
 
   <div class="form-group">
     <label class="form-label" for="vss">{ui.vocab_session_size}</label>
-    <input id="vss" type="number" class="form-control" bind:value={vocabSize} min="5" max="100">
+    <select id="vss" class="form-control" bind:value={vocabSize}>
+      <option value={20}>20</option>
+      <option value={50}>50</option>
+      <option value={100}>100</option>
+    </select>
+  </div>
+
+  <div class="form-group">
+    <label class="form-label" for="sbs">{ui.study_batch_size}</label>
+    <select id="sbs" class="form-control" bind:value={studyBatchSize}>
+      <option value={20}>20</option>
+      <option value={50}>50</option>
+      <option value={100}>100</option>
+      <option value={200}>200</option>
+    </select>
   </div>
 
   <hr style="margin: 30px 0; border: 0; border-top: 1px solid var(--border);">
