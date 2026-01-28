@@ -765,7 +765,7 @@
                     <div class="card" style="text-align:center; opacity:0.6;">{ui.empty_vocab_prompt}</div>
                 {/if}
                 {#each vocab as v}
-                    <div class="vocab-item" role="button" tabindex="0">
+                    <div class="vocab-item" role="button" tabindex="0" onclick={() => { if (!editingId) toggleVocabFav(v.id); }}>
                         <div style="display:flex; align-items:center; gap:12px; flex: 1; min-width: 0;">
                             <button class="btn-text" onclick={(e) => { e.stopPropagation(); playVocabPair(v.display, $user.interface_language === 'ukr' ? v.ua : v.en); }}>
                                 <span class="material-symbols-outlined" style="font-size:18px;">volume_up</span>
