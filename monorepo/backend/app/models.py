@@ -163,6 +163,7 @@ class AIResource(Base):
     data_type: Mapped[str] = mapped_column(String, nullable=False)  # "text" | "audio" | "image"
     price_per_unit: Mapped[float] = mapped_column(Float, nullable=False)  # Ціна за 1млн символів
     provider: Mapped[str] = mapped_column(String, nullable=False)  # "google" | "azure" | тощо
+    lang: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # Мова для TTS: "DE" | "EN" | "UA" (лише для TTS)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())

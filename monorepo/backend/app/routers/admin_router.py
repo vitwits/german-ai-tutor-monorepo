@@ -2047,6 +2047,7 @@ async def ai_models_list(
     rows_html = ""
     for r in resources:
         status = "✅ Active" if r.is_active else "⛔ Inactive"
+        lang_display = r.lang if r.lang else "NULL"
         rows_html += f"""
         <tr>
             <td>{r.id}</td>
@@ -2057,6 +2058,7 @@ async def ai_models_list(
             <td>{r.data_type}</td>
             <td>${r.price_per_unit}</td>
             <td>{r.provider}</td>
+            <td>{lang_display}</td>
             <td>{status}</td>
             <td>
                 <button class="btn btn-sm btn-warning" onclick="editResource({r.id})">Edit</button>
@@ -2088,9 +2090,9 @@ async def ai_models_list(
             .btn-add {{ margin-bottom: 20px; }}
             table {{ background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border-radius: 8px; overflow: hidden; }}
             code {{ background: #f5f5f5; padding: 2px 6px; border-radius: 3px; }}
-            .modal {{ display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; }}
+            .modal {{ display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; overflow: auto; }}
             .modal.show {{ display: flex; }}
-            .modal-content {{ background: white; padding: 30px; border-radius: 8px; width: 90%; max-width: 600px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }}
+            .modal-content {{ background: white; padding: 30px; border-radius: 8px; width: 90%; max-width: 600px; max-height: 90vh; overflow-y: auto; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: auto 0; }}
             .modal-header {{ margin-bottom: 20px; font-size: 1.5em; font-weight: 700; }}
             .form-group {{ margin-bottom: 15px; }}
             label {{ font-weight: 600; margin-bottom: 5px; display: block; }}
@@ -2115,6 +2117,7 @@ async def ai_models_list(
                     <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/users">Users</a></li>
                     <li class="nav-item"><a class="nav-link active" href="/admin/ai-models">AI Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
                 </ul>
                 <div class="nav-right">
@@ -2139,6 +2142,7 @@ async def ai_models_list(
                         <th>Data Type</th>
                         <th>Price (per 1M chars)</th>
                         <th>Provider</th>
+                        <th>Language</th>
                         <th>Status</th>
                         <th>Actions</th>
                     </tr>
@@ -2169,11 +2173,25 @@ async def ai_models_list(
                     
                     <div class="form-group">
                         <label for="type">Type *</label>
-                        <select id="type" required>
+                        <select id="type" required onchange="updateLanguageFieldVisibility()">
                             <option value="">-- Select --</option>
                             <option value="LLM">LLM</option>
                             <option value="TTS">TTS</option>
                         </select>
+                    </div>
+                    
+                    <div class="form-group" id="langGroup" style="display: none;">
+                        <label for="lang">Language (TTS only) *</label>
+                        <select id="lang">
+                            <option value="">-- Select Language --</option>
+                            <option value="DE">DE (Deutsch)</option>
+                            <option value="EN">EN (English)</option>
+                            <option value="UA">UA (Українська)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group" id="langNull" style="color: #999;">
+                        Language: <span style="font-style: italic;">NULL (not applicable for LLM)</span>
                     </div>
                     
                     <div class="form-group">
@@ -2226,6 +2244,24 @@ async def ai_models_list(
         </div>
 
         <script>
+            function updateLanguageFieldVisibility() {{
+                const type = document.getElementById('type').value;
+                const langGroup = document.getElementById('langGroup');
+                const langNull = document.getElementById('langNull');
+                const langInput = document.getElementById('lang');
+                
+                if (type === 'TTS') {{
+                    langGroup.style.display = 'block';
+                    langNull.style.display = 'none';
+                    langInput.required = true;
+                }} else {{
+                    langGroup.style.display = 'none';
+                    langNull.style.display = 'block';
+                    langInput.required = false;
+                    langInput.value = '';
+                }}
+            }}
+
             function openAddModal() {{
                 document.getElementById('modelId').value = '';
                 document.getElementById('modelForm').reset();
@@ -2248,11 +2284,14 @@ async def ai_models_list(
                         document.getElementById('name').value = model.name;
                         document.getElementById('modelIdentifier').value = model.model_id;
                         document.getElementById('type').value = model.type;
+                        document.getElementById('lang').value = model.lang || '';
                         document.getElementById('direction').value = model.direction;
                         document.getElementById('dataType').value = model.data_type;
                         document.getElementById('pricePerUnit').value = model.price_per_unit;
                         document.getElementById('provider').value = model.provider;
                         document.getElementById('isActive').checked = model.is_active;
+                        
+                        updateLanguageFieldVisibility();
                         
                         document.getElementById('modalTitle').textContent = 'Edit AI Model';
                         document.getElementById('modal').classList.add('show');
@@ -2293,6 +2332,7 @@ async def ai_models_list(
                     data_type: document.getElementById('dataType').value,
                     price_per_unit: parseFloat(document.getElementById('pricePerUnit').value),
                     provider: document.getElementById('provider').value,
+                    lang: document.getElementById('type').value === 'TTS' ? document.getElementById('lang').value : null,
                     is_active: document.getElementById('isActive').checked
                 }};
                 
@@ -2357,6 +2397,7 @@ async def get_ai_model(
                 "data_type": resource.data_type,
                 "price_per_unit": resource.price_per_unit,
                 "provider": resource.provider,
+                "lang": resource.lang,
                 "is_active": resource.is_active
             }
         }
@@ -2382,6 +2423,7 @@ async def create_ai_model(
             data_type=data.get('data_type'),
             price_per_unit=float(data.get('price_per_unit')),
             provider=data.get('provider'),
+            lang=data.get('lang') if data.get('type') == 'TTS' else None,
             is_active=data.get('is_active', True)
         )
         
@@ -2417,6 +2459,7 @@ async def update_ai_model(
         resource.data_type = data.get('data_type', resource.data_type)
         resource.price_per_unit = float(data.get('price_per_unit', resource.price_per_unit))
         resource.provider = data.get('provider', resource.provider)
+        resource.lang = data.get('lang') if data.get('type', resource.type) == 'TTS' else None
         resource.is_active = data.get('is_active', resource.is_active)
         
         await db.commit()
