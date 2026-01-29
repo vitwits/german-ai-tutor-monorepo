@@ -3483,6 +3483,7 @@ async def get_ai_preference(
     return {
         "id": pref.id,
         "job": pref.job,
+        "page": pref.page,
         "model_type": pref.model_type,
         "lang": pref.lang,
         "llm_model_id": pref.llm_model_id,
@@ -3928,7 +3929,7 @@ async def ai_preferences_page(
                             <td>${{modelName}}</td>
                             <td>
                                 <button class="btn btn-sm btn-warning" onclick="editPreference(${{pref.id}}, '${{tab}}')">Edit</button>
-                                <button class="btn btn-sm btn-danger" onclick="deletePreference(${{pref.id}})">Delete</button>
+                                <button class="btn btn-sm btn-danger" onclick="deletePreference(${{pref.id}}, '${{tab}}')">Delete</button>
                             </td>
                         </tr>
                     `;
@@ -3999,14 +4000,14 @@ async def ai_preferences_page(
                 }}
             }}
             
-            async function deletePreference(id) {{
+            async function deletePreference(id, tab) {{
                 if (!confirm('Are you sure?')) return;
                 
                 try {{
                     const response = await fetch(`/admin/api/ai-preferences/${{id}}`, {{ method: 'DELETE' }});
                     const result = await response.json();
                     if (result.ok) {{
-                        await loadPreferencesForTab(currentTab);
+                        await loadPreferencesForTab(tab);
                     }} else {{
                         alert('Error: ' + (result.error || 'Unknown error'));
                     }}
