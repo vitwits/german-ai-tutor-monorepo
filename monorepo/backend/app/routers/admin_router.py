@@ -12,9 +12,10 @@ from typing import Optional
 from datetime import timedelta
 
 from ..database import get_db
-from ..models import User, Sentence, SentenceBatch, TempSentence, TTSLog
+from ..models import User, Sentence, SentenceBatch, TempSentence, TTSLog, AIResource
 from ..dependencies import get_current_user
 from ..security import verify_password, create_access_token
+from sqlalchemy import delete
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -371,6 +372,7 @@ async def caching_stats(
                     <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/users">Users</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/ai-models">AI Models</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
                 </ul>
@@ -464,6 +466,7 @@ async def admin_index(
                     <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/users">Users</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/ai-models">AI Models</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
                 </ul>
@@ -673,6 +676,7 @@ async def sentence_list(
                     <li class="nav-item"><a class="nav-link active" href="/admin/sentence/list">Sentences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/users">Users</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/ai-models">AI Models</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
                 </ul>
@@ -930,6 +934,7 @@ async def reported_sentences(
                     <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
                     <li class="nav-item"><a class="nav-link active" href="/admin/reported">Reported</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/users">Users</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/ai-models">AI Models</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
                 </ul>
@@ -1111,6 +1116,7 @@ async def admin_users(
                     <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
                     <li class="nav-item"><a class="nav-link active" href="/admin/users">Users</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/ai-models">AI Models</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
                 </ul>
@@ -1206,6 +1212,7 @@ async def edit_user(
                     <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
                     <li class="nav-item"><a class="nav-link active" href="/admin/users">Users</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/ai-models">AI Models</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
                 </ul>
@@ -2024,3 +2031,418 @@ async def delete_batch(
             "ok": False,
             "error": str(e)
         }
+
+
+# ============= AI RESOURCES MANAGEMENT =============
+
+@router.get("/ai-models", response_class=HTMLResponse)
+async def ai_models_list(
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """AI Models management page"""
+    result = await db.execute(select(AIResource).order_by(AIResource.created_at.desc()))
+    resources = result.scalars().all()
+    
+    rows_html = ""
+    for r in resources:
+        status = "✅ Active" if r.is_active else "⛔ Inactive"
+        rows_html += f"""
+        <tr>
+            <td>{r.id}</td>
+            <td>{r.name}</td>
+            <td><code>{r.model_id}</code></td>
+            <td>{r.type}</td>
+            <td>{r.direction}</td>
+            <td>{r.data_type}</td>
+            <td>${r.price_per_unit}</td>
+            <td>{r.provider}</td>
+            <td>{status}</td>
+            <td>
+                <button class="btn btn-sm btn-warning" onclick="editResource({r.id})">Edit</button>
+                <button class="btn btn-sm btn-danger" onclick="deleteResource({r.id})">Delete</button>
+            </td>
+        </tr>
+        """
+    
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>AI Models</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/css/bootstrap.min.css" rel="stylesheet">
+        <style>
+            * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+            body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto; background-color: #f5f7fa; }}
+            .navbar {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 30px; }}
+            .navbar-container {{ display: flex; align-items: center; justify-content: flex-start; padding: 0 30px; height: 50px; gap: 40px; }}
+            .navbar-brand {{ font-size: 1.5em; font-weight: 700; color: white; text-decoration: none; display: flex; align-items: center; gap: 10px; }}
+            .nav-menu {{ display: flex; gap: 0; list-style: none; margin: 0; padding: 0; }}
+            .nav-link {{ color: rgba(255,255,255,0.9); text-decoration: none; padding: 15px 12px; font-size: 0.9em; font-weight: 500; border-bottom: 3px solid transparent; height: 50px; display: flex; align-items: center; }}
+            .nav-link.active {{ color: white; background-color: rgba(255,255,255,0.15); border-bottom-color: white; }}
+            .nav-right {{ display: flex; gap: 8px; align-items: center; margin-left: auto; color: white; font-size: 0.85em; }}
+            .container-main {{ max-width: 1400px; margin: 0 auto; padding: 30px; }}
+            h1 {{ font-size: 2em; color: #2c3e50; margin-bottom: 30px; font-weight: 700; }}
+            .btn-add {{ margin-bottom: 20px; }}
+            table {{ background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border-radius: 8px; overflow: hidden; }}
+            code {{ background: #f5f5f5; padding: 2px 6px; border-radius: 3px; }}
+            .modal {{ display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; }}
+            .modal.show {{ display: flex; }}
+            .modal-content {{ background: white; padding: 30px; border-radius: 8px; width: 90%; max-width: 600px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }}
+            .modal-header {{ margin-bottom: 20px; font-size: 1.5em; font-weight: 700; }}
+            .form-group {{ margin-bottom: 15px; }}
+            label {{ font-weight: 600; margin-bottom: 5px; display: block; }}
+            input, select {{ width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 1em; }}
+            input:focus, select:focus {{ outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); }}
+            .modal-footer {{ display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }}
+            .btn {{ padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; }}
+            .btn-primary {{ background: #667eea; color: white; }}
+            .btn-primary:hover {{ background: #5568d3; }}
+            .btn-secondary {{ background: #6c757d; color: white; }}
+            .btn-secondary:hover {{ background: #5a6268; }}
+            .btn-danger {{ background: #dc3545; color: white; padding: 5px 10px; font-size: 0.85em; }}
+            .btn-warning {{ background: #ffc107; color: black; padding: 5px 10px; font-size: 0.85em; }}
+        </style>
+    </head>
+    <body>
+        <nav class="navbar">
+            <div class="navbar-container">
+                <a class="navbar-brand" href="/admin">🎓 Admin</a>
+                <ul class="nav-menu">
+                    <li class="nav-item"><a class="nav-link" href="/admin">Dashboard</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/users">Users</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="/admin/ai-models">AI Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
+                </ul>
+                <div class="nav-right">
+                    <span>{current_user.email.split("@")[0]}</span>
+                    <a class="nav-link" href="/admin/logout">Logout</a>
+                </div>
+            </div>
+        </nav>
+
+        <div class="container-main">
+            <h1>AI Models & Resources</h1>
+            <button class="btn btn-primary btn-add" onclick="openAddModal()">+ Add New Model</button>
+            
+            <table class="table table-striped">
+                <thead class="table-dark">
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Model ID</th>
+                        <th>Type</th>
+                        <th>Direction</th>
+                        <th>Data Type</th>
+                        <th>Price (per 1M chars)</th>
+                        <th>Provider</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows_html}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Add/Edit Modal -->
+        <div id="modal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header" id="modalTitle">Add New AI Model</div>
+                
+                <form id="modelForm">
+                    <input type="hidden" id="modelId" value="">
+                    
+                    <div class="form-group">
+                        <label for="name">Name (Friendly Name) *</label>
+                        <input type="text" id="name" required placeholder="e.g., Gemini 2.5 Flash Lite (Input)">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="modelIdentifier">Model ID (Code Identifier) *</label>
+                        <input type="text" id="modelIdentifier" required placeholder="e.g., gemini-2.5-flash-lite">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="type">Type *</label>
+                        <select id="type" required>
+                            <option value="">-- Select --</option>
+                            <option value="LLM">LLM</option>
+                            <option value="TTS">TTS</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="direction">Direction *</label>
+                        <select id="direction" required>
+                            <option value="">-- Select --</option>
+                            <option value="input">input</option>
+                            <option value="output">output</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="dataType">Data Type *</label>
+                        <select id="dataType" required>
+                            <option value="">-- Select --</option>
+                            <option value="text">text</option>
+                            <option value="audio">audio</option>
+                            <option value="image">image</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="pricePerUnit">Price per 1M Characters ($) *</label>
+                        <input type="number" id="pricePerUnit" required step="0.000001" placeholder="0.1">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="provider">Provider *</label>
+                        <select id="provider" required>
+                            <option value="">-- Select --</option>
+                            <option value="google">Google</option>
+                            <option value="azure">Azure</option>
+                            <option value="openai">OpenAI</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="isActive" checked>
+                            Is Active
+                        </label>
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <script>
+            function openAddModal() {{
+                document.getElementById('modelId').value = '';
+                document.getElementById('modelForm').reset();
+                document.getElementById('modalTitle').textContent = 'Add New AI Model';
+                document.getElementById('modal').classList.add('show');
+            }}
+
+            function closeModal() {{
+                document.getElementById('modal').classList.remove('show');
+            }}
+
+            async function editResource(id) {{
+                try {{
+                    const response = await fetch(`/admin/api/ai-models/${{id}}`);
+                    const data = await response.json();
+                    
+                    if (data.ok) {{
+                        const model = data.data;
+                        document.getElementById('modelId').value = model.id;
+                        document.getElementById('name').value = model.name;
+                        document.getElementById('modelIdentifier').value = model.model_id;
+                        document.getElementById('type').value = model.type;
+                        document.getElementById('direction').value = model.direction;
+                        document.getElementById('dataType').value = model.data_type;
+                        document.getElementById('pricePerUnit').value = model.price_per_unit;
+                        document.getElementById('provider').value = model.provider;
+                        document.getElementById('isActive').checked = model.is_active;
+                        
+                        document.getElementById('modalTitle').textContent = 'Edit AI Model';
+                        document.getElementById('modal').classList.add('show');
+                    }} else {{
+                        alert('Error: ' + (data.error || 'Unknown error'));
+                    }}
+                }} catch (error) {{
+                    alert('Error loading model: ' + error.message);
+                }}
+            }}
+
+            async function deleteResource(id) {{
+                if (!confirm('Are you sure you want to delete this model?')) return;
+                
+                try {{
+                    const response = await fetch(`/admin/api/ai-models/${{id}}`, {{ method: 'DELETE' }});
+                    const data = await response.json();
+                    
+                    if (data.ok) {{
+                        location.reload();
+                    }} else {{
+                        alert('Error: ' + (data.error || 'Unknown error'));
+                    }}
+                }} catch (error) {{
+                    alert('Error deleting resource: ' + error.message);
+                }}
+            }}
+
+            document.getElementById('modelForm').addEventListener('submit', async (e) => {{
+                e.preventDefault();
+                
+                const modelId = document.getElementById('modelId').value;
+                const data = {{
+                    name: document.getElementById('name').value,
+                    model_id: document.getElementById('modelIdentifier').value,
+                    type: document.getElementById('type').value,
+                    direction: document.getElementById('direction').value,
+                    data_type: document.getElementById('dataType').value,
+                    price_per_unit: parseFloat(document.getElementById('pricePerUnit').value),
+                    provider: document.getElementById('provider').value,
+                    is_active: document.getElementById('isActive').checked
+                }};
+                
+                try {{
+                    const method = modelId ? 'PUT' : 'POST';
+                    const url = modelId ? `/admin/api/ai-models/${{modelId}}` : '/admin/api/ai-models';
+                    
+                    const response = await fetch(url, {{
+                        method: method,
+                        headers: {{ 'Content-Type': 'application/json' }},
+                        body: JSON.stringify(data)
+                    }});
+                    
+                    const result = await response.json();
+                    
+                    if (result.ok) {{
+                        location.reload();
+                    }} else {{
+                        alert('Error: ' + (result.error || 'Unknown error'));
+                    }}
+                }} catch (error) {{
+                    alert('Error saving model: ' + error.message);
+                }}
+            }});
+
+            window.onclick = function(event) {{
+                const modal = document.getElementById('modal');
+                if (event.target == modal) {{
+                    closeModal();
+                }}
+            }}
+        </script>
+    </body>
+    </html>
+    """
+    return html
+
+
+# API endpoints for CRUD operations
+@router.get("/api/ai-models/{resource_id}")
+async def get_ai_model(
+    resource_id: int,
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get a single AI model by ID"""
+    try:
+        result = await db.execute(select(AIResource).where(AIResource.id == resource_id))
+        resource = result.scalar_one_or_none()
+        
+        if not resource:
+            return {"ok": False, "error": "Model not found"}
+        
+        return {
+            "ok": True,
+            "data": {
+                "id": resource.id,
+                "name": resource.name,
+                "model_id": resource.model_id,
+                "type": resource.type,
+                "direction": resource.direction,
+                "data_type": resource.data_type,
+                "price_per_unit": resource.price_per_unit,
+                "provider": resource.provider,
+                "is_active": resource.is_active
+            }
+        }
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@router.post("/api/ai-models")
+async def create_ai_model(
+    request: Request,
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a new AI model"""
+    try:
+        data = await request.json()
+        
+        new_resource = AIResource(
+            name=data.get('name'),
+            model_id=data.get('model_id'),
+            type=data.get('type', 'LLM'),
+            direction=data.get('direction'),
+            data_type=data.get('data_type'),
+            price_per_unit=float(data.get('price_per_unit')),
+            provider=data.get('provider'),
+            is_active=data.get('is_active', True)
+        )
+        
+        db.add(new_resource)
+        await db.commit()
+        
+        return {"ok": True, "id": new_resource.id}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@router.put("/api/ai-models/{resource_id}")
+async def update_ai_model(
+    resource_id: int,
+    request: Request,
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update an AI model"""
+    try:
+        data = await request.json()
+        
+        result = await db.execute(select(AIResource).where(AIResource.id == resource_id))
+        resource = result.scalar_one_or_none()
+        
+        if not resource:
+            return {"ok": False, "error": "Model not found"}
+        
+        resource.name = data.get('name', resource.name)
+        resource.model_id = data.get('model_id', resource.model_id)
+        resource.type = data.get('type', resource.type)
+        resource.direction = data.get('direction', resource.direction)
+        resource.data_type = data.get('data_type', resource.data_type)
+        resource.price_per_unit = float(data.get('price_per_unit', resource.price_per_unit))
+        resource.provider = data.get('provider', resource.provider)
+        resource.is_active = data.get('is_active', resource.is_active)
+        
+        await db.commit()
+        
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@router.delete("/api/ai-models/{resource_id}")
+async def delete_ai_model(
+    resource_id: int,
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete an AI model"""
+    try:
+        result = await db.execute(select(AIResource).where(AIResource.id == resource_id))
+        resource = result.scalar_one_or_none()
+        
+        if not resource:
+            return {"ok": False, "error": "Model not found"}
+        
+        await db.delete(resource)
+        await db.commit()
+        
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}

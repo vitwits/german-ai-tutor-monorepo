@@ -151,3 +151,18 @@ class TTSLog(Base):
     chars: Mapped[Optional[int]] = mapped_column(Integer)
     source: Mapped[Optional[str]] = mapped_column(String)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+
+class AIResource(Base):
+    __tablename__ = "ai_resources"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)  # Дружелюбне імя
+    model_id: Mapped[str] = mapped_column(String, nullable=False)  # ID для коду
+    type: Mapped[str] = mapped_column(String, nullable=False, default='LLM')  # "LLM" | "TTS"
+    direction: Mapped[str] = mapped_column(String, nullable=False)  # "input" | "output"
+    data_type: Mapped[str] = mapped_column(String, nullable=False)  # "text" | "audio" | "image"
+    price_per_unit: Mapped[float] = mapped_column(Float, nullable=False)  # Ціна за 1млн символів
+    provider: Mapped[str] = mapped_column(String, nullable=False)  # "google" | "azure" | тощо
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
