@@ -171,6 +171,7 @@ class TTSModel(Base):
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     human_name: Mapped[str] = mapped_column(String, nullable=False)  # Дружелюбне імя (e.g., "Google TTS German")
+    family: Mapped[str] = mapped_column(String, nullable=False)  # Сім'я моделі (користувач вводить вручну)
     provider: Mapped[str] = mapped_column(String, nullable=False)  # "google" | "azure" | "openai" | тощо
     price_per_unit: Mapped[float] = mapped_column(Float, nullable=False)  # Ціна за 1млн символів
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -178,18 +179,28 @@ class TTSModel(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
 
 
-class AIResource(Base):
-    __tablename__ = "ai_resources"
+class LLMPrice(Base):
+    __tablename__ = "llm_prices"
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    name: Mapped[str] = mapped_column(String, nullable=False)  # Дружелюбне імя
-    model_id: Mapped[str] = mapped_column(String, nullable=False)  # ID для коду
-    type: Mapped[str] = mapped_column(String, nullable=False, default='LLM')  # "LLM" | "TTS"
+    human_name: Mapped[str] = mapped_column(String, nullable=False)  # Дружелюбне імя
+    llm_model_id: Mapped[int] = mapped_column(ForeignKey("llm_models.id"), nullable=False)  # Foreign key до llm_models
     direction: Mapped[str] = mapped_column(String, nullable=False)  # "input" | "output"
     data_type: Mapped[str] = mapped_column(String, nullable=False)  # "text" | "audio" | "image"
     price_per_unit: Mapped[float] = mapped_column(Float, nullable=False)  # Ціна за 1млн символів
-    provider: Mapped[str] = mapped_column(String, nullable=False)  # "google" | "azure" | тощо
-    lang: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # Мова для TTS: "DE" | "EN" | "UA" (лише для TTS)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class TTSVoice(Base):
+    __tablename__ = "tts_voices"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    voice_name: Mapped[str] = mapped_column(String, nullable=False)  # Ім'я голосу (e.g., "de-DE-Standard-A")
+    tts_model_id: Mapped[int] = mapped_column(ForeignKey("tts_models.id"), nullable=False)  # Foreign key до tts_models
+    lang: Mapped[str] = mapped_column(String, nullable=False)  # "EN" | "DE" | "UA"
+    gender: Mapped[str] = mapped_column(String, nullable=False)  # "male" | "female"
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())

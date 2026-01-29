@@ -12,7 +12,7 @@ from typing import Optional
 from datetime import timedelta
 
 from ..database import get_db
-from ..models import User, Sentence, SentenceBatch, TempSentence, TTSLog, AIResource, LLMModel, TTSModel
+from ..models import User, Sentence, SentenceBatch, TempSentence, TTSLog, LLMModel, TTSModel, LLMPrice, TTSVoice
 from ..dependencies import get_current_user
 from ..security import verify_password, create_access_token
 from sqlalchemy import delete
@@ -372,9 +372,10 @@ async def caching_stats(
                     <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/users">Users</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/admin/ai-models">AI Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/llm-prices">LLM Prices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/llm-models">LLM Models</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-models">TTS Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/tts-voices">TTS Voices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
                     <li class="nav-item"><a class="nav-link active" href="/admin/caching-stats">Stats</a></li>
@@ -469,9 +470,10 @@ async def admin_index(
                     <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/users">Users</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/admin/ai-models">AI Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/llm-prices">LLM Prices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/llm-models">LLM Models</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-models">TTS Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/tts-voices">TTS Voices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
@@ -682,9 +684,10 @@ async def sentence_list(
                     <li class="nav-item"><a class="nav-link active" href="/admin/sentence/list">Sentences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/users">Users</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/admin/ai-models">AI Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/llm-prices">LLM Prices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/llm-models">LLM Models</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-models">TTS Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/tts-voices">TTS Voices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
@@ -943,9 +946,10 @@ async def reported_sentences(
                     <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
                     <li class="nav-item"><a class="nav-link active" href="/admin/reported">Reported</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/users">Users</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/admin/ai-models">AI Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/llm-prices">LLM Prices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/llm-models">LLM Models</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-models">TTS Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/tts-voices">TTS Voices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
@@ -1128,9 +1132,10 @@ async def admin_users(
                     <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
                     <li class="nav-item"><a class="nav-link active" href="/admin/users">Users</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/admin/ai-models">AI Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/llm-prices">LLM Prices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/llm-models">LLM Models</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-models">TTS Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/tts-voices">TTS Voices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
@@ -1227,9 +1232,10 @@ async def edit_user(
                     <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
                     <li class="nav-item"><a class="nav-link active" href="/admin/users">Users</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/admin/ai-models">AI Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/llm-prices">LLM Prices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/llm-models">LLM Models</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-models">TTS Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/tts-voices">TTS Voices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
@@ -1679,9 +1685,10 @@ async def generate_view(
                     <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/users">Users</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/admin/ai-models">AI Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/llm-prices">LLM Prices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/llm-models">LLM Models</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-models">TTS Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/tts-voices">TTS Voices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
                     <li class="nav-item"><a class="nav-link active" href="/admin/generate">Generate</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
@@ -2057,43 +2064,54 @@ async def delete_batch(
 
 # ============= AI RESOURCES MANAGEMENT =============
 
-@router.get("/ai-models", response_class=HTMLResponse)
-async def ai_models_list(
+@router.get("/llm-prices", response_class=HTMLResponse)
+async def llm_prices_list(
     current_user: User = Depends(check_admin_access),
     db: AsyncSession = Depends(get_db)
 ):
-    """AI Models management page"""
-    result = await db.execute(select(AIResource).order_by(AIResource.created_at.desc()))
-    resources = result.scalars().all()
+    """LLM Prices management page"""
+    result = await db.execute(
+        select(LLMPrice)
+        .join(LLMModel, LLMPrice.llm_model_id == LLMModel.id)
+        .order_by(LLMPrice.id.desc())
+    )
+    prices = result.scalars().all()
+    
+    # Отримуємо всі LLM моделі для dropdown
+    models_result = await db.execute(select(LLMModel).order_by(LLMModel.human_name))
+    llm_models = models_result.scalars().all()
     
     rows_html = ""
-    for r in resources:
-        status = "✅ Active" if r.is_active else "⛔ Inactive"
-        lang_display = r.lang if r.lang else "NULL"
+    for p in prices:
+        status = "✅ Active" if p.is_active else "⏸️ Inactive"
+        price_display = f"{p.price_per_unit:g}"
+        # Отримуємо ім'я моделі
+        model_result = await db.execute(select(LLMModel).where(LLMModel.id == p.llm_model_id))
+        model = model_result.scalar_one_or_none()
+        model_name = model.human_name if model else "Unknown"
+        
         rows_html += f"""
-        <tr>
-            <td>{r.id}</td>
-            <td>{r.name}</td>
-            <td><code>{r.model_id}</code></td>
-            <td>{r.type}</td>
-            <td>{r.direction}</td>
-            <td>{r.data_type}</td>
-            <td>${r.price_per_unit}</td>
-            <td>{r.provider}</td>
-            <td>{lang_display}</td>
+        <tr data-id="{p.id}" data-price="{p.price_per_unit}" data-active="{p.is_active}" data-llm-model-id="{p.llm_model_id}">
+            <td>{p.human_name}</td>
+            <td>{model_name}</td>
+            <td>{p.direction}</td>
+            <td>{p.data_type}</td>
+            <td>${price_display}</td>
             <td>{status}</td>
             <td>
-                <button class="btn btn-sm btn-warning" onclick="editResource({r.id})">Edit</button>
-                <button class="btn btn-sm btn-danger" onclick="deleteResource({r.id})">Delete</button>
+                <button class="btn btn-sm btn-warning" onclick="editPrice({p.id})">Edit</button>
+                <button class="btn btn-sm btn-danger" onclick="deletePrice({p.id})">Delete</button>
             </td>
         </tr>
         """
+    
+    models_options = "".join([f'<option value="{m.id}">{m.human_name}</option>' for m in llm_models])
     
     html = f"""
     <!DOCTYPE html>
     <html>
     <head>
-        <title>AI Models</title>
+        <title>LLM Prices</title>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -2115,7 +2133,6 @@ async def ai_models_list(
             h1 {{ font-size: 2em; color: #2c3e50; margin-bottom: 30px; font-weight: 700; }}
             .btn-add {{ margin-bottom: 20px; }}
             table {{ background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border-radius: 8px; overflow: hidden; }}
-            code {{ background: #f5f5f5; padding: 2px 6px; border-radius: 3px; }}
             .modal {{ display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; overflow: auto; }}
             .modal.show {{ display: flex; }}
             .modal-content {{ background: white; padding: 30px; border-radius: 8px; width: 90%; max-width: 600px; max-height: 90vh; overflow-y: auto; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: auto 0; }}
@@ -2143,9 +2160,10 @@ async def ai_models_list(
                     <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/users">Users</a></li>
-                    <li class="nav-item"><a class="nav-link active" href="/admin/ai-models">AI Models</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="/admin/llm-prices">LLM Prices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/llm-models">LLM Models</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-models">TTS Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/tts-voices">TTS Voices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
@@ -2158,27 +2176,23 @@ async def ai_models_list(
         </nav>
 
         <div class="container-main">
-            <h1>AI Models & Resources</h1>
-            <button class="btn btn-primary btn-add" onclick="openAddModal()">+ Add New Model</button>
+            <h1>LLM Prices</h1>
+            <button class="btn btn-primary btn-add" onclick="openAddModal()">+ Add LLM Price</button>
             
-            <table class="table table-striped">
+            <table class="table table-striped table-bordered">
                 <thead class="table-dark">
                     <tr>
-                        <th>ID</th>
-                        <th>Name</th>
-                        <th>Model ID</th>
-                        <th>Type</th>
+                        <th>Human Name</th>
+                        <th>LLM Model</th>
                         <th>Direction</th>
                         <th>Data Type</th>
-                        <th>Price (per 1M chars)</th>
-                        <th>Provider</th>
-                        <th>Language</th>
+                        <th>Price</th>
                         <th>Status</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {rows_html}
+                    {rows_html if rows_html else '<tr><td colspan="7" style="text-align: center; padding: 20px; color: #999;">No LLM prices yet. Click "Add" to create one.</td></tr>'}
                 </tbody>
             </table>
         </div>
@@ -2186,82 +2200,51 @@ async def ai_models_list(
         <!-- Add/Edit Modal -->
         <div id="modal" class="modal">
             <div class="modal-content">
-                <div class="modal-header" id="modalTitle">Add New AI Model</div>
+                <div class="modal-header" id="modalTitle">Add LLM Price</div>
                 
-                <form id="modelForm">
-                    <input type="hidden" id="modelId" value="">
+                <form id="priceForm" onsubmit="submitForm(event)">
+                    <input type="hidden" id="priceId" value="">
                     
                     <div class="form-group">
-                        <label for="name">Name (Friendly Name) *</label>
-                        <input type="text" id="name" required placeholder="e.g., Gemini 2.5 Flash Lite (Input)">
+                        <label for="humanName">Human Name *</label>
+                        <input type="text" id="humanName" required placeholder="e.g., GPT-4 Input">
                     </div>
                     
                     <div class="form-group">
-                        <label for="modelIdentifier">Model ID (Code Identifier) *</label>
-                        <input type="text" id="modelIdentifier" required placeholder="e.g., gemini-2.5-flash-lite">
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="type">Type *</label>
-                        <select id="type" required onchange="updateLanguageFieldVisibility()">
-                            <option value="">-- Select --</option>
-                            <option value="LLM">LLM</option>
-                            <option value="TTS">TTS</option>
+                        <label for="llmModelId">LLM Model *</label>
+                        <select id="llmModelId" required>
+                            <option value="">Select LLM Model</option>
+                            {models_options}
                         </select>
-                    </div>
-                    
-                    <div class="form-group" id="langGroup" style="display: none;">
-                        <label for="lang">Language (TTS only) *</label>
-                        <select id="lang">
-                            <option value="">-- Select Language --</option>
-                            <option value="DE">DE (Deutsch)</option>
-                            <option value="EN">EN (English)</option>
-                            <option value="UA">UA (Українська)</option>
-                        </select>
-                    </div>
-                    
-                    <div class="form-group" id="langNull" style="color: #999;">
-                        Language: <span style="font-style: italic;">NULL (not applicable for LLM)</span>
                     </div>
                     
                     <div class="form-group">
                         <label for="direction">Direction *</label>
                         <select id="direction" required>
-                            <option value="">-- Select --</option>
-                            <option value="input">input</option>
-                            <option value="output">output</option>
+                            <option value="">Select direction</option>
+                            <option value="input">Input</option>
+                            <option value="output">Output</option>
                         </select>
                     </div>
                     
                     <div class="form-group">
                         <label for="dataType">Data Type *</label>
                         <select id="dataType" required>
-                            <option value="">-- Select --</option>
-                            <option value="text">text</option>
-                            <option value="audio">audio</option>
-                            <option value="image">image</option>
+                            <option value="">Select data type</option>
+                            <option value="text">Text</option>
+                            <option value="audio">Audio</option>
+                            <option value="image">Image</option>
                         </select>
                     </div>
                     
                     <div class="form-group">
-                        <label for="pricePerUnit">Price per 1M Characters ($) *</label>
-                        <input type="number" id="pricePerUnit" required step="0.000001" placeholder="0.1">
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="provider">Provider *</label>
-                        <select id="provider" required>
-                            <option value="">-- Select --</option>
-                            <option value="google">Google</option>
-                            <option value="azure">Azure</option>
-                            <option value="openai">OpenAI</option>
-                        </select>
+                        <label for="pricePerUnit">Price per 1M characters *</label>
+                        <input type="number" id="pricePerUnit" step="any" required placeholder="e.g., 0.03 or 23">
                     </div>
                     
                     <div class="form-group">
                         <label>
-                            <input type="checkbox" id="isActive" checked>
-                            Is Active
+                            <input type="checkbox" id="isActive" checked> Active
                         </label>
                     </div>
                     
@@ -2274,251 +2257,100 @@ async def ai_models_list(
         </div>
 
         <script>
-            function updateLanguageFieldVisibility() {{
-                const type = document.getElementById('type').value;
-                const langGroup = document.getElementById('langGroup');
-                const langNull = document.getElementById('langNull');
-                const langInput = document.getElementById('lang');
-                
-                if (type === 'TTS') {{
-                    langGroup.style.display = 'block';
-                    langNull.style.display = 'none';
-                    langInput.required = true;
-                }} else {{
-                    langGroup.style.display = 'none';
-                    langNull.style.display = 'block';
-                    langInput.required = false;
-                    langInput.value = '';
-                }}
-            }}
-
+            let editingId = null;
+            
             function openAddModal() {{
-                document.getElementById('modelId').value = '';
-                document.getElementById('modelForm').reset();
-                document.getElementById('modalTitle').textContent = 'Add New AI Model';
+                editingId = null;
+                document.getElementById('priceForm').reset();
+                document.getElementById('isActive').checked = true;
+                document.getElementById('modalTitle').innerText = 'Add LLM Price';
                 document.getElementById('modal').classList.add('show');
             }}
-
+            
+            function editPrice(id) {{
+                const row = document.querySelector(`tr[data-id="${{id}}"]`);
+                if (row) {{
+                    const cells = row.querySelectorAll('td');
+                    editingId = id;
+                    document.getElementById('humanName').value = cells[0].innerText;
+                    document.getElementById('llmModelId').value = row.dataset.llmModelId;
+                    document.getElementById('direction').value = cells[2].innerText.toLowerCase();
+                    document.getElementById('dataType').value = cells[3].innerText.toLowerCase();
+                    document.getElementById('pricePerUnit').value = parseFloat(row.dataset.price);
+                    document.getElementById('isActive').checked = row.dataset.active === 'True';
+                    document.getElementById('modalTitle').innerText = 'Edit LLM Price';
+                    document.getElementById('modal').classList.add('show');
+                }}
+            }}
+            
             function closeModal() {{
                 document.getElementById('modal').classList.remove('show');
+                editingId = null;
             }}
-
-            async function editResource(id) {{
-                try {{
-                    const response = await fetch(`/admin/api/ai-models/${{id}}`);
-                    const data = await response.json();
-                    
-                    if (data.ok) {{
-                        const model = data.data;
-                        document.getElementById('modelId').value = model.id;
-                        document.getElementById('name').value = model.name;
-                        document.getElementById('modelIdentifier').value = model.model_id;
-                        document.getElementById('type').value = model.type;
-                        document.getElementById('lang').value = model.lang || '';
-                        document.getElementById('direction').value = model.direction;
-                        document.getElementById('dataType').value = model.data_type;
-                        document.getElementById('pricePerUnit').value = model.price_per_unit;
-                        document.getElementById('provider').value = model.provider;
-                        document.getElementById('isActive').checked = model.is_active;
-                        
-                        updateLanguageFieldVisibility();
-                        
-                        document.getElementById('modalTitle').textContent = 'Edit AI Model';
-                        document.getElementById('modal').classList.add('show');
-                    }} else {{
-                        alert('Error: ' + (data.error || 'Unknown error'));
-                    }}
-                }} catch (error) {{
-                    alert('Error loading model: ' + error.message);
-                }}
-            }}
-
-            async function deleteResource(id) {{
-                if (!confirm('Are you sure you want to delete this model?')) return;
-                
-                try {{
-                    const response = await fetch(`/admin/api/ai-models/${{id}}`, {{ method: 'DELETE' }});
-                    const data = await response.json();
-                    
-                    if (data.ok) {{
-                        location.reload();
-                    }} else {{
-                        alert('Error: ' + (data.error || 'Unknown error'));
-                    }}
-                }} catch (error) {{
-                    alert('Error deleting resource: ' + error.message);
-                }}
-            }}
-
-            document.getElementById('modelForm').addEventListener('submit', async (e) => {{
+            
+            async function submitForm(e) {{
                 e.preventDefault();
-                
-                const modelId = document.getElementById('modelId').value;
+                const priceValue = document.getElementById('pricePerUnit').value;
                 const data = {{
-                    name: document.getElementById('name').value,
-                    model_id: document.getElementById('modelIdentifier').value,
-                    type: document.getElementById('type').value,
+                    human_name: document.getElementById('humanName').value,
+                    llm_model_id: parseInt(document.getElementById('llmModelId').value),
                     direction: document.getElementById('direction').value,
                     data_type: document.getElementById('dataType').value,
-                    price_per_unit: parseFloat(document.getElementById('pricePerUnit').value),
-                    provider: document.getElementById('provider').value,
-                    lang: document.getElementById('type').value === 'TTS' ? document.getElementById('lang').value : null,
+                    price_per_unit: priceValue ? parseFloat(priceValue) : 0,
                     is_active: document.getElementById('isActive').checked
                 }};
                 
                 try {{
-                    const method = modelId ? 'PUT' : 'POST';
-                    const url = modelId ? `/admin/api/ai-models/${{modelId}}` : '/admin/api/ai-models';
+                    const url = editingId 
+                        ? `/admin/api/llm-prices/${{editingId}}`
+                        : '/admin/api/llm-prices';
+                    const method = editingId ? 'PUT' : 'POST';
                     
                     const response = await fetch(url, {{
                         method: method,
-                        headers: {{ 'Content-Type': 'application/json' }},
+                        headers: {{'Content-Type': 'application/json'}},
                         body: JSON.stringify(data)
                     }});
                     
                     const result = await response.json();
-                    
                     if (result.ok) {{
                         location.reload();
                     }} else {{
-                        alert('Error: ' + (result.error || 'Unknown error'));
+                        alert('Error: ' + result.error);
                     }}
                 }} catch (error) {{
-                    alert('Error saving model: ' + error.message);
+                    alert('Error: ' + error.message);
                 }}
-            }});
-
-            window.onclick = function(event) {{
-                const modal = document.getElementById('modal');
-                if (event.target == modal) {{
-                    closeModal();
+            }}
+            
+            async function deletePrice(id) {{
+                if (confirm('Are you sure you want to delete this price?')) {{
+                    try {{
+                        const response = await fetch(`/admin/api/llm-prices/${{id}}`, {{
+                            method: 'DELETE',
+                            headers: {{'Content-Type': 'application/json'}}
+                        }});
+                        
+                        const result = await response.json();
+                        if (result.ok) {{
+                            location.reload();
+                        }} else {{
+                            alert('Error: ' + result.error);
+                        }}
+                    }} catch (error) {{
+                        alert('Error: ' + error.message);
+                    }}
                 }}
             }}
         </script>
     </body>
     </html>
     """
+    
     return html
 
 
-# API endpoints for CRUD operations
-@router.get("/api/ai-models/{resource_id}")
-async def get_ai_model(
-    resource_id: int,
-    current_user: User = Depends(check_admin_access),
-    db: AsyncSession = Depends(get_db)
-):
-    """Get a single AI model by ID"""
-    try:
-        result = await db.execute(select(AIResource).where(AIResource.id == resource_id))
-        resource = result.scalar_one_or_none()
-        
-        if not resource:
-            return {"ok": False, "error": "Model not found"}
-        
-        return {
-            "ok": True,
-            "data": {
-                "id": resource.id,
-                "name": resource.name,
-                "model_id": resource.model_id,
-                "type": resource.type,
-                "direction": resource.direction,
-                "data_type": resource.data_type,
-                "price_per_unit": resource.price_per_unit,
-                "provider": resource.provider,
-                "lang": resource.lang,
-                "is_active": resource.is_active
-            }
-        }
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
-
-
-@router.post("/api/ai-models")
-async def create_ai_model(
-    request: Request,
-    current_user: User = Depends(check_admin_access),
-    db: AsyncSession = Depends(get_db)
-):
-    """Create a new AI model"""
-    try:
-        data = await request.json()
-        
-        new_resource = AIResource(
-            name=data.get('name'),
-            model_id=data.get('model_id'),
-            type=data.get('type', 'LLM'),
-            direction=data.get('direction'),
-            data_type=data.get('data_type'),
-            price_per_unit=float(data.get('price_per_unit')),
-            provider=data.get('provider'),
-            lang=data.get('lang') if data.get('type') == 'TTS' else None,
-            is_active=data.get('is_active', True)
-        )
-        
-        db.add(new_resource)
-        await db.commit()
-        
-        return {"ok": True, "id": new_resource.id}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
-
-
-@router.put("/api/ai-models/{resource_id}")
-async def update_ai_model(
-    resource_id: int,
-    request: Request,
-    current_user: User = Depends(check_admin_access),
-    db: AsyncSession = Depends(get_db)
-):
-    """Update an AI model"""
-    try:
-        data = await request.json()
-        
-        result = await db.execute(select(AIResource).where(AIResource.id == resource_id))
-        resource = result.scalar_one_or_none()
-        
-        if not resource:
-            return {"ok": False, "error": "Model not found"}
-        
-        resource.name = data.get('name', resource.name)
-        resource.model_id = data.get('model_id', resource.model_id)
-        resource.type = data.get('type', resource.type)
-        resource.direction = data.get('direction', resource.direction)
-        resource.data_type = data.get('data_type', resource.data_type)
-        resource.price_per_unit = float(data.get('price_per_unit', resource.price_per_unit))
-        resource.provider = data.get('provider', resource.provider)
-        resource.lang = data.get('lang') if data.get('type', resource.type) == 'TTS' else None
-        resource.is_active = data.get('is_active', resource.is_active)
-        
-        await db.commit()
-        
-        return {"ok": True}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
-
-
-@router.delete("/api/ai-models/{resource_id}")
-async def delete_ai_model(
-    resource_id: int,
-    current_user: User = Depends(check_admin_access),
-    db: AsyncSession = Depends(get_db)
-):
-    """Delete an AI model"""
-    try:
-        result = await db.execute(select(AIResource).where(AIResource.id == resource_id))
-        resource = result.scalar_one_or_none()
-        
-        if not resource:
-            return {"ok": False, "error": "Model not found"}
-        
-        await db.delete(resource)
-        await db.commit()
-        
-        return {"ok": True}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
+# (Removed legacy AI Resources endpoints that referenced non-existent AIResource model)
 
 
 # ============ LLM MODELS ============
@@ -2602,9 +2434,10 @@ async def llm_models_page(
                     <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/users">Users</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/admin/ai-models">AI Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/llm-prices">LLM Prices</a></li>
                     <li class="nav-item"><a class="nav-link active" href="/admin/llm-models">LLM Models</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-models">TTS Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/tts-voices">TTS Voices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
@@ -2774,11 +2607,13 @@ async def tts_models_page(
     rows_html = ""
     for model in models:
         status = "✅ Active" if model.is_active else "⏸️ Inactive"
+        price_display = f"{model.price_per_unit:g}"
         rows_html += f"""
-        <tr>
+        <tr data-id="{model.id}" data-price="{model.price_per_unit}" data-active="{model.is_active}">
             <td>{model.human_name}</td>
+            <td>{model.family}</td>
             <td>{model.provider}</td>
-            <td>${{model.price_per_unit:.6f}}</td>
+            <td>${price_display}</td>
             <td>{status}</td>
             <td>
                 <button class="btn btn-sm btn-warning" onclick="editTTSModel({model.id})">Edit</button>
@@ -2840,9 +2675,10 @@ async def tts_models_page(
                     <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/users">Users</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/admin/ai-models">AI Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/llm-prices">LLM Prices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/llm-models">LLM Models</a></li>
                     <li class="nav-item"><a class="nav-link active" href="/admin/tts-models">TTS Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/tts-voices">TTS Voices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
@@ -2862,6 +2698,7 @@ async def tts_models_page(
                 <thead>
                     <tr>
                         <th>Human Name</th>
+                        <th>Family</th>
                         <th>Provider</th>
                         <th>Price per 1M chars</th>
                         <th>Status</th>
@@ -2869,7 +2706,7 @@ async def tts_models_page(
                     </tr>
                 </thead>
                 <tbody>
-                    {rows_html if rows_html else '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #999;">No TTS models yet. Click "Add" to create one.</td></tr>'}
+                    {rows_html if rows_html else '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #999;">No TTS models yet. Click "Add" to create one.</td></tr>'}
                 </tbody>
             </table>
         </div>
@@ -2884,6 +2721,10 @@ async def tts_models_page(
                         <input type="text" id="humanName" required placeholder="e.g., Google TTS">
                     </div>
                     <div class="form-group">
+                        <label>Family</label>
+                        <input type="text" id="family" required placeholder="e.g., German, English, Ukrainian">
+                    </div>
+                    <div class="form-group">
                         <label>Provider</label>
                         <select id="provider" required>
                             <option value="">Select provider</option>
@@ -2894,7 +2735,7 @@ async def tts_models_page(
                     </div>
                     <div class="form-group">
                         <label>Price per 1M characters</label>
-                        <input type="number" id="pricePerUnit" step="0.000001" required placeholder="0.000001">
+                        <input type="number" id="pricePerUnit" step="any" required placeholder="e.g., 0.03 or 23">
                     </div>
                     <div class="form-group">
                         <label>
@@ -2921,19 +2762,17 @@ async def tts_models_page(
             }}
             
             function editTTSModel(id) {{
-                const rows = document.querySelectorAll('tbody tr');
-                for (let row of rows) {{
+                const row = document.querySelector(`tr[data-id="${{id}}"]`);
+                if (row) {{
                     const cells = row.querySelectorAll('td');
-                    if (cells[0]) {{
-                        editingId = id;
-                        document.getElementById('humanName').value = cells[0].innerText;
-                        document.getElementById('provider').value = cells[1].innerText.toLowerCase();
-                        document.getElementById('pricePerUnit').value = cells[2].innerText.substring(1);
-                        document.getElementById('isActive').checked = cells[3].innerText.includes('Active');
-                        document.getElementById('modalTitle').innerText = 'Edit TTS Model';
-                        document.getElementById('modal').classList.add('show');
-                        break;
-                    }}
+                    editingId = id;
+                    document.getElementById('humanName').value = cells[0].innerText;
+                    document.getElementById('family').value = cells[1].innerText;
+                    document.getElementById('provider').value = cells[2].innerText.toLowerCase();
+                    document.getElementById('pricePerUnit').value = parseFloat(row.dataset.price);
+                    document.getElementById('isActive').checked = row.dataset.active === 'True';
+                    document.getElementById('modalTitle').innerText = 'Edit TTS Model';
+                    document.getElementById('modal').classList.add('show');
                 }}
             }}
             
@@ -2944,10 +2783,12 @@ async def tts_models_page(
             
             async function submitForm(e) {{
                 e.preventDefault();
+                const priceValue = document.getElementById('pricePerUnit').value;
                 const data = {{
                     human_name: document.getElementById('humanName').value,
+                    family: document.getElementById('family').value,
                     provider: document.getElementById('provider').value,
-                    price_per_unit: parseFloat(document.getElementById('pricePerUnit').value),
+                    price_per_unit: priceValue ? parseFloat(priceValue) : 0,
                     is_active: document.getElementById('isActive').checked
                 }};
                 
@@ -3078,6 +2919,7 @@ async def create_tts_model(
     try:
         model = TTSModel(
             human_name=data.get("human_name"),
+            family=data.get("family"),
             provider=data.get("provider"),
             price_per_unit=data.get("price_per_unit"),
             is_active=data.get("is_active", True)
@@ -3105,6 +2947,7 @@ async def update_tts_model(
             return {"ok": False, "error": "Model not found"}
         
         model.human_name = data.get("human_name", model.human_name)
+        model.family = data.get("family", model.family)
         model.provider = data.get("provider", model.provider)
         model.price_per_unit = data.get("price_per_unit", model.price_per_unit)
         model.is_active = data.get("is_active", model.is_active)
@@ -3134,3 +2977,585 @@ async def delete_tts_model(
         return {"ok": True}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+
+# ============ LLM PRICES ============
+
+@router.post("/api/llm-prices")
+async def create_llm_price(
+    data: dict,
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a new LLM price"""
+    try:
+        price = LLMPrice(
+            human_name=data.get("human_name"),
+            llm_model_id=data.get("llm_model_id"),
+            direction=data.get("direction"),
+            data_type=data.get("data_type"),
+            price_per_unit=data.get("price_per_unit"),
+            is_active=data.get("is_active", True)
+        )
+        db.add(price)
+        await db.commit()
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@router.put("/api/llm-prices/{price_id}")
+async def update_llm_price(
+    price_id: int,
+    data: dict,
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update an LLM price"""
+    try:
+        result = await db.execute(select(LLMPrice).where(LLMPrice.id == price_id))
+        price = result.scalar_one_or_none()
+        
+        if not price:
+            return {"ok": False, "error": "Price not found"}
+        
+        price.human_name = data.get("human_name", price.human_name)
+        price.llm_model_id = data.get("llm_model_id", price.llm_model_id)
+        price.direction = data.get("direction", price.direction)
+        price.data_type = data.get("data_type", price.data_type)
+        price.price_per_unit = data.get("price_per_unit", price.price_per_unit)
+        price.is_active = data.get("is_active", price.is_active)
+        
+        await db.commit()
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@router.delete("/api/llm-prices/{price_id}")
+async def delete_llm_price(
+    price_id: int,
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete an LLM price"""
+    try:
+        result = await db.execute(select(LLMPrice).where(LLMPrice.id == price_id))
+        price = result.scalar_one_or_none()
+        
+        if not price:
+            return {"ok": False, "error": "Price not found"}
+        
+        await db.delete(price)
+        await db.commit()
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+# ============ TTS VOICES ============
+
+@router.get("/tts-voices", response_class=HTMLResponse)
+async def tts_voices_list(
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """TTS Voices management page"""
+    result = await db.execute(
+        select(TTSVoice)
+        .join(TTSModel, TTSVoice.tts_model_id == TTSModel.id)
+        .order_by(TTSVoice.id.desc())
+    )
+    voices = result.scalars().all()
+    
+    # Отримуємо всі TTS моделі для dropdown
+    models_result = await db.execute(select(TTSModel).order_by(TTSModel.human_name))
+    tts_models = models_result.scalars().all()
+    
+    rows_html = ""
+    for v in voices:
+        status = "✅ Active" if v.is_active else "⏸️ Inactive"
+        # Отримуємо ім'я моделі
+        model_result = await db.execute(select(TTSModel).where(TTSModel.id == v.tts_model_id))
+        model = model_result.scalar_one_or_none()
+        model_name = model.human_name if model else "Unknown"
+        
+        rows_html += f"""
+        <tr data-id="{v.id}" data-active="{v.is_active}" data-tts-model-id="{v.tts_model_id}">
+            <td>{v.voice_name}</td>
+            <td>{model_name}</td>
+            <td>{v.lang}</td>
+            <td>{v.gender}</td>
+            <td>{status}</td>
+            <td>
+                <button class="btn btn-sm btn-warning" onclick="editVoice({v.id})">Edit</button>
+                <button class="btn btn-sm btn-danger" onclick="deleteVoice({v.id})">Delete</button>
+            </td>
+        </tr>
+        """
+    
+    if not rows_html:
+        rows_html = '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #999;">No TTS voices yet. Click "Add" to create one.</td></tr>'
+    
+    models_options = "".join([f'<option value="{m.id}">{m.human_name}</option>' for m in tts_models])
+    
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>TTS Voices</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/css/bootstrap.min.css" rel="stylesheet">
+        <style>
+            * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+            body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto; background-color: #f5f7fa; }}
+            .navbar {{display: block!important; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 30px; }}
+            .navbar-container {{ display: flex; align-items: center; justify-content: flex-start; padding: 0 30px; height: 50px; gap: 40px; }}
+            .navbar-brand {{ font-size: 1.5em; font-weight: 700; color: white; text-decoration: none; display: flex; align-items: center; gap: 10px; white-space: nowrap; }}
+            .navbar-brand:hover {{ color: #f0f0f0; }}
+            .nav-menu {{ display: flex; gap: 0; list-style: none; margin: 0; padding: 0; }}
+            .nav-item {{ position: relative; }}
+            .nav-link {{ color: rgba(255,255,255,0.9); text-decoration: none; padding: 15px 12px; font-size: 0.9em; font-weight: 500; transition: all 0.3s; border-bottom: 3px solid transparent; height: 50px; display: flex; align-items: center; white-space: nowrap; }}
+            .nav-link:hover {{ color: white; background-color: rgba(255,255,255,0.1); border-bottom-color: rgba(255,255,255,0.3); }}
+            .nav-link.active {{ color: white; background-color: rgba(255,255,255,0.15); border-bottom-color: white; }}
+            .nav-right {{ display: flex; gap: 8px; align-items: center; margin-left: auto; color: white; font-size: 0.85em; white-space: nowrap; }}
+            .nav-right a.nav-link {{ padding: 8px 12px; height: auto; border-bottom: none; }}
+            .container-main {{ max-width: 1400px; margin: 0 auto; padding: 30px; }}
+            h1 {{ font-size: 2em; color: #2c3e50; margin-bottom: 30px; font-weight: 700; }}
+            .btn-add {{ margin-bottom: 20px; }}
+            table {{ background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border-radius: 8px; overflow: hidden; }}
+            .modal {{ display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; overflow: auto; }}
+            .modal.show {{ display: flex; }}
+            .modal-content {{ background: white; padding: 30px; border-radius: 8px; width: 90%; max-width: 600px; max-height: 90vh; overflow-y: auto; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: auto 0; }}
+            .modal-header {{ margin-bottom: 20px; font-size: 1.5em; font-weight: 700; }}
+            .form-group {{ margin-bottom: 15px; }}
+            label {{ font-weight: 600; margin-bottom: 5px; display: block; }}
+            input, select {{ width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 1em; }}
+            input:focus, select:focus {{ outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); }}
+            .modal-footer {{ display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }}
+            .btn {{ padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; }}
+            .btn-primary {{ background: #667eea; color: white; }}
+            .btn-primary:hover {{ background: #5568d3; }}
+            .btn-secondary {{ background: #6c757d; color: white; }}
+            .btn-secondary:hover {{ background: #5a6268; }}
+            .btn-danger {{ background: #dc3545; color: white; padding: 5px 10px; font-size: 0.85em; }}
+            .btn-warning {{ background: #ffc107; color: black; padding: 5px 10px; font-size: 0.85em; }}
+        </style>
+    </head>
+    <body>
+        <nav class="navbar">
+            <div class="navbar-container">
+                <a class="navbar-brand" href="/admin">🎓 Admin</a>
+                <ul class="nav-menu">
+                    <li class="nav-item"><a class="nav-link" href="/admin">Dashboard</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/users">Users</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/llm-prices">LLM Prices</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/llm-models">LLM Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/tts-models">TTS Models</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="/admin/tts-voices">TTS Voices</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
+                </ul>
+                <div class="nav-right">
+                    <span>{current_user.email.split("@")[0]}</span>
+                    <a class="nav-link" href="/admin/logout">Logout</a>
+                </div>
+            </div>
+        </nav>
+
+        <div class="container-main">
+            <h1>TTS Voices</h1>
+            <button class="btn btn-primary btn-add" onclick="openAddModal()">+ Add TTS Voice</button>
+            
+            <table class="table table-striped table-bordered">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Voice Name</th>
+                        <th>TTS Model</th>
+                        <th>Language</th>
+                        <th>Gender</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows_html}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Add/Edit Modal -->
+        <div id="modal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header" id="modalTitle">Add TTS Voice</div>
+                
+                <form id="voiceForm" onsubmit="submitForm(event)">
+                    <input type="hidden" id="voiceId" value="">
+                    
+                    <div class="form-group">
+                        <label for="voiceName">Voice Name *</label>
+                        <input type="text" id="voiceName" required placeholder="e.g., de-DE-Standard-A">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="ttsModelId">TTS Model *</label>
+                        <select id="ttsModelId" required>
+                            <option value="">Select TTS Model</option>
+                            {models_options}
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="lang">Language *</label>
+                        <select id="lang" required>
+                            <option value="">Select language</option>
+                            <option value="EN">English (EN)</option>
+                            <option value="DE">German (DE)</option>
+                            <option value="UA">Ukrainian (UA)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="gender">Gender *</label>
+                        <select id="gender" required>
+                            <option value="">Select gender</option>
+                            <option value="male">Male</option>
+                            <option value="female">Female</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="isActive" checked> Active
+                        </label>
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <script>
+            let editingId = null;
+            
+            function openAddModal() {{
+                editingId = null;
+                document.getElementById('voiceForm').reset();
+                document.getElementById('isActive').checked = true;
+                document.getElementById('modalTitle').innerText = 'Add TTS Voice';
+                document.getElementById('modal').classList.add('show');
+            }}
+            
+            function editVoice(id) {{
+                const row = document.querySelector(`tr[data-id="${{id}}"]`);
+                if (row) {{
+                    const cells = row.querySelectorAll('td');
+                    editingId = id;
+                    document.getElementById('voiceName').value = cells[0].innerText;
+                    document.getElementById('ttsModelId').value = row.dataset.ttsModelId;
+                    document.getElementById('lang').value = cells[2].innerText;
+                    document.getElementById('gender').value = cells[3].innerText.toLowerCase();
+                    document.getElementById('isActive').checked = row.dataset.active === 'True';
+                    document.getElementById('modalTitle').innerText = 'Edit TTS Voice';
+                    document.getElementById('modal').classList.add('show');
+                }}
+            }}
+            
+            function closeModal() {{
+                document.getElementById('modal').classList.remove('show');
+                editingId = null;
+            }}
+            
+            async function submitForm(e) {{
+                e.preventDefault();
+                const data = {{
+                    voice_name: document.getElementById('voiceName').value,
+                    tts_model_id: parseInt(document.getElementById('ttsModelId').value),
+                    lang: document.getElementById('lang').value,
+                    gender: document.getElementById('gender').value,
+                    is_active: document.getElementById('isActive').checked
+                }};
+                
+                try {{
+                    const url = editingId 
+                        ? `/admin/api/tts-voices/${{editingId}}`
+                        : '/admin/api/tts-voices';
+                    const method = editingId ? 'PUT' : 'POST';
+                    
+                    const response = await fetch(url, {{
+                        method: method,
+                        headers: {{'Content-Type': 'application/json'}},
+                        body: JSON.stringify(data)
+                    }});
+                    
+                    const result = await response.json();
+                    if (result.ok) {{
+                        location.reload();
+                    }} else {{
+                        alert('Error: ' + result.error);
+                    }}
+                }} catch (error) {{
+                    alert('Error: ' + error.message);
+                }}
+            }}
+            
+            async function deleteVoice(id) {{
+                if (confirm('Are you sure you want to delete this voice?')) {{
+                    try {{
+                        const response = await fetch(`/admin/api/tts-voices/${{id}}`, {{
+                            method: 'DELETE',
+                            headers: {{'Content-Type': 'application/json'}}
+                        }});
+                        
+                        const result = await response.json();
+                        if (result.ok) {{
+                            location.reload();
+                        }} else {{
+                            alert('Error: ' + result.error);
+                        }}
+                    }} catch (error) {{
+                        alert('Error: ' + error.message);
+                    }}
+                }}
+            }}
+        </script>
+    </body>
+    </html>
+    """
+    
+    return html
+
+
+@router.post("/api/tts-voices")
+async def create_tts_voice(
+    request: Request,
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a new TTS voice"""
+    try:
+        data = await request.json()
+        
+        voice = TTSVoice(
+            voice_name=data.get("voice_name"),
+            tts_model_id=data.get("tts_model_id"),
+            lang=data.get("lang"),
+            gender=data.get("gender"),
+            is_active=data.get("is_active", True)
+        )
+        db.add(voice)
+        await db.commit()
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@router.put("/api/tts-voices/{voice_id}")
+async def update_tts_voice(
+    voice_id: int,
+    request: Request,
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update a TTS voice"""
+    try:
+        data = await request.json()
+        
+        result = await db.execute(select(TTSVoice).where(TTSVoice.id == voice_id))
+        voice = result.scalar_one_or_none()
+        
+        if not voice:
+            return {"ok": False, "error": "Voice not found"}
+        
+        voice.voice_name = data.get("voice_name", voice.voice_name)
+        voice.tts_model_id = data.get("tts_model_id", voice.tts_model_id)
+        voice.lang = data.get("lang", voice.lang)
+        voice.gender = data.get("gender", voice.gender)
+        voice.is_active = data.get("is_active", voice.is_active)
+        
+        await db.commit()
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@router.delete("/api/tts-voices/{voice_id}")
+async def delete_tts_voice(
+    voice_id: int,
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete a TTS voice"""
+    try:
+        result = await db.execute(select(TTSVoice).where(TTSVoice.id == voice_id))
+        voice = result.scalar_one_or_none()
+        
+        if not voice:
+            return {"ok": False, "error": "Voice not found"}
+        
+        await db.delete(voice)
+        await db.commit()
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+# ============ AI PREFERENCES ============
+
+TABS = {
+    "texts": {
+        "name": "Texts",
+        "description": "Model settings for text generation settings, grammar generation options, audio generation for sentences, model prompts"
+    },
+    "words": {
+        "name": "Words",
+        "description": "Model settings for words translation and generating audio for words, model prompts"
+    },
+    "sentences": {
+        "name": "Sentences",
+        "description": "Model settings for sentences generation, audio generation and model prompts"
+    },
+    "speaking": {
+        "name": "Speaking",
+        "description": "Model settings for evaluating speaking, model prompts"
+    }
+}
+
+@router.get("/ai-preferences", response_class=HTMLResponse)
+async def ai_preferences_page(
+    tab: str = "texts",
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """AI Preferences admin page"""
+    
+    # Validate tab
+    if tab not in TABS:
+        tab = "texts"
+    
+    current_tab = TABS[tab]
+    
+    # Generate tab buttons
+    tabs_html = ""
+    for tab_key, tab_info in TABS.items():
+        active_class = "active" if tab_key == tab else ""
+        tabs_html += f'<a href="/admin/ai-preferences?tab={tab_key}" class="tab-btn {active_class}">{tab_info["name"]}</a>\n'
+    
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>AI Preferences</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/css/bootstrap.min.css" rel="stylesheet">
+        <style>
+            * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+            body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto; background-color: #f5f7fa; }}
+            .navbar {{display: block!important; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 30px; }}
+            .navbar-container {{ display: flex; align-items: center; justify-content: flex-start; padding: 0 30px; height: 50px; gap: 40px; }}
+            .navbar-brand {{ font-size: 1.5em; font-weight: 700; color: white; text-decoration: none; display: flex; align-items: center; gap: 10px; white-space: nowrap; }}
+            .navbar-brand:hover {{ color: #f0f0f0; }}
+            .nav-menu {{ display: flex; gap: 0; list-style: none; margin: 0; padding: 0; }}
+            .nav-item {{ position: relative; }}
+            .nav-link {{ color: rgba(255,255,255,0.9); text-decoration: none; padding: 15px 12px; font-size: 0.9em; font-weight: 500; transition: all 0.3s; border-bottom: 3px solid transparent; height: 50px; display: flex; align-items: center; white-space: nowrap; }}
+            .nav-link:hover {{ color: white; background-color: rgba(255,255,255,0.1); border-bottom-color: rgba(255,255,255,0.3); }}
+            .nav-link.active {{ color: white; background-color: rgba(255,255,255,0.15); border-bottom-color: white; }}
+            .nav-right {{ display: flex; gap: 8px; align-items: center; margin-left: auto; color: white; font-size: 0.85em; white-space: nowrap; }}
+            .nav-right a.nav-link {{ padding: 8px 12px; height: auto; border-bottom: none; }}
+            .container-main {{ max-width: 1200px; margin: 0 auto; padding: 20px; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }}
+            
+            .tabs-container {{ display: flex; gap: 10px; margin-bottom: 30px; border-bottom: 2px solid #e0e0e0; }}
+            .tab-btn {{ padding: 12px 24px; background: none; border: none; cursor: pointer; font-size: 1em; color: #666; border-bottom: 3px solid transparent; transition: 0.3s; }}
+            .tab-btn:hover {{ color: #333; }}
+            .tab-btn.active {{ color: #667eea; border-bottom-color: #667eea; font-weight: 600; }}
+            
+            .tab-content {{ display: none; }}
+            .tab-content.active {{ display: block; }}
+            
+            .tab-header {{ margin-bottom: 30px; }}
+            .tab-header h2 {{ color: #333; margin-bottom: 15px; font-size: 1.8em; }}
+            .tab-header p {{ color: #666; font-size: 1.05em; line-height: 1.6; }}
+            
+            h1 {{ color: #333; margin-bottom: 30px; font-size: 2.2em; }}
+        </style>
+    </head>
+    <body>
+        <nav class="navbar">
+            <div class="navbar-container">
+                <a class="navbar-brand" href="/admin">🎓 Admin</a>
+                <ul class="nav-menu">
+                    <li class="nav-item"><a class="nav-link" href="/admin">Dashboard</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/users">Users</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/llm-prices">LLM Prices</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/llm-models">LLM Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/tts-models">TTS Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/tts-voices">TTS Voices</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="/admin/ai-preferences">AI Preferences</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
+                </ul>
+                <div class="nav-right">
+                    <span>{current_user.email.split("@")[0]}</span>
+                    <a class="nav-link" href="/admin/logout">Logout</a>
+                </div>
+            </div>
+        </nav>
+
+        <div class="container-main">
+            <h1>⚙️ AI Preferences</h1>
+            
+            <div class="tabs-container">
+                {tabs_html}
+            </div>
+            
+            <!-- TEXTS TAB -->
+            <div class="tab-content {('active' if tab == 'texts' else '')}">
+                <div class="tab-header">
+                    <h2>{TABS['texts']['name']}</h2>
+                    <p>{TABS['texts']['description']}</p>
+                </div>
+                <p style="color: #999; padding: 40px; text-align: center;">Content coming soon...</p>
+            </div>
+            
+            <!-- WORDS TAB -->
+            <div class="tab-content {('active' if tab == 'words' else '')}">
+                <div class="tab-header">
+                    <h2>{TABS['words']['name']}</h2>
+                    <p>{TABS['words']['description']}</p>
+                </div>
+                <p style="color: #999; padding: 40px; text-align: center;">Content coming soon...</p>
+            </div>
+            
+            <!-- SENTENCES TAB -->
+            <div class="tab-content {('active' if tab == 'sentences' else '')}">
+                <div class="tab-header">
+                    <h2>{TABS['sentences']['name']}</h2>
+                    <p>{TABS['sentences']['description']}</p>
+                </div>
+                <p style="color: #999; padding: 40px; text-align: center;">Content coming soon...</p>
+            </div>
+            
+            <!-- SPEAKING TAB -->
+            <div class="tab-content {('active' if tab == 'speaking' else '')}">
+                <div class="tab-header">
+                    <h2>{TABS['speaking']['name']}</h2>
+                    <p>{TABS['speaking']['description']}</p>
+                </div>
+                <p style="color: #999; padding: 40px; text-align: center;">Content coming soon...</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    
+    return html

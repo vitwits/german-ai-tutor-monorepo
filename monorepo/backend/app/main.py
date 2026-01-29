@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import os
-from .routers import auth, library, vocabulary, speaking, tts, admin_router, ai_preferences
+from .routers import auth, library, vocabulary, speaking, tts, admin_router
 from .database import engine
 
 app = FastAPI(title="German AI Tutor API")
@@ -32,7 +32,6 @@ app.include_router(vocabulary.router)
 app.include_router(speaking.router)
 app.include_router(tts.router)
 app.include_router(admin_router.router)
-app.include_router(ai_preferences.router)
 
 @app.get("/")
 def read_root():
