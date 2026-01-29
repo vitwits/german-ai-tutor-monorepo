@@ -61,15 +61,17 @@ async def ai_preferences_page(
         <style>
             * {{ margin: 0; padding: 0; box-sizing: border-box; }}
             body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto; background-color: #f5f7fa; }}
-            .navbar {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 30px; }}
+            .navbar {{display: block!important; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 30px; }}
             .navbar-container {{ display: flex; align-items: center; justify-content: flex-start; padding: 0 30px; height: 50px; gap: 40px; }}
-            .navbar-brand {{ font-size: 1.5em; font-weight: 700; color: white; text-decoration: none; display: flex; align-items: center; gap: 10px; }}
-            .nav-menu {{ display: flex; list-style: none; gap: 0; }}
-            .nav-item {{ margin: 0; }}
-            .nav-link {{ display: block; color: rgba(255,255,255,0.8); text-decoration: none; padding: 15px 20px; font-size: 0.95em; transition: 0.3s; }}
-            .nav-link:hover {{ background-color: rgba(0,0,0,0.1); color: white; }}
-            .nav-link.active {{ background-color: rgba(0,0,0,0.2); color: white; border-bottom: 3px solid white; }}
-            .nav-right {{ margin-left: auto; display: flex; align-items: center; gap: 20px; color: white; }}
+            .navbar-brand {{ font-size: 1.5em; font-weight: 700; color: white; text-decoration: none; display: flex; align-items: center; gap: 10px; white-space: nowrap; }}
+            .navbar-brand:hover {{ color: #f0f0f0; }}
+            .nav-menu {{ display: flex; gap: 0; list-style: none; margin: 0; padding: 0; }}
+            .nav-item {{ position: relative; }}
+            .nav-link {{ color: rgba(255,255,255,0.9); text-decoration: none; padding: 15px 12px; font-size: 0.9em; font-weight: 500; transition: all 0.3s; border-bottom: 3px solid transparent; height: 50px; display: flex; align-items: center; white-space: nowrap; }}
+            .nav-link:hover {{ color: white; background-color: rgba(255,255,255,0.1); border-bottom-color: rgba(255,255,255,0.3); }}
+            .nav-link.active {{ color: white; background-color: rgba(255,255,255,0.15); border-bottom-color: white; }}
+            .nav-right {{ display: flex; gap: 8px; align-items: center; margin-left: auto; color: white; font-size: 0.85em; white-space: nowrap; }}
+            .nav-right a.nav-link {{ padding: 8px 12px; height: auto; border-bottom: none; }}
             .container-main {{ max-width: 1200px; margin: 0 auto; padding: 20px; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }}
             
             .tabs-container {{ display: flex; gap: 10px; margin-bottom: 30px; border-bottom: 2px solid #e0e0e0; }}
@@ -94,9 +96,11 @@ async def ai_preferences_page(
                 <ul class="nav-menu">
                     <li class="nav-item"><a class="nav-link" href="/admin">Dashboard</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/users">Users</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-models">AI Models</a></li>
                     <li class="nav-item"><a class="nav-link active" href="/admin/ai-preferences">AI Preferences</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
                 </ul>
                 <div class="nav-right">
