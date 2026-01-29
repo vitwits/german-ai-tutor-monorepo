@@ -1,0 +1,53 @@
+<script>
+  import { login } from "../stores/auth";
+  import { router } from "tinro";
+
+  let email = "";
+  let password = "";
+  let error = "";
+
+  async function handleSubmit() {
+    error = "";
+    const res = await login(email, password);
+    if (!res.ok) {
+      error = res.error;
+    }
+  }
+</script>
+
+<div class="card auth-container">
+  <div class="auth-header">
+    <span class="material-symbols-outlined auth-icon">login</span>
+    <h2 style="margin: 0; color: var(--primary); font-weight: 500; letter-spacing: 1px;">LOGIN</h2>
+  </div>
+
+  {#if error}
+    <div class="error-msg">{error}</div>
+  {/if}
+
+  <form onsubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
+    <div class="form-group">
+      <label for="email">Email</label>
+      <input type="email" id="email" bind:value={email} class="form-control" placeholder="name@example.com" required>
+    </div>
+    <div class="form-group">
+      <label for="password">Password</label>
+      <input type="password" id="password" bind:value={password} class="form-control" placeholder="••••••••" required>
+    </div>
+    <button type="submit" class="btn-contained" style="width: 100%; margin-top: 10px;">Log In</button>
+  </form>
+  
+  <p style="margin-top: 24px; font-size: 0.9rem; opacity: 0.8;">
+    Don't have an account? <button type="button" class="btn-text" style="padding:0; height:auto; color: var(--primary); text-transform:none; display:inline;" onclick={() => router.goto('/register')}>Register</button>
+  </p>
+</div>
+
+<style>
+  .auth-container { max-width: 400px; margin: 60px auto; padding: 40px; text-align: center; }
+  .auth-header { margin-bottom: 30px; }
+  .auth-icon { font-size: 48px; color: var(--primary); margin-bottom: 10px; }
+  .form-group { margin-bottom: 20px; text-align: left; }
+  .form-control { width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--on-surface); font-size: 16px; box-sizing: border-box; }
+  .btn-contained { background: var(--primary); color: var(--on-primary); border: none; height: 48px; font-size: 1rem; font-weight: 500; text-transform: uppercase; border-radius: var(--radius); cursor: pointer; }
+  .error-msg { background: #ffebee; color: #c62828; padding: 10px; border-radius: 4px; margin-bottom: 20px; font-size: 0.9rem; }
+</style>
