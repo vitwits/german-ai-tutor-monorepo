@@ -33,7 +33,7 @@ from app.database import DATABASE_URL
 # Голоси (Google Cloud Text-to-Speech)
 VOICES = {
     'uk': ["uk-UA-Chirp3-HD-Leda", "uk-UA-Chirp3-HD-Sadachbia"],
-    'en': ["en-US-Neural2-A", "en-US-Neural2-C"],
+    'en': ["en-US-Neural2-D", "en-US-Neural2-C"],
     'de': ["de-DE-Neural2-A", "de-DE-Neural2-B"]
 }
 
