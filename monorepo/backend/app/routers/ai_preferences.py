@@ -99,6 +99,8 @@ async def ai_preferences_page(
                     <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/users">Users</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-models">AI Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/llm-models">LLM Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/tts-models">TTS Models</a></li>
                     <li class="nav-item"><a class="nav-link active" href="/admin/ai-preferences">AI Preferences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>

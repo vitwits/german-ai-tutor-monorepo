@@ -12,7 +12,7 @@ from typing import Optional
 from datetime import timedelta
 
 from ..database import get_db
-from ..models import User, Sentence, SentenceBatch, TempSentence, TTSLog, AIResource
+from ..models import User, Sentence, SentenceBatch, TempSentence, TTSLog, AIResource, LLMModel, TTSModel
 from ..dependencies import get_current_user
 from ..security import verify_password, create_access_token
 from sqlalchemy import delete
@@ -373,6 +373,8 @@ async def caching_stats(
                     <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/users">Users</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-models">AI Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/llm-models">LLM Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/tts-models">TTS Models</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
                     <li class="nav-item"><a class="nav-link active" href="/admin/caching-stats">Stats</a></li>
@@ -468,6 +470,8 @@ async def admin_index(
                     <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/users">Users</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-models">AI Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/llm-models">LLM Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/tts-models">TTS Models</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
@@ -679,6 +683,8 @@ async def sentence_list(
                     <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/users">Users</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-models">AI Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/llm-models">LLM Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/tts-models">TTS Models</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
@@ -938,6 +944,8 @@ async def reported_sentences(
                     <li class="nav-item"><a class="nav-link active" href="/admin/reported">Reported</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/users">Users</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-models">AI Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/llm-models">LLM Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/tts-models">TTS Models</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
@@ -1121,6 +1129,8 @@ async def admin_users(
                     <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
                     <li class="nav-item"><a class="nav-link active" href="/admin/users">Users</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-models">AI Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/llm-models">LLM Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/tts-models">TTS Models</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
@@ -1218,6 +1228,8 @@ async def edit_user(
                     <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
                     <li class="nav-item"><a class="nav-link active" href="/admin/users">Users</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-models">AI Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/llm-models">LLM Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/tts-models">TTS Models</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
@@ -1668,6 +1680,8 @@ async def generate_view(
                     <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/users">Users</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-models">AI Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/llm-models">LLM Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/tts-models">TTS Models</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
                     <li class="nav-item"><a class="nav-link active" href="/admin/generate">Generate</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
@@ -2130,6 +2144,8 @@ async def ai_models_list(
                     <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/users">Users</a></li>
                     <li class="nav-item"><a class="nav-link active" href="/admin/ai-models">AI Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/llm-models">LLM Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/tts-models">TTS Models</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
@@ -2500,6 +2516,621 @@ async def delete_ai_model(
         await db.delete(resource)
         await db.commit()
         
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+# ============ LLM MODELS ============
+
+@router.get("/llm-models", response_class=HTMLResponse)
+async def llm_models_page(
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """LLM Models management page"""
+    result = await db.execute(select(LLMModel).order_by(LLMModel.id.desc()))
+    models = result.scalars().all()
+    
+    rows_html = ""
+    for model in models:
+        status = "✅ Active" if model.is_active else "⏸️ Inactive"
+        rows_html += f"""
+        <tr>
+            <td>{model.human_name}</td>
+            <td><code>{model.model_id}</code></td>
+            <td>{model.provider}</td>
+            <td>{status}</td>
+            <td>
+                <button class="btn btn-sm btn-warning" onclick="editLLMModel({model.id})">Edit</button>
+                <button class="btn btn-sm btn-danger" onclick="deleteLLMModel({model.id})">Delete</button>
+            </td>
+        </tr>
+        """
+    
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>LLM Models</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/css/bootstrap.min.css" rel="stylesheet">
+        <style>
+            * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+            body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto; background-color: #f5f7fa; }}
+            .navbar {{ display: block!important; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 30px; }}
+            .navbar-container {{ display: flex; align-items: center; justify-content: flex-start; padding: 0 30px; height: 50px; gap: 40px; }}
+            .navbar-brand {{ font-size: 1.5em; font-weight: 700; color: white; text-decoration: none; display: flex; align-items: center; gap: 10px; white-space: nowrap; }}
+            .navbar-brand:hover {{ color: #f0f0f0; }}
+            .nav-menu {{ display: flex; gap: 0; list-style: none; margin: 0; padding: 0; }}
+            .nav-item {{ position: relative; }}
+            .nav-link {{ color: rgba(255,255,255,0.9); text-decoration: none; padding: 15px 12px; font-size: 0.9em; font-weight: 500; transition: all 0.3s; border-bottom: 3px solid transparent; height: 50px; display: flex; align-items: center; white-space: nowrap; }}
+            .nav-link:hover {{ color: white; background-color: rgba(255,255,255,0.1); border-bottom-color: rgba(255,255,255,0.3); }}
+            .nav-link.active {{ color: white; background-color: rgba(255,255,255,0.15); border-bottom-color: white; }}
+            .nav-right {{ display: flex; gap: 8px; align-items: center; margin-left: auto; color: white; font-size: 0.85em; white-space: nowrap; }}
+            .nav-right a.nav-link {{ padding: 8px 12px; height: auto; border-bottom: none; }}
+            .container-main {{ max-width: 1400px; margin: 0 auto; padding: 0 30px; }}
+            h1 {{ font-size: 2em; color: #2c3e50; margin-bottom: 30px; font-weight: 700; }}
+            .btn-add {{ margin-bottom: 20px; }}
+            table {{ background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border-radius: 8px; overflow: hidden; }}
+            code {{ background: #f5f5f5; padding: 2px 6px; border-radius: 3px; }}
+            .modal {{ display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; overflow: auto; }}
+            .modal.show {{ display: flex; }}
+            .modal-content {{ background: white; padding: 30px; border-radius: 8px; width: 90%; max-width: 600px; max-height: 90vh; overflow-y: auto; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: auto 0; }}
+            .modal-header {{ margin-bottom: 20px; font-size: 1.5em; font-weight: 700; }}
+            .form-group {{ margin-bottom: 15px; }}
+            label {{ font-weight: 600; margin-bottom: 5px; display: block; }}
+            input, select {{ width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 1em; }}
+            input:focus, select:focus {{ outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); }}
+            .modal-footer {{ display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }}
+            .btn {{ padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; }}
+            .btn-primary {{ background: #667eea; color: white; }}
+            .btn-primary:hover {{ background: #5568d3; }}
+            .btn-secondary {{ background: #6c757d; color: white; }}
+            .btn-secondary:hover {{ background: #5a6268; }}
+            .btn-danger {{ background: #dc3545; color: white; padding: 5px 10px; font-size: 0.85em; }}
+            .btn-warning {{ background: #ffc107; color: black; padding: 5px 10px; font-size: 0.85em; }}
+        </style>
+    </head>
+    <body>
+        <nav class="navbar">
+            <div class="navbar-container">
+                <a class="navbar-brand" href="/admin">🎓 Admin</a>
+                <ul class="nav-menu">
+                    <li class="nav-item"><a class="nav-link" href="/admin">Dashboard</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/users">Users</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/ai-models">AI Models</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="/admin/llm-models">LLM Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/tts-models">TTS Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
+                </ul>
+                <div class="nav-right">
+                    <span title="{current_user.email}">{current_user.email.split("@")[0]}</span>
+                    <a class="nav-link" href="/admin/logout">Logout</a>
+                </div>
+            </div>
+        </nav>
+        
+        <div class="container-main">
+            <h1>LLM Models & Resources</h1>
+            <button class="btn btn-primary btn-add" onclick="openAddModal()">+ Add LLM Model</button>
+            
+            <table class="table table-striped table-bordered">
+                <thead>
+                    <tr>
+                        <th>Human Name</th>
+                        <th>Model ID</th>
+                        <th>Provider</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows_html if rows_html else '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #999;">No LLM models yet. Click "Add" to create one.</td></tr>'}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Modal -->
+        <div id="modal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header" id="modalTitle">Add LLM Model</div>
+                <form id="form" onsubmit="submitForm(event)">
+                    <div class="form-group">
+                        <label>Human Name</label>
+                        <input type="text" id="humanName" required placeholder="e.g., GPT-4 Turbo">
+                    </div>
+                    <div class="form-group">
+                        <label>Model ID</label>
+                        <input type="text" id="modelId" required placeholder="e.g., gpt-4-turbo">
+                    </div>
+                    <div class="form-group">
+                        <label>Provider</label>
+                        <select id="provider" required>
+                            <option value="">Select provider</option>
+                            <option value="openai">OpenAI</option>
+                            <option value="google">Google</option>
+                            <option value="azure">Azure</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="isActive" checked> Active
+                        </label>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <script>
+            let editingId = null;
+            
+            function openAddModal() {{
+                editingId = null;
+                document.getElementById('modalTitle').innerText = 'Add LLM Model';
+                document.getElementById('form').reset();
+                document.getElementById('isActive').checked = true;
+                document.getElementById('modal').classList.add('show');
+            }}
+            
+            function editLLMModel(id) {{
+                // Find model in page and get its data
+                const rows = document.querySelectorAll('tbody tr');
+                for (let row of rows) {{
+                    const cells = row.querySelectorAll('td');
+                    if (cells[0]) {{
+                        // Parse the row data
+                        editingId = id;
+                        document.getElementById('humanName').value = cells[0].innerText;
+                        document.getElementById('modelId').value = cells[1].innerText.trim();
+                        document.getElementById('provider').value = cells[2].innerText.toLowerCase();
+                        document.getElementById('isActive').checked = cells[3].innerText.includes('Active');
+                        document.getElementById('modalTitle').innerText = 'Edit LLM Model';
+                        document.getElementById('modal').classList.add('show');
+                        break;
+                    }}
+                }}
+            }}
+            
+            function closeModal() {{
+                document.getElementById('modal').classList.remove('show');
+                editingId = null;
+            }}
+            
+            async function submitForm(e) {{
+                e.preventDefault();
+                const data = {{
+                    human_name: document.getElementById('humanName').value,
+                    model_id: document.getElementById('modelId').value,
+                    provider: document.getElementById('provider').value,
+                    is_active: document.getElementById('isActive').checked
+                }};
+                
+                try {{
+                    const url = editingId 
+                        ? `/admin/api/llm-models/${{editingId}}`
+                        : '/admin/api/llm-models';
+                    const method = editingId ? 'PUT' : 'POST';
+                    
+                    const response = await fetch(url, {{
+                        method: method,
+                        headers: {{'Content-Type': 'application/json'}},
+                        body: JSON.stringify(data)
+                    }});
+                    
+                    const result = await response.json();
+                    if (result.ok) {{
+                        location.reload();
+                    }} else {{
+                        alert('Error: ' + result.error);
+                    }}
+                }} catch (error) {{
+                    alert('Error: ' + error);
+                }}
+            }}
+            
+            async function deleteLLMModel(id) {{
+                if (confirm('Delete this LLM model?')) {{
+                    try {{
+                        const response = await fetch(`/admin/api/llm-models/${{id}}`, {{
+                            method: 'DELETE'
+                        }});
+                        const result = await response.json();
+                        if (result.ok) {{
+                            location.reload();
+                        }} else {{
+                            alert('Error: ' + result.error);
+                        }}
+                    }} catch (error) {{
+                        alert('Error: ' + error);
+                    }}
+                }}
+            }}
+        </script>
+    </body>
+    </html>
+    """
+    return html
+
+
+@router.get("/tts-models", response_class=HTMLResponse)
+async def tts_models_page(
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """TTS Models management page"""
+    result = await db.execute(select(TTSModel).order_by(TTSModel.id.desc()))
+    models = result.scalars().all()
+    
+    rows_html = ""
+    for model in models:
+        status = "✅ Active" if model.is_active else "⏸️ Inactive"
+        rows_html += f"""
+        <tr>
+            <td>{model.human_name}</td>
+            <td>{model.provider}</td>
+            <td>${{model.price_per_unit:.6f}}</td>
+            <td>{status}</td>
+            <td>
+                <button class="btn btn-sm btn-warning" onclick="editTTSModel({model.id})">Edit</button>
+                <button class="btn btn-sm btn-danger" onclick="deleteTTSModel({model.id})">Delete</button>
+            </td>
+        </tr>
+        """
+    
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>TTS Models</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/css/bootstrap.min.css" rel="stylesheet">
+        <style>
+            * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+            body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto; background-color: #f5f7fa; }}
+            .navbar {{ display: block!important; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 30px; }}
+            .navbar-container {{ display: flex; align-items: center; justify-content: flex-start; padding: 0 30px; height: 50px; gap: 40px; }}
+            .navbar-brand {{ font-size: 1.5em; font-weight: 700; color: white; text-decoration: none; display: flex; align-items: center; gap: 10px; white-space: nowrap; }}
+            .navbar-brand:hover {{ color: #f0f0f0; }}
+            .nav-menu {{ display: flex; gap: 0; list-style: none; margin: 0; padding: 0; }}
+            .nav-item {{ position: relative; }}
+            .nav-link {{ color: rgba(255,255,255,0.9); text-decoration: none; padding: 15px 12px; font-size: 0.9em; font-weight: 500; transition: all 0.3s; border-bottom: 3px solid transparent; height: 50px; display: flex; align-items: center; white-space: nowrap; }}
+            .nav-link:hover {{ color: white; background-color: rgba(255,255,255,0.1); border-bottom-color: rgba(255,255,255,0.3); }}
+            .nav-link.active {{ color: white; background-color: rgba(255,255,255,0.15); border-bottom-color: white; }}
+            .nav-right {{ display: flex; gap: 8px; align-items: center; margin-left: auto; color: white; font-size: 0.85em; white-space: nowrap; }}
+            .nav-right a.nav-link {{ padding: 8px 12px; height: auto; border-bottom: none; }}
+            .container-main {{ max-width: 1400px; margin: 0 auto; padding: 0 30px; }}
+            h1 {{ font-size: 2em; color: #2c3e50; margin-bottom: 30px; font-weight: 700; }}
+            .btn-add {{ margin-bottom: 20px; }}
+            table {{ background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border-radius: 8px; overflow: hidden; }}
+            .modal {{ display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; overflow: auto; }}
+            .modal.show {{ display: flex; }}
+            .modal-content {{ background: white; padding: 30px; border-radius: 8px; width: 90%; max-width: 600px; max-height: 90vh; overflow-y: auto; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: auto 0; }}
+            .modal-header {{ margin-bottom: 20px; font-size: 1.5em; font-weight: 700; }}
+            .form-group {{ margin-bottom: 15px; }}
+            label {{ font-weight: 600; margin-bottom: 5px; display: block; }}
+            input, select {{ width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 1em; }}
+            input:focus, select:focus {{ outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); }}
+            .modal-footer {{ display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }}
+            .btn {{ padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; }}
+            .btn-primary {{ background: #667eea; color: white; }}
+            .btn-primary:hover {{ background: #5568d3; }}
+            .btn-secondary {{ background: #6c757d; color: white; }}
+            .btn-secondary:hover {{ background: #5a6268; }}
+            .btn-danger {{ background: #dc3545; color: white; padding: 5px 10px; font-size: 0.85em; }}
+            .btn-warning {{ background: #ffc107; color: black; padding: 5px 10px; font-size: 0.85em; }}
+        </style>
+    </head>
+    <body>
+        <nav class="navbar">
+            <div class="navbar-container">
+                <a class="navbar-brand" href="/admin">🎓 Admin</a>
+                <ul class="nav-menu">
+                    <li class="nav-item"><a class="nav-link" href="/admin">Dashboard</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/users">Users</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/ai-models">AI Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/llm-models">LLM Models</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="/admin/tts-models">TTS Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
+                </ul>
+                <div class="nav-right">
+                    <span title="{current_user.email}">{current_user.email.split("@")[0]}</span>
+                    <a class="nav-link" href="/admin/logout">Logout</a>
+                </div>
+            </div>
+        </nav>
+        
+        <div class="container-main">
+            <h1>TTS Models & Resources</h1>
+            <button class="btn btn-primary btn-add" onclick="openAddModal()">+ Add TTS Model</button>
+            
+            <table class="table table-striped table-bordered">
+                <thead>
+                    <tr>
+                        <th>Human Name</th>
+                        <th>Provider</th>
+                        <th>Price per 1M chars</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows_html if rows_html else '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #999;">No TTS models yet. Click "Add" to create one.</td></tr>'}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Modal -->
+        <div id="modal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header" id="modalTitle">Add TTS Model</div>
+                <form id="form" onsubmit="submitForm(event)">
+                    <div class="form-group">
+                        <label>Human Name</label>
+                        <input type="text" id="humanName" required placeholder="e.g., Google TTS">
+                    </div>
+                    <div class="form-group">
+                        <label>Provider</label>
+                        <select id="provider" required>
+                            <option value="">Select provider</option>
+                            <option value="google">Google</option>
+                            <option value="azure">Azure</option>
+                            <option value="openai">OpenAI</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Price per 1M characters</label>
+                        <input type="number" id="pricePerUnit" step="0.000001" required placeholder="0.000001">
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="isActive" checked> Active
+                        </label>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <script>
+            let editingId = null;
+            
+            function openAddModal() {{
+                editingId = null;
+                document.getElementById('modalTitle').innerText = 'Add TTS Model';
+                document.getElementById('form').reset();
+                document.getElementById('isActive').checked = true;
+                document.getElementById('modal').classList.add('show');
+            }}
+            
+            function editTTSModel(id) {{
+                const rows = document.querySelectorAll('tbody tr');
+                for (let row of rows) {{
+                    const cells = row.querySelectorAll('td');
+                    if (cells[0]) {{
+                        editingId = id;
+                        document.getElementById('humanName').value = cells[0].innerText;
+                        document.getElementById('provider').value = cells[1].innerText.toLowerCase();
+                        document.getElementById('pricePerUnit').value = cells[2].innerText.substring(1);
+                        document.getElementById('isActive').checked = cells[3].innerText.includes('Active');
+                        document.getElementById('modalTitle').innerText = 'Edit TTS Model';
+                        document.getElementById('modal').classList.add('show');
+                        break;
+                    }}
+                }}
+            }}
+            
+            function closeModal() {{
+                document.getElementById('modal').classList.remove('show');
+                editingId = null;
+            }}
+            
+            async function submitForm(e) {{
+                e.preventDefault();
+                const data = {{
+                    human_name: document.getElementById('humanName').value,
+                    provider: document.getElementById('provider').value,
+                    price_per_unit: parseFloat(document.getElementById('pricePerUnit').value),
+                    is_active: document.getElementById('isActive').checked
+                }};
+                
+                try {{
+                    const url = editingId 
+                        ? `/admin/api/tts-models/${{editingId}}`
+                        : '/admin/api/tts-models';
+                    const method = editingId ? 'PUT' : 'POST';
+                    
+                    const response = await fetch(url, {{
+                        method: method,
+                        headers: {{'Content-Type': 'application/json'}},
+                        body: JSON.stringify(data)
+                    }});
+                    
+                    const result = await response.json();
+                    if (result.ok) {{
+                        location.reload();
+                    }} else {{
+                        alert('Error: ' + result.error);
+                    }}
+                }} catch (error) {{
+                    alert('Error: ' + error);
+                }}
+            }}
+            
+            async function deleteTTSModel(id) {{
+                if (confirm('Delete this TTS model?')) {{
+                    try {{
+                        const response = await fetch(`/admin/api/tts-models/${{id}}`, {{
+                            method: 'DELETE'
+                        }});
+                        const result = await response.json();
+                        if (result.ok) {{
+                            location.reload();
+                        }} else {{
+                            alert('Error: ' + result.error);
+                        }}
+                    }} catch (error) {{
+                        alert('Error: ' + error);
+                    }}
+                }}
+            }}
+        </script>
+    </body>
+    </html>
+    """
+    return html
+
+
+# LLM Models API endpoints
+@router.post("/api/llm-models")
+async def create_llm_model(
+    data: dict,
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a new LLM model"""
+    try:
+        model = LLMModel(
+            human_name=data.get("human_name"),
+            model_id=data.get("model_id"),
+            provider=data.get("provider"),
+            is_active=data.get("is_active", True)
+        )
+        db.add(model)
+        await db.commit()
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@router.put("/api/llm-models/{model_id}")
+async def update_llm_model(
+    model_id: int,
+    data: dict,
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update an LLM model"""
+    try:
+        result = await db.execute(select(LLMModel).where(LLMModel.id == model_id))
+        model = result.scalar_one_or_none()
+        
+        if not model:
+            return {"ok": False, "error": "Model not found"}
+        
+        model.human_name = data.get("human_name", model.human_name)
+        model.model_id = data.get("model_id", model.model_id)
+        model.provider = data.get("provider", model.provider)
+        model.is_active = data.get("is_active", model.is_active)
+        
+        await db.commit()
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@router.delete("/api/llm-models/{model_id}")
+async def delete_llm_model(
+    model_id: int,
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete an LLM model"""
+    try:
+        result = await db.execute(select(LLMModel).where(LLMModel.id == model_id))
+        model = result.scalar_one_or_none()
+        
+        if not model:
+            return {"ok": False, "error": "Model not found"}
+        
+        await db.delete(model)
+        await db.commit()
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+# TTS Models API endpoints
+@router.post("/api/tts-models")
+async def create_tts_model(
+    data: dict,
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a new TTS model"""
+    try:
+        model = TTSModel(
+            human_name=data.get("human_name"),
+            provider=data.get("provider"),
+            price_per_unit=data.get("price_per_unit"),
+            is_active=data.get("is_active", True)
+        )
+        db.add(model)
+        await db.commit()
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@router.put("/api/tts-models/{model_id}")
+async def update_tts_model(
+    model_id: int,
+    data: dict,
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update a TTS model"""
+    try:
+        result = await db.execute(select(TTSModel).where(TTSModel.id == model_id))
+        model = result.scalar_one_or_none()
+        
+        if not model:
+            return {"ok": False, "error": "Model not found"}
+        
+        model.human_name = data.get("human_name", model.human_name)
+        model.provider = data.get("provider", model.provider)
+        model.price_per_unit = data.get("price_per_unit", model.price_per_unit)
+        model.is_active = data.get("is_active", model.is_active)
+        
+        await db.commit()
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@router.delete("/api/tts-models/{model_id}")
+async def delete_tts_model(
+    model_id: int,
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete a TTS model"""
+    try:
+        result = await db.execute(select(TTSModel).where(TTSModel.id == model_id))
+        model = result.scalar_one_or_none()
+        
+        if not model:
+            return {"ok": False, "error": "Model not found"}
+        
+        await db.delete(model)
+        await db.commit()
         return {"ok": True}
     except Exception as e:
         return {"ok": False, "error": str(e)}

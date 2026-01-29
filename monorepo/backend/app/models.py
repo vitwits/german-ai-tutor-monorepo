@@ -152,6 +152,32 @@ class TTSLog(Base):
     source: Mapped[Optional[str]] = mapped_column(String)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
 
+
+
+class LLMModel(Base):
+    __tablename__ = "llm_models"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    human_name: Mapped[str] = mapped_column(String, nullable=False)  # Дружелюбне імя (e.g., "GPT-4 Turbo")
+    model_id: Mapped[str] = mapped_column(String, unique=True, nullable=False)  # Уникальний ID моделі (e.g., "gpt-4-turbo")
+    provider: Mapped[str] = mapped_column(String, nullable=False)  # "google" | "azure" | "openai"
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class TTSModel(Base):
+    __tablename__ = "tts_models"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    human_name: Mapped[str] = mapped_column(String, nullable=False)  # Дружелюбне імя (e.g., "Google TTS German")
+    provider: Mapped[str] = mapped_column(String, nullable=False)  # "google" | "azure" | "openai" | тощо
+    price_per_unit: Mapped[float] = mapped_column(Float, nullable=False)  # Ціна за 1млн символів
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
+
+
 class AIResource(Base):
     __tablename__ = "ai_resources"
     
