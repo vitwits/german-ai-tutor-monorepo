@@ -12,7 +12,7 @@ from typing import Optional
 from datetime import timedelta
 
 from ..database import get_db
-from ..models import User, Sentence, SentenceBatch, TempSentence, TTSLog, LLMModel, TTSModel, LLMPrice, TTSVoice
+from ..models import User, Sentence, SentenceBatch, TempSentence, TTSLog, LLMModel, TTSModel, LLMPrice, TTSVoice, AIPreference
 from ..dependencies import get_current_user
 from ..security import verify_password, create_access_token
 from sqlalchemy import delete
@@ -3407,7 +3407,202 @@ async def delete_tts_voice(
         return {"ok": False, "error": str(e)}
 
 
-# ============ AI PREFERENCES ============
+# ============ AI PREFERENCES - API ENDPOINTS ============
+
+@router.get("/api/ai-preferences/llm-models")
+async def get_llm_models(
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get all LLM models for dropdown"""
+    result = await db.execute(select(LLMModel).order_by(LLMModel.human_name))
+    models = result.scalars().all()
+    return [{"id": m.id, "human_name": m.human_name, "is_active": m.is_active} for m in models]
+
+
+@router.get("/api/ai-preferences/tts-voices")
+async def get_tts_voices(
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get all TTS voices for dropdown"""
+    result = await db.execute(select(TTSVoice).order_by(TTSVoice.lang, TTSVoice.voice_name))
+    voices = result.scalars().all()
+    return [
+        {
+            "id": v.id,
+            "voice_name": v.voice_name,
+            "lang": v.lang,
+            "gender": v.gender,
+            "is_active": v.is_active,
+            "tts_model_id": v.tts_model_id
+        }
+        for v in voices
+    ]
+
+
+@router.get("/api/ai-preferences")
+async def get_ai_preferences(
+    tab: str = Query(None),
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get AI preferences, optionally filtered by page"""
+    result = await db.execute(select(AIPreference).order_by(AIPreference.job))
+    prefs = result.scalars().all()
+    
+    # Filter by page if provided
+    if tab:
+        prefs = [p for p in prefs if p.page == tab]
+    
+    return [
+        {
+            "id": p.id,
+            "job": p.job,
+            "page": p.page,
+            "model_type": p.model_type,
+            "lang": p.lang,
+            "llm_model_id": p.llm_model_id,
+            "tts_voice_id": p.tts_voice_id
+        }
+        for p in prefs
+    ]
+
+
+@router.get("/api/ai-preferences/{pref_id}")
+async def get_ai_preference(
+    pref_id: int,
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get single AI preference"""
+    pref = await db.get(AIPreference, pref_id)
+    if not pref:
+        return {"ok": False, "error": "Preference not found"}
+    
+    return {
+        "id": pref.id,
+        "job": pref.job,
+        "model_type": pref.model_type,
+        "lang": pref.lang,
+        "llm_model_id": pref.llm_model_id,
+        "tts_voice_id": pref.tts_voice_id
+    }
+
+
+@router.post("/api/ai-preferences")
+async def create_ai_preference(
+    request: Request,
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Create new AI preference"""
+    try:
+        data = await request.json()
+        
+        # Validate data
+        model_type = data.get("model_type")
+        page = data.get("page")
+        
+        if not page or page not in ["texts", "words", "sentences", "speaking"]:
+            return {"ok": False, "error": "Invalid page"}
+        
+        if model_type == "tts":
+            if not data.get("tts_voice_id"):
+                return {"ok": False, "error": "tts_voice_id required for TTS"}
+            if not data.get("lang"):
+                return {"ok": False, "error": "lang required for TTS"}
+        elif model_type == "llm":
+            if not data.get("llm_model_id"):
+                return {"ok": False, "error": "llm_model_id required for LLM"}
+        else:
+            return {"ok": False, "error": "Invalid model_type"}
+        
+        pref = AIPreference(
+            job=data.get("job"),
+            page=page,
+            model_type=model_type,
+            lang=data.get("lang"),
+            llm_model_id=data.get("llm_model_id"),
+            tts_voice_id=data.get("tts_voice_id")
+        )
+        
+        db.add(pref)
+        await db.commit()
+        return {"ok": True, "id": pref.id}
+    except Exception as e:
+        await db.rollback()
+        return {"ok": False, "error": str(e)}
+
+
+@router.put("/api/ai-preferences/{pref_id}")
+async def update_ai_preference(
+    pref_id: int,
+    request: Request,
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update AI preference"""
+    try:
+        data = await request.json()
+        
+        pref = await db.get(AIPreference, pref_id)
+        if not pref:
+            return {"ok": False, "error": "Preference not found"}
+        
+        # Validate data
+        model_type = data.get("model_type")
+        page = data.get("page")
+        
+        if not page or page not in ["texts", "words", "sentences", "speaking"]:
+            return {"ok": False, "error": "Invalid page"}
+        
+        if model_type == "tts":
+            if not data.get("tts_voice_id"):
+                return {"ok": False, "error": "tts_voice_id required for TTS"}
+            if not data.get("lang"):
+                return {"ok": False, "error": "lang required for TTS"}
+        elif model_type == "llm":
+            if not data.get("llm_model_id"):
+                return {"ok": False, "error": "llm_model_id required for LLM"}
+        else:
+            return {"ok": False, "error": "Invalid model_type"}
+        
+        pref.job = data.get("job", pref.job)
+        pref.page = page
+        pref.model_type = model_type
+        pref.lang = data.get("lang")
+        pref.llm_model_id = data.get("llm_model_id")
+        pref.tts_voice_id = data.get("tts_voice_id")
+        
+        await db.commit()
+        return {"ok": True}
+    except Exception as e:
+        await db.rollback()
+        return {"ok": False, "error": str(e)}
+
+
+@router.delete("/api/ai-preferences/{pref_id}")
+async def delete_ai_preference(
+    pref_id: int,
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete AI preference"""
+    try:
+        pref = await db.get(AIPreference, pref_id)
+        if not pref:
+            return {"ok": False, "error": "Preference not found"}
+        
+        await db.delete(pref)
+        await db.commit()
+        return {"ok": True}
+    except Exception as e:
+        await db.rollback()
+        return {"ok": False, "error": str(e)}
+
+
+# ============ AI PREFERENCES - PAGE ============
 
 TABS = {
     "texts": {
@@ -3485,6 +3680,28 @@ async def ai_preferences_page(
             .tab-header p {{ color: #666; font-size: 1.05em; line-height: 1.6; }}
             
             h1 {{ color: #333; margin-bottom: 30px; font-size: 2.2em; }}
+            h2 {{ color: #333; font-size: 1.5em; font-weight: 600; }}
+            
+            table {{ width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }}
+            th, td {{ padding: 12px; text-align: left; border-bottom: 1px solid #eee; }}
+            th {{ background: #f8f9fa; font-weight: 600; color: #333; }}
+            tr:hover {{ background: #f8f9fa; }}
+            
+            .modal {{ display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; }}
+            .modal.show {{ display: flex; }}
+            .modal-content {{ background: white; padding: 30px; border-radius: 8px; width: 90%; max-width: 500px; max-height: 90vh; overflow-y: auto; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }}
+            .modal-header {{ margin-bottom: 20px; font-size: 1.3em; font-weight: 700; }}
+            .form-group {{ margin-bottom: 15px; }}
+            label {{ font-weight: 600; margin-bottom: 5px; display: block; color: #333; }}
+            input, select {{ width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 1em; }}
+            input:focus, select:focus {{ outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); }}
+            .modal-footer {{ display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }}
+            .btn-primary {{ background: #667eea; color: white; }}
+            .btn-primary:hover {{ background: #5568d3; }}
+            .btn-secondary {{ background: #6c757d; color: white; }}
+            .btn-secondary:hover {{ background: #5a6268; }}
+            .btn-danger {{ background: #dc3545; color: white; padding: 5px 10px; font-size: 0.85em; }}
+            .btn-danger:hover {{ background: #c82333; }}
         </style>
     </head>
     <body>
@@ -3520,42 +3737,290 @@ async def ai_preferences_page(
             
             <!-- TEXTS TAB -->
             <div class="tab-content {('active' if tab == 'texts' else '')}">
-                <div class="tab-header">
-                    <h2>{TABS['texts']['name']}</h2>
-                    <p>{TABS['texts']['description']}</p>
-                </div>
-                <p style="color: #999; padding: 40px; text-align: center;">Content coming soon...</p>
+                <p>{TABS['texts']['description']}</p>
+                <h2 style="margin-top: 30px; margin-bottom: 20px;">Models</h2>
+                <button class="btn btn-primary btn-add" onclick="openAddModal('texts')">+ Add Model</button>
+                <div id="texts-models-table" style="margin-top: 20px;"></div>
             </div>
             
             <!-- WORDS TAB -->
             <div class="tab-content {('active' if tab == 'words' else '')}">
-                <div class="tab-header">
-                    <h2>{TABS['words']['name']}</h2>
-                    <p>{TABS['words']['description']}</p>
-                </div>
-                <p style="color: #999; padding: 40px; text-align: center;">Content coming soon...</p>
+                <p>{TABS['words']['description']}</p>
+                <h2 style="margin-top: 30px; margin-bottom: 20px;">Models</h2>
+                <button class="btn btn-primary btn-add" onclick="openAddModal('words')">+ Add Model</button>
+                <div id="words-models-table" style="margin-top: 20px;"></div>
             </div>
             
             <!-- SENTENCES TAB -->
             <div class="tab-content {('active' if tab == 'sentences' else '')}">
-                <div class="tab-header">
-                    <h2>{TABS['sentences']['name']}</h2>
-                    <p>{TABS['sentences']['description']}</p>
-                </div>
-                <p style="color: #999; padding: 40px; text-align: center;">Content coming soon...</p>
+                <p>{TABS['sentences']['description']}</p>
+                <h2 style="margin-top: 30px; margin-bottom: 20px;">Models</h2>
+                <button class="btn btn-primary btn-add" onclick="openAddModal('sentences')">+ Add Model</button>
+                <div id="sentences-models-table" style="margin-top: 20px;"></div>
             </div>
             
             <!-- SPEAKING TAB -->
             <div class="tab-content {('active' if tab == 'speaking' else '')}">
-                <div class="tab-header">
-                    <h2>{TABS['speaking']['name']}</h2>
-                    <p>{TABS['speaking']['description']}</p>
-                </div>
-                <p style="color: #999; padding: 40px; text-align: center;">Content coming soon...</p>
+                <p>{TABS['speaking']['description']}</p>
+                <h2 style="margin-top: 30px; margin-bottom: 20px;">Models</h2>
+                <button class="btn btn-primary btn-add" onclick="openAddModal('speaking')">+ Add Model</button>
+                <div id="speaking-models-table" style="margin-top: 20px;"></div>
             </div>
         </div>
+        
+        <!-- Modal -->
+        <div id="modal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header" id="modalTitle">Add AI Preference</div>
+                <form id="form" onsubmit="submitForm(event)">
+                    <div class="form-group">
+                        <label>Job Name</label>
+                        <input type="text" id="job" required placeholder="e.g., tts_de">
+                    </div>
+                    <!-- Hidden field for page -->
+                    <input type="hidden" id="page">
+                    <div class="form-group">
+                        <label>Model Type</label>
+                        <select id="modelType" required onchange="updateModelTypeFields()">
+                            <option value="">Select type</option>
+                            <option value="tts">TTS</option>
+                            <option value="llm">LLM</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="langGroup" style="display: none;">
+                        <label>Language</label>
+                        <select id="lang" onchange="loadTTSVoices()">
+                            <option value="">Select language</option>
+                            <option value="DE">German</option>
+                            <option value="EN">English</option>
+                            <option value="UA">Ukrainian</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="ttsVoiceGroup" style="display: none;">
+                        <label>TTS Voice</label>
+                        <select id="ttsVoiceId"></select>
+                    </div>
+                    <div class="form-group" id="llmModelGroup" style="display: none;">
+                        <label>LLM Model</label>
+                        <select id="llmModelId"></select>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <script>
+            let currentTab = null;
+            let editingId = null;
+            let allLLMModels = [];
+            let allTTSVoices = [];
+            
+            // Load initial data
+            async function initData() {{
+                try {{
+                    const llmRes = await fetch('/admin/api/ai-preferences/llm-models');
+                    allLLMModels = await llmRes.json();
+                    
+                    const ttsRes = await fetch('/admin/api/ai-preferences/tts-voices');
+                    allTTSVoices = await ttsRes.json();
+                    
+                    populateLLMDropdown();
+                    loadAllPreferences();
+                }} catch (err) {{
+                    console.error('Error loading data:', err);
+                }}
+            }}
+            
+            function populateLLMDropdown() {{
+                const select = document.getElementById('llmModelId');
+                select.innerHTML = '<option value="">Select model</option>';
+                allLLMModels.forEach(model => {{
+                    if (model.is_active) {{
+                        select.innerHTML += `<option value="${{model.id}}">${{model.human_name}}</option>`;
+                    }}
+                }});
+            }}
+            
+            function loadTTSVoices() {{
+                const lang = document.getElementById('lang').value;
+                const select = document.getElementById('ttsVoiceId');
+                select.innerHTML = '<option value="">Select voice</option>';
+                allTTSVoices.forEach(voice => {{
+                    if (voice.lang === lang && voice.is_active) {{
+                        select.innerHTML += `<option value="${{voice.id}}">${{voice.voice_name}}</option>`;
+                    }}
+                }});
+            }}
+            
+            function updateModelTypeFields() {{
+                const modelType = document.getElementById('modelType').value;
+                const langGroup = document.getElementById('langGroup');
+                const ttsVoiceGroup = document.getElementById('ttsVoiceGroup');
+                const llmModelGroup = document.getElementById('llmModelGroup');
+                
+                if (modelType === 'tts') {{
+                    langGroup.style.display = 'block';
+                    ttsVoiceGroup.style.display = 'block';
+                    llmModelGroup.style.display = 'none';
+                }} else if (modelType === 'llm') {{
+                    langGroup.style.display = 'none';
+                    ttsVoiceGroup.style.display = 'none';
+                    llmModelGroup.style.display = 'block';
+                    populateLLMDropdown();
+                }} else {{
+                    langGroup.style.display = 'none';
+                    ttsVoiceGroup.style.display = 'none';
+                    llmModelGroup.style.display = 'none';
+                }}
+            }}
+            
+            function openAddModal(tab) {{
+                currentTab = tab;
+                editingId = null;
+                document.getElementById('modalTitle').innerText = 'Add AI Preference';
+                document.getElementById('form').reset();
+                document.getElementById('page').value = tab;
+                document.getElementById('modelType').value = '';
+                updateModelTypeFields();
+                document.getElementById('modal').classList.add('show');
+            }}
+            
+            function closeModal() {{
+                document.getElementById('modal').classList.remove('show');
+                editingId = null;
+                currentTab = null;
+            }}
+            
+            async function loadAllPreferences() {{
+                const tabs = ['texts', 'words', 'sentences', 'speaking'];
+                for (const tab of tabs) {{
+                    await loadPreferencesForTab(tab);
+                }}
+            }}
+            
+            async function loadPreferencesForTab(tab) {{
+                const response = await fetch(`/admin/api/ai-preferences?tab=${{tab}}`);
+                const prefs = await response.json();
+                renderTable(tab, prefs);
+            }}
+            
+            function renderTable(tab, prefs) {{
+                const container = document.getElementById(`${{tab}}-models-table`);
+                if (!prefs || prefs.length === 0) {{
+                    container.innerHTML = '<p style="color: #999; padding: 20px; text-align: center;">No models configured yet</p>';
+                    return;
+                }}
+                
+                let html = '<table><thead><tr><th>Job</th><th>Type</th><th>Language</th><th>Model</th><th>Actions</th></tr></thead><tbody>';
+                prefs.forEach(pref => {{
+                    const modelName = pref.model_type === 'tts' 
+                        ? (allTTSVoices.find(v => v.id === pref.tts_voice_id)?.voice_name || 'N/A')
+                        : (allLLMModels.find(m => m.id === pref.llm_model_id)?.human_name || 'N/A');
+                    
+                    html += `
+                        <tr>
+                            <td>${{pref.job}}</td>
+                            <td><strong>${{pref.model_type.toUpperCase()}}</strong></td>
+                            <td>${{pref.lang || '-'}}</td>
+                            <td>${{modelName}}</td>
+                            <td>
+                                <button class="btn btn-sm btn-warning" onclick="editPreference(${{pref.id}}, '${{tab}}')">Edit</button>
+                                <button class="btn btn-sm btn-danger" onclick="deletePreference(${{pref.id}})">Delete</button>
+                            </td>
+                        </tr>
+                    `;
+                }});
+                html += '</tbody></table>';
+                container.innerHTML = html;
+            }}
+            
+            async function editPreference(id, tab) {{
+                const response = await fetch(`/admin/api/ai-preferences/${{id}}`);
+                const pref = await response.json();
+                
+                currentTab = tab;
+                editingId = id;
+                
+                document.getElementById('job').value = pref.job;
+                document.getElementById('page').value = pref.page;
+                document.getElementById('modelType').value = pref.model_type;
+                document.getElementById('lang').value = pref.lang || '';
+                
+                updateModelTypeFields();
+                
+                if (pref.model_type === 'tts') {{
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    loadTTSVoices();
+                    document.getElementById('ttsVoiceId').value = pref.tts_voice_id || '';
+                }} else if (pref.model_type === 'llm') {{
+                    document.getElementById('llmModelId').value = pref.llm_model_id || '';
+                }}
+                
+                document.getElementById('modalTitle').innerText = 'Edit AI Preference';
+                document.getElementById('modal').classList.add('show');
+            }}
+            
+            async function submitForm(e) {{
+                e.preventDefault();
+                const data = {{
+                    job: document.getElementById('job').value,
+                    page: document.getElementById('page').value,
+                    model_type: document.getElementById('modelType').value,
+                    lang: document.getElementById('lang').value || null,
+                    llm_model_id: document.getElementById('llmModelId').value ? parseInt(document.getElementById('llmModelId').value) : null,
+                    tts_voice_id: document.getElementById('ttsVoiceId').value ? parseInt(document.getElementById('ttsVoiceId').value) : null
+                }};
+                
+                try {{
+                    const url = editingId 
+                        ? `/admin/api/ai-preferences/${{editingId}}`
+                        : '/admin/api/ai-preferences';
+                    const method = editingId ? 'PUT' : 'POST';
+                    
+                    const response = await fetch(url, {{
+                        method: method,
+                        headers: {{'Content-Type': 'application/json'}},
+                        body: JSON.stringify(data)
+                    }});
+                    
+                    const result = await response.json();
+                    if (result.ok) {{
+                        const tabToRefresh = currentTab;
+                        closeModal();
+                        await loadPreferencesForTab(tabToRefresh);
+                    }} else {{
+                        alert('Error: ' + (result.error || 'Unknown error'));
+                    }}
+                }} catch (err) {{
+                    alert('Error: ' + err.message);
+                }}
+            }}
+            
+            async function deletePreference(id) {{
+                if (!confirm('Are you sure?')) return;
+                
+                try {{
+                    const response = await fetch(`/admin/api/ai-preferences/${{id}}`, {{ method: 'DELETE' }});
+                    const result = await response.json();
+                    if (result.ok) {{
+                        await loadPreferencesForTab(currentTab);
+                    }} else {{
+                        alert('Error: ' + (result.error || 'Unknown error'));
+                    }}
+                }} catch (err) {{
+                    alert('Error: ' + err.message);
+                }}
+            }}
+            
+            // Initialize on page load
+            document.addEventListener('DOMContentLoaded', initData);
+        </script>
     </body>
     </html>
     """
     
     return html
+

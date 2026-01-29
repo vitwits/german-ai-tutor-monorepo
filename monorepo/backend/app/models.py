@@ -204,3 +204,25 @@ class TTSVoice(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class AIPreference(Base):
+    __tablename__ = "ai_preferences"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    job: Mapped[str] = mapped_column(String, unique=True, nullable=False)  # e.g., "vocabulary_tts_de"
+    page: Mapped[str] = mapped_column(String, nullable=False)  # "texts" | "words" | "sentences" | "speaking"
+    model_type: Mapped[str] = mapped_column(String, nullable=False)  # "tts" | "llm"
+    lang: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # "DE" | "EN" | "UA" | NULL
+    
+    # Foreign Keys
+    llm_model_id: Mapped[Optional[int]] = mapped_column(ForeignKey("llm_models.id"), nullable=True)
+    tts_voice_id: Mapped[Optional[int]] = mapped_column(ForeignKey("tts_voices.id"), nullable=True)
+    
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
+    
+    # Relationships (для зручного доступу)
+    llm_model: Mapped[Optional["LLMModel"]] = relationship("LLMModel")
+    tts_voice: Mapped[Optional["TTSVoice"]] = relationship("TTSVoice")
