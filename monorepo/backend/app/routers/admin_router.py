@@ -4436,10 +4436,17 @@ async def ai_preferences_page(
             
             async function loadPromptsForTab(tab) {{
                 try {{
+                    const tableDiv = document.getElementById(`${{tab}}-prompts-table`);
+                    
+                    // Skip if element doesn't exist (tab not yet loaded in DOM)
+                    if (!tableDiv) {{
+                        console.warn(`Element ${{tab}}-prompts-table not found, skipping load`);
+                        return;
+                    }}
+                    
                     const response = await fetch(`/admin/api/model-prompts?page=${{tab}}`);
                     const prompts = await response.json();
                     
-                    const tableDiv = document.getElementById(`${{tab}}-prompts-table`);
                     if (!prompts || prompts.length === 0) {{
                         tableDiv.innerHTML = '<p style="color: #999;">No prompts yet.</p>';
                         return;
@@ -4463,6 +4470,7 @@ async def ai_preferences_page(
                     html += '</table>';
                     tableDiv.innerHTML = html;
                 }} catch (err) {{
+                    console.error('Error loading prompts:', err);
                     alert('Error loading prompts: ' + err.message);
                 }}
             }}
@@ -4490,14 +4498,22 @@ async def ai_preferences_page(
             async function loadAllPrompts() {{
                 const pages = ['texts', 'words', 'sentences', 'speaking'];
                 for (const page of pages) {{
-                    await loadPromptsForTab(page);
+                    const tableDiv = document.getElementById(`${{page}}-prompts-table`);
+                    if (tableDiv) {{
+                        // Only load prompts for visible tabs
+                        await loadPromptsForTab(page);
+                    }}
                 }}
             }}
             
             // Initialize on page load
             document.addEventListener('DOMContentLoaded', () => {{
                 initData();
-                loadAllPrompts();
+                
+                // Load prompts for the currently active tab
+                const urlParams = new URLSearchParams(window.location.search);
+                const activeTab = urlParams.get('tab') || 'texts';
+                loadPromptsForTab(activeTab);
             }});
         </script>
     </body>
