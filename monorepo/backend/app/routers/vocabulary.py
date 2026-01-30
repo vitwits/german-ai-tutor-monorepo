@@ -322,7 +322,7 @@ async def quick_translate(
         return {"ok": False, "error_key": "word_exists"}
 
     # 2. Translate
-    word_data = services.translate_word(req.text, req.ctx)
+    word_data = await services.translate_word(req.text, req.ctx, db=db)
     if not word_data or word_data.get('ua') == 'Error':
         return {"ok": False, "error_key": "translation_failed"}
 

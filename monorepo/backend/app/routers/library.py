@@ -236,7 +236,7 @@ async def explain_grammar(
     Respond in {target_lang_name}.
     """
 
-    explanation = services.explain_grammar_text(prompt, db=db)
+    explanation = await services.explain_grammar_text(prompt, db=db)
     
     # Save
     if explanation and req.text_id:

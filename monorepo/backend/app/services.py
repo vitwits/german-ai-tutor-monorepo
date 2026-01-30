@@ -227,7 +227,7 @@ async def generate_german_text(topic, count, level, style='neutral', db: AsyncSe
         print(f"Gen Error: {e}")
         return {"sentences": [], "title_ua": "Error", "title_de": "Error", "title_en": "Error"}
 
-async def get_tts_audio(text, lang='de', db: AsyncSession = None):
+async def get_tts_audio(text, lang='de', db: AsyncSession = None, job_name='generate_text_audio'):
     """
     Generates audio via Google TTS.
     
@@ -235,6 +235,8 @@ async def get_tts_audio(text, lang='de', db: AsyncSession = None):
         text: текст для озвучування
         lang: 'de' (German), 'uk' (Ukrainian), 'en' (English)
         db: AsyncSession для отримання голосу з БД (optional)
+        job_name: ім'я job у ai_preferences для отримання голосу (default: 'generate_text_audio')
+                  Для vocabulary: 'vocabulary_tts_de', 'vocabulary_tts_ua', 'vocabulary_tts_en'
     """
     if not text: return None
 
@@ -247,7 +249,7 @@ async def get_tts_audio(text, lang='de', db: AsyncSession = None):
     
     if db:
         tts_lang = lang_code_map.get(lang, 'DE')
-        voice_name = await get_tts_voice_for_job('generate_text_audio', tts_lang, db)
+        voice_name = await get_tts_voice_for_job(job_name, tts_lang, db)
     
     # Якщо не отримали з DB, користуємо fallback
     if not voice_name:
@@ -349,7 +351,12 @@ def evaluate_audio_with_gemini(original_text, audio_bytes, interface_lang, mime_
             "transcribed_text": ""
         }
 
-def translate_word(text, ctx):
+async def translate_word(text, ctx, db: AsyncSession = None):
+    # Отримуємо модель з DB або використовуємо fallback
+    model_id = "gemini-2.5-flash-lite"  # Fallback
+    if db:
+        model_id = await get_llm_model_for_job('translate_vocabulary', db)
+    
     # ПОВНИЙ, ОРИГІНАЛЬНИЙ ПРОМПТ
     prompt = f"""Translate the German word or phrase: "{text}". Context: "{ctx}".
     The input "{text}" has {len(text.split())} words.
@@ -407,7 +414,7 @@ def translate_word(text, ctx):
     
     try:
         response = client.models.generate_content(
-            model="gemini-2.5-flash-lite",
+            model=model_id,
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json"
@@ -422,7 +429,7 @@ def translate_word(text, ctx):
         print(f"Translate Error: {e}")
         return {"display": text, "ua": "Error", "en": "Error", "level": "?"}
 
-def explain_grammar_text(prompt_text, db: AsyncSession = None):
+async def explain_grammar_text(prompt_text, db: AsyncSession = None):
     """
     Виконує запит на пояснення граматики.
     
@@ -431,9 +438,10 @@ def explain_grammar_text(prompt_text, db: AsyncSession = None):
         db: AsyncSession для отримання моделі з БД (optional)
     """
     try:
-        # NOTE: This is a sync function but needs async DB access
-        # For now, use fallback model. Should be refactored to async in future
+        # Отримуємо модель з DB або використовуємо fallback
         model_id = "gemini-2.5-flash-lite"  # Default fallback
+        if db:
+            model_id = await get_llm_model_for_job('generate_text_grammar', db)
         
         response = client.models.generate_content(
             model=model_id,

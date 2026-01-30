@@ -12,7 +12,7 @@ async def test_llm_models():
     
     async with AsyncSessionLocal() as db:
         print("=" * 60)
-        print("🧪 Testing LLM Model Selection")
+        print("🧪 Testing LLM Model Selection (Text Generation)")
         print("=" * 60)
         
         # Test 1: get_llm_model_for_job for text generation
@@ -32,33 +32,44 @@ async def test_llm_models():
             FROM ai_preferences ap
             JOIN llm_models m ON ap.llm_model_id = m.id
             WHERE ap.model_type = 'llm' AND m.is_active = 1
+            ORDER BY ap.job
         """))
         for row in result:
             print(f"   - {row[0]}: {row[1]} ({row[2]})")
-        
+
+async def test_vocabulary_llm_models():
+    """Test if translate_vocabulary uses correct model"""
+    
+    async with AsyncSessionLocal() as db:
         print("\n" + "=" * 60)
-        print("✅ Tests completed!")
+        print("🧪 Testing LLM Model Selection (Vocabulary Translation)")
         print("=" * 60)
         
-        # Instructions for manual testing
-        print("\n📋 Manual Testing Instructions:")
-        print("-" * 60)
-        print("1. Go to Admin Panel → AI Preferences")
-        print("2. Change 'generate_texts' model to 'Gemini Flash 2.0' (llm_model_id=1)")
-        print("3. Save the change")
-        print("4. Run this test again - you should see:")
-        print("   - generate_texts returns: gemini-2.0-flash")
-        print("   - generate_text_grammar returns: gemini-2.5-flash-lite (unchanged)")
-        print("\n5. Then change 'generate_text_grammar' to 'Gemini Flash 2.0'")
-        print("6. Run this test again - both should return gemini-2.0-flash")
-        print("-" * 60)
+        print("\n1️⃣ Testing get_llm_model_for_job('translate_vocabulary', db):")
+        model_for_vocab = await services.get_llm_model_for_job('translate_vocabulary', db)
+        print(f"   ✅ Result: {model_for_vocab}")
+        
+        # Check database
+        print("\n2️⃣ Database verification:")
+        result = await db.execute(text("""
+            SELECT ap.job, m.model_id, m.human_name
+            FROM ai_preferences ap
+            JOIN llm_models m ON ap.llm_model_id = m.id
+            WHERE ap.job = 'translate_vocabulary' AND m.is_active = 1
+        """))
+        rows = result.fetchall()
+        if rows:
+            for row in rows:
+                print(f"   - {row[0]}: {row[1]} ({row[2]})")
+        else:
+            print("   ⚠️  No translate_vocabulary job found in ai_preferences")
 
 async def test_tts_voice():
     """Test if get_tts_audio uses correct voice"""
     
     async with AsyncSessionLocal() as db:
         print("\n\n" + "=" * 60)
-        print("🧪 Testing TTS Voice Selection")
+        print("🧪 Testing TTS Voice Selection (Text Audio)")
         print("=" * 60)
         
         print("\n1️⃣ Testing get_tts_voice_for_job('generate_text_audio', 'DE', db):")
@@ -67,28 +78,88 @@ async def test_tts_voice():
         
         print("\n2️⃣ Database verification:")
         result = await db.execute(text("""
-            SELECT ap.job, v.voice_name, v.id
+            SELECT ap.job, v.voice_name, v.lang, v.id
             FROM ai_preferences ap
             JOIN tts_voices v ON ap.tts_voice_id = v.id
             WHERE ap.job = 'generate_text_audio' AND v.is_active = 1
         """))
         for row in result:
-            print(f"   - {row[0]}: {row[1]} (ID={row[2]})")
-        
+            print(f"   - {row[0]}: {row[1]} (lang={row[2]}, ID={row[3]})")
+
+async def test_vocabulary_tts_voices():
+    """Test if vocabulary TTS uses correct voices"""
+    
+    async with AsyncSessionLocal() as db:
         print("\n" + "=" * 60)
-        print("✅ Tests completed!")
+        print("🧪 Testing TTS Voice Selection (Vocabulary Audio)")
         print("=" * 60)
         
-        print("\n📋 Manual Testing Instructions:")
-        print("-" * 60)
-        print("1. Go to Admin Panel → AI Preferences → Words tab")
-        print("2. Change TTS voice to 'de-DE-Neural2-A'")
-        print("3. Save the change")
-        print("4. Run this test again - you should see:")
-        print("   - Result: de-DE-Neural2-A")
-        print("-" * 60)
+        vocab_jobs = ['vocabulary_tts_de', 'vocabulary_tts_ua', 'vocabulary_tts_en']
+        lang_map = {'vocabulary_tts_de': 'DE', 'vocabulary_tts_ua': 'UA', 'vocabulary_tts_en': 'EN'}
+        
+        for job in vocab_jobs:
+            lang = lang_map[job]
+            print(f"\n1️⃣ Testing get_tts_voice_for_job('{job}', '{lang}', db):")
+            voice = await services.get_tts_voice_for_job(job, lang, db)
+            print(f"   ✅ Result: {voice}")
+        
+        # Check database
+        print("\n2️⃣ Database verification:")
+        result = await db.execute(text("""
+            SELECT ap.job, v.voice_name, v.lang
+            FROM ai_preferences ap
+            JOIN tts_voices v ON ap.tts_voice_id = v.id
+            WHERE ap.job IN ('vocabulary_tts_de', 'vocabulary_tts_ua', 'vocabulary_tts_en')
+            AND v.is_active = 1
+            ORDER BY ap.job
+        """))
+        rows = result.fetchall()
+        if rows:
+            for row in rows:
+                print(f"   - {row[0]}: {row[1]} (lang={row[2]})")
+        else:
+            print("   ⚠️  No vocabulary_tts jobs found in ai_preferences")
+
+async def main():
+    print("\n" + "=" * 80)
+    print("🚀 AI PREFERENCES COMPREHENSIVE TEST SUITE")
+    print("=" * 80)
+    
+    try:
+        await test_llm_models()
+        await test_vocabulary_llm_models()
+        await test_tts_voice()
+        await test_vocabulary_tts_voices()
+        
+        print("\n\n" + "=" * 80)
+        print("✅ ALL TESTS COMPLETED SUCCESSFULLY!")
+        print("=" * 80)
+        
+        print("\n📋 MANUAL TESTING INSTRUCTIONS:")
+        print("-" * 80)
+        print("1. Go to Admin Panel → AI Preferences")
+        print("\n2. For Text Generation:")
+        print("   - Change 'generate_texts' model to a different one")
+        print("   - Verify library.py calls use the new model")
+        
+        print("\n3. For Vocabulary Translation:")
+        print("   - Set 'translate_vocabulary' in ai_preferences")
+        print("   - Change model and verify vocabulary.py uses it")
+        
+        print("\n4. For TTS Audio:")
+        print("   - Change 'generate_text_audio' voice")
+        print("   - Change 'vocabulary_tts_de/ua/en' voices")
+        print("   - Verify audio uses new voices")
+        
+        print("\n5. Run tests again after changes:")
+        print(f"   cd /Users/omicron/Desktop/german_ai_tutor/monorepo/backend")
+        print(f"   python test_ai_preferences.py")
+        print("-" * 80 + "\n")
+        
+    except Exception as e:
+        print(f"\n❌ TEST FAILED: {str(e)}")
+        import traceback
+        traceback.print_exc()
 
 if __name__ == "__main__":
-    print("\n🚀 Starting AI Preferences Test\n")
-    asyncio.run(test_llm_models())
-    asyncio.run(test_tts_voice())
+    asyncio.run(main())
