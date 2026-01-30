@@ -27,26 +27,54 @@ os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(google_creds)
 
 sys.path.insert(0, str(BACKEND_DIR))
 
-from app.models import TempSentence, Sentence, SentenceBatch, Base
+from app.models import TempSentence, Sentence, SentenceBatch, Base, AIPreference, TTSVoice
 from app.database import DATABASE_URL
-
-# Голоси (Google Cloud Text-to-Speech)
-VOICES = {
-    'uk': ["uk-UA-Chirp3-HD-Leda", "uk-UA-Chirp3-HD-Sadachbia"],
-    'en': ["en-US-Neural2-D", "en-US-Neural2-C"],
-    'de': ["de-DE-Neural2-A", "de-DE-Neural2-B"]
-}
 
 # Папка для аудіо
 STATIC_AUDIO_DIR = BACKEND_DIR / "static" / "audio" / "sentences"
 
-def generate_audio_file(text, lang, filepath):
-    """Генерує аудіо файл"""
+async def get_tts_voices_for_lang(lang: str, db: AsyncSession) -> list[str]:
+    """
+    Отримує обидва голоси (male + female) для мови з ai_preferences.
+    
+    Дивимося на ai_preferences де page='sentences' і шукаємо записи для цієї мови.
+    lang — мова як 'de', 'en', 'uk' (як передається з TempSentence)
+    
+    tts_voices.lang містить скорочені коди: 'DE', 'EN', 'UA'
+    """
+    from sqlalchemy import and_
+    
+    # Маппим uk → UA, en → EN, de → DE для пошуку в tts_voices за мовою
+    lang_code_map = {
+        'de': 'DE',
+        'en': 'EN',
+        'uk': 'UA'
+    }
+    lang_code = lang_code_map.get(lang.lower(), lang.upper())
+    
+    # Шукаємо голоси для цієї мови в ai_preferences де page='sentences'
+    result = await db.execute(
+        select(TTSVoice.voice_name).join(
+            AIPreference, AIPreference.tts_voice_id == TTSVoice.id
+        ).where(
+            and_(
+                AIPreference.page == 'sentences',
+                AIPreference.model_type == 'tts',
+                TTSVoice.lang == lang_code,  # Точне порівняння: 'EN' == 'EN'
+                TTSVoice.is_active == True
+            )
+        ).order_by(AIPreference.gender)  # Male comes before Female alphabetically
+    )
+    voices = result.scalars().all()
+    
+    return list(voices)
+
+def generate_audio_file(text, lang, filepath, voice_name: str):
+    """Генерує аудіо файл з вказаним голосом"""
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
     
     client = texttospeech.TextToSpeechClient()
     
-    voice_name = random.choice(VOICES[lang])
     language_code = voice_name[:5]
     
     s_input = texttospeech.SynthesisInput(text=text)
@@ -83,6 +111,22 @@ async def generate_audio_for_batch(batch_id):
         await conn.run_sync(Base.metadata.create_all)
     
     async with async_session() as db:
+        # Отримуємо голоси для кожної мови з ai_preferences (male + female пари)
+        voices = {}
+        for lang in ['de', 'en', 'uk']:
+            voice_list = await get_tts_voices_for_lang(lang, db)
+            if not voice_list:
+                print(f"⚠️  Warning: No voices found for {lang} in ai_preferences")
+                voices[lang] = []
+            else:
+                voices[lang] = voice_list
+        
+        # Перевіркимо що всі мови мають голоси
+        for lang in ['de', 'en', 'uk']:
+            if not voices[lang]:
+                print(f"✗ Error: No voices configured for {lang} in ai_preferences")
+                return
+        
         # Отримуємо батч
         result = await db.execute(
             select(SentenceBatch).where(SentenceBatch.id == batch_id)
@@ -107,7 +151,7 @@ async def generate_audio_for_batch(batch_id):
         final_sentences = []
         
         for idx, temp_sentence in enumerate(temp_sentences, 1):
-            print(f"[{idx}/{len(temp_sentences)}] {temp_sentence.de[:40]}...", end=" ")
+            print(f"[{idx}/{len(temp_sentences)}] {temp_sentence.de[:40]}...", end="")
             
             # Шляхи для аудіо (відносні до /static)
             file_prefix = f"{idx:04d}"
@@ -120,10 +164,16 @@ async def generate_audio_for_batch(batch_id):
             path_en_abs = STATIC_AUDIO_DIR / level / f"{file_prefix}_en.ogg"
             path_uk_abs = STATIC_AUDIO_DIR / level / f"{file_prefix}_uk.ogg"
             
-            # Генеруємо аудіо
-            de_ok = generate_audio_file(temp_sentence.de, 'de', str(path_de_abs))
-            en_ok = de_ok and generate_audio_file(temp_sentence.en, 'en', str(path_en_abs))
-            uk_ok = en_ok and generate_audio_file(temp_sentence.uk, 'uk', str(path_uk_abs))
+            # Генеруємо аудіо з динамічним вибором голосу (50/50 male/female)
+            voice_de = random.choice(voices['de'])
+            voice_en = random.choice(voices['en'])
+            voice_uk = random.choice(voices['uk'])
+            
+            print(f"\n    DE: {voice_de} | EN: {voice_en} | UA: {voice_uk}", end=" ")
+            
+            de_ok = generate_audio_file(temp_sentence.de, 'de', str(path_de_abs), voice_de)
+            en_ok = de_ok and generate_audio_file(temp_sentence.en, 'en', str(path_en_abs), voice_en)
+            uk_ok = en_ok and generate_audio_file(temp_sentence.uk, 'uk', str(path_uk_abs), voice_uk)
             
             if de_ok and en_ok and uk_ok:
                 # Створюємо ФІНАЛЬНУ запись у таблиці sentences БЕЗ встановлення id

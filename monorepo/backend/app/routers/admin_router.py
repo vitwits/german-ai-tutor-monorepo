@@ -3786,7 +3786,10 @@ async def ai_preferences_page(
             <div class="tab-content {('active' if tab == 'sentences' else '')}">
                 <p>{TABS['sentences']['description']}</p>
                 <h2 style="margin-top: 30px; margin-bottom: 20px;">Models</h2>
-                <button class="btn btn-primary btn-add" onclick="openAddModal('sentences')">+ Add Model</button>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <button class="btn btn-primary btn-add" onclick="openAddModal('sentences')">+ Add Model</button>
+                    <button class="btn btn-outline-secondary" style="width: 32px; height: 32px; padding: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: help;" onclick="showHelpModal('sentences')" title="How to add models?">?</button>
+                </div>
                 <div id="sentences-models-table" style="margin-top: 20px;"></div>
             </div>
             
@@ -3940,6 +3943,148 @@ async def ai_preferences_page(
                 document.getElementById('modal').classList.remove('show');
                 editingId = null;
                 currentTab = null;
+            }}
+            
+            function showHelpModal(page) {{
+                const helpContent = {{
+                    'texts': `
+                        <h4>🔧 How Models Are Used for Text Generation</h4>
+                        <p><strong>Job Name:</strong> <code>generate_texts</code></p>
+                        <p>When you click "Generate Text" in the app, the system:</p>
+                        <ol>
+                            <li>Looks up <strong>generate_texts</strong> job in AI Preferences</li>
+                            <li>Gets the LLM Model you configured (e.g., Gemini Flash 2.5)</li>
+                            <li>Uses that model to generate text</li>
+                        </ol>
+                        <p><strong>Configuration:</strong></p>
+                        <ul>
+                            <li><strong>Model Type:</strong> LLM (required)</li>
+                            <li><strong>Language:</strong> Not used (leave empty)</li>
+                            <li><strong>Gender:</strong> Not used (leave empty)</li>
+                        </ul>
+                        <p><strong>Naming:</strong> Job name must be exactly <code>generate_texts</code></p>
+                    `,
+                    'words': `
+                        <h4>🔧 How Models Are Used for Vocabulary</h4>
+                        <p><strong>Job Names:</strong> <code>translate_vocabulary</code>, <code>vocabulary_tts_de</code>, <code>vocabulary_tts_en</code>, <code>vocabulary_tts_ua</code></p>
+                        
+                        <p><strong>For Translation:</strong></p>
+                        <ol>
+                            <li>System looks for <code>translate_vocabulary</code> job</li>
+                            <li>Gets the LLM Model configured</li>
+                            <li>Uses it to translate word definitions</li>
+                        </ol>
+                        
+                        <p><strong>For Audio Generation:</strong></p>
+                        <ol>
+                            <li>System looks for <code>vocabulary_tts_de</code> (or en/ua)</li>
+                            <li>Gets the TTS Voice you configured for that language</li>
+                            <li>Uses it to generate audio for that word</li>
+                        </ol>
+                        
+                        <p><strong>Configuration:</strong></p>
+                        <ul>
+                            <li><strong>translate_vocabulary:</strong> Model Type=LLM, Language=empty, Gender=empty</li>
+                            <li><strong>vocabulary_tts_*:</strong> Model Type=TTS, Language=DE/EN/UA, Gender=empty (one voice per language)</li>
+                        </ul>
+                        
+                        <p><strong>Naming Rules:</strong></p>
+                        <ul>
+                            <li>Translation job: must be <code>translate_vocabulary</code></li>
+                            <li>Audio jobs: must be <code>vocabulary_tts_de</code>, <code>vocabulary_tts_en</code>, <code>vocabulary_tts_ua</code></li>
+                            <li>Each language gets ONE voice (not multiple like sentences)</li>
+                        </ul>
+                    `,
+                    'sentences': `
+                        <h4>🔧 How Models Are Used for Sentence Generation</h4>
+                        <p><strong>Job Names:</strong> <code>generate_sentences</code>, <code>sentences_tts_de_male</code>, <code>sentences_tts_de_female</code>, etc.</p>
+                        
+                        <p><strong>For Text Generation:</strong></p>
+                        <ol>
+                            <li>System looks for <code>generate_sentences</code> job</li>
+                            <li>Gets the LLM Model configured</li>
+                            <li>Uses it to generate sentence text</li>
+                        </ol>
+                        
+                        <p><strong>For Audio Generation:</strong></p>
+                        <ol>
+                            <li>System looks for ALL <code>sentences_tts_*</code> jobs for a language</li>
+                            <li>Finds both MALE and FEMALE voices (if configured)</li>
+                            <li>For each sentence, randomly picks one voice (50/50 male/female)</li>
+                            <li>Generates audio with that voice</li>
+                        </ol>
+                        <p>↳ This gives <strong>natural variation</strong> — no two sentences sound identical</p>
+                        
+                        <p><strong>Configuration Rules:</strong></p>
+                        <ul>
+                            <li><strong>Text generation:</strong> Model Type=LLM, Language=empty, Gender=empty</li>
+                            <li><strong>Audio (German):</strong> Model Type=TTS, Language=DE, Gender=male OR female (separate entries)</li>
+                            <li><strong>Audio (English):</strong> Model Type=TTS, Language=EN, Gender=male OR female (separate entries)</li>
+                            <li><strong>Audio (Ukrainian):</strong> Model Type=TTS, Language=UA, Gender=male OR female (separate entries)</li>
+                        </ul>
+                        
+                        <p><strong>Naming Rules:</strong></p>
+                        <ul>
+                            <li>Text generation job: must be <code>generate_sentences</code></li>
+                            <li>Audio jobs: format is <code>sentences_tts_{{lang}}_{{gender}}</code></li>
+                            <li>Examples: <code>sentences_tts_de_male</code>, <code>sentences_tts_en_female</code>, <code>sentences_tts_ua_male</code></li>
+                            <li><strong>Add BOTH male and female for each language</strong> to enable voice variation</li>
+                        </ul>
+                        
+                        <p><strong>Pro Tip:</strong> You can add more than 2 voices per language (e.g., male, female, another_male) and the system will randomly rotate through all of them.</p>
+                    `,
+                    'speaking': `
+                        <h4>🔧 How Models Are Used for Speaking Practice</h4>
+                        <p><strong>Job Names:</strong> <code>speaking_tts_de_male</code>, <code>speaking_tts_de_female</code>, etc.</p>
+                        
+                        <p><strong>For Audio Generation:</strong></p>
+                        <ol>
+                            <li>System looks for ALL <code>speaking_tts_*</code> jobs for a language</li>
+                            <li>Finds both MALE and FEMALE voices (if configured)</li>
+                            <li>For each speaking prompt, randomly picks one voice</li>
+                            <li>Generates audio with that voice</li>
+                        </ol>
+                        
+                        <p><strong>Configuration Rules:</strong></p>
+                        <ul>
+                            <li><strong>Audio (German):</strong> Model Type=TTS, Language=DE, Gender=male OR female (separate entries)</li>
+                            <li><strong>Audio (English):</strong> Model Type=TTS, Language=EN, Gender=male OR female (separate entries)</li>
+                            <li><strong>Audio (Ukrainian):</strong> Model Type=TTS, Language=UA, Gender=male OR female (separate entries)</li>
+                        </ul>
+                        
+                        <p><strong>Naming Rules:</strong></p>
+                        <ul>
+                            <li>Format: <code>speaking_tts_{{lang}}_{{gender}}</code></li>
+                            <li>Examples: <code>speaking_tts_de_male</code>, <code>speaking_tts_en_female</code>, <code>speaking_tts_ua_male</code></li>
+                            <li><strong>Add BOTH male and female for each language</strong> for voice variation</li>
+                        </ul>
+                        
+                        <p><strong>Note:</strong> Job names matter! System searches by exact job name to find models.</p>
+                    `
+                }};
+                
+                const content = helpContent[page] || '<p>Help not available</p>';
+                const modal = document.createElement('div');
+                modal.className = 'modal show';
+                modal.style.display = 'block';
+                modal.style.backgroundColor = 'rgba(0,0,0,0.5)';
+                modal.innerHTML = `
+                    <div class="modal-dialog modal-lg" style="margin: 50px auto;">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">⚙️ Model Logic & Naming</h5>
+                                <button type="button" class="close" onclick="this.closest('.modal').remove()" style="border: none; background: none; font-size: 1.5rem; cursor: pointer;">×</button>
+                            </div>
+                            <div class="modal-body" style="max-height: 600px; overflow-y: auto;">
+                                ${{content}}
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" onclick="this.closest('.modal').remove()">Close</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(modal);
             }}
             
             async function loadAllPreferences() {{
