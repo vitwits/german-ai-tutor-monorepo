@@ -881,9 +881,7 @@ async def reported_sentences(
                     <a href="/admin/sentence/{s.id}/edit" class="btn btn-primary action-btn" title="Edit">
                         <span class="material-symbols-outlined">edit</span>
                     </a>
-                    <form action="/admin/sentence/{s.id}/unreport" method="POST" style="display:inline;">
-                        <button type="submit" class="btn btn-warning action-btn" title="Un-report">✓</button>
-                    </form>
+                    <button type="button" class="btn btn-warning action-btn" title="Un-report" onclick="unreportSentence({s.id}, this)">✓</button>
                     <form action="/admin/sentence/{s.id}/delete" method="POST" style="display:inline;">
                         <button type="submit" class="btn btn-danger action-btn" title="Delete">
                             <span class="material-symbols-outlined">delete</span>
@@ -1059,6 +1057,24 @@ async def reported_sentences(
                 currentRow = null;
                 currentAudio = null;
                 stopPlayback = false;
+            }}
+            
+            async function unreportSentence(sentenceId, btn) {{
+                try {{
+                    const response = await fetch(`/admin/sentence/${{sentenceId}}/unreport`, {{
+                        method: 'POST',
+                        headers: {{'Content-Type': 'application/json'}}
+                    }});
+                    
+                    if (response.ok) {{
+                        const row = btn.closest('tr');
+                        row.remove();
+                    }} else {{
+                        alert('Error un-reporting sentence');
+                    }}
+                }} catch (error) {{
+                    alert('Error: ' + error.message);
+                }}
             }}
         </script>
     </body>
