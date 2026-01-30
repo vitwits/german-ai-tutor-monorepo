@@ -10,14 +10,26 @@ import datetime
 import uuid
 from typing import Optional
 from datetime import timedelta
+from pydantic import BaseModel
 
 from ..database import get_db
-from ..models import User, Sentence, SentenceBatch, TempSentence, TTSLog, LLMModel, TTSModel, LLMPrice, TTSVoice, AIPreference
+from ..models import User, Sentence, SentenceBatch, TempSentence, TTSLog, LLMModel, TTSModel, LLMPrice, TTSVoice, AIPreference, ModelPrompt
 from ..dependencies import get_current_user
 from ..security import verify_password, create_access_token
 from sqlalchemy import delete
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+# Pydantic models for API requests
+class ModelPromptCreate(BaseModel):
+    name: str
+    page: str
+    prompt: str
+
+class ModelPromptUpdate(BaseModel):
+    name: Optional[str] = None
+    page: Optional[str] = None
+    prompt: Optional[str] = None
 
 # Dependency to check admin access - returns None if not authenticated
 async def get_admin_user(request: Request, db: AsyncSession = Depends(get_db)) -> Optional[User]:
@@ -3788,6 +3800,10 @@ async def ai_preferences_page(
                 <h2 style="margin-top: 30px; margin-bottom: 20px;">Models</h2>
                 <button class="btn btn-primary btn-add" onclick="openAddModal('texts')">+ Add Model</button>
                 <div id="texts-models-table" style="margin-top: 20px;"></div>
+                
+                <h2 style="margin-top: 50px; margin-bottom: 20px;">Prompts</h2>
+                <button class="btn btn-primary btn-add" onclick="openAddPromptModal('texts')">+ Add Prompt</button>
+                <div id="texts-prompts-table" style="margin-top: 20px;"></div>
             </div>
             
             <!-- WORDS TAB -->
@@ -3796,6 +3812,10 @@ async def ai_preferences_page(
                 <h2 style="margin-top: 30px; margin-bottom: 20px;">Models</h2>
                 <button class="btn btn-primary btn-add" onclick="openAddModal('words')">+ Add Model</button>
                 <div id="words-models-table" style="margin-top: 20px;"></div>
+                
+                <h2 style="margin-top: 50px; margin-bottom: 20px;">Prompts</h2>
+                <button class="btn btn-primary btn-add" onclick="openAddPromptModal('words')">+ Add Prompt</button>
+                <div id="words-prompts-table" style="margin-top: 20px;"></div>
             </div>
             
             <!-- SENTENCES TAB -->
@@ -3807,6 +3827,10 @@ async def ai_preferences_page(
                     <button class="btn btn-outline-secondary" style="width: 32px; height: 32px; padding: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: help;" onclick="showHelpModal('sentences')" title="How to add models?">?</button>
                 </div>
                 <div id="sentences-models-table" style="margin-top: 20px;"></div>
+                
+                <h2 style="margin-top: 50px; margin-bottom: 20px;">Prompts</h2>
+                <button class="btn btn-primary btn-add" onclick="openAddPromptModal('sentences')">+ Add Prompt</button>
+                <div id="sentences-prompts-table" style="margin-top: 20px;"></div>
             </div>
             
             <!-- SPEAKING TAB -->
@@ -3815,6 +3839,10 @@ async def ai_preferences_page(
                 <h2 style="margin-top: 30px; margin-bottom: 20px;">Models</h2>
                 <button class="btn btn-primary btn-add" onclick="openAddModal('speaking')">+ Add Model</button>
                 <div id="speaking-models-table" style="margin-top: 20px;"></div>
+                
+                <h2 style="margin-top: 50px; margin-bottom: 20px;">Prompts</h2>
+                <button class="btn btn-primary btn-add" onclick="openAddPromptModal('speaking')">+ Add Prompt</button>
+                <div id="speaking-prompts-table" style="margin-top: 20px;"></div>
             </div>
         </div>
         
@@ -3870,11 +3898,70 @@ async def ai_preferences_page(
             </div>
         </div>
         
+        <!-- Prompts Modal -->
+        <div id="promptModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header" id="promptModalTitle">Add Model Prompt</div>
+                <form id="promptForm" onsubmit="submitPromptForm(event)">
+                    <div class="form-group">
+                        <label>Prompt Name</label>
+                        <input type="text" id="promptName" required placeholder="e.g., generate_texts_a1">
+                    </div>
+                    <!-- Hidden field for page -->
+                    <input type="hidden" id="promptPage">
+                    <div class="form-group">
+                        <label>Prompt Text</label>
+                        <textarea id="promptText" required placeholder="Enter the prompt..." style="width: 100%; height: 300px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 0.9em;"></textarea>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" onclick="closePromptModal()">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Fullscreen Prompt Editor Modal -->
+        <div id="editorModal" class="modal" style="z-index: 2000;">
+            <div class="modal-content" style="width: 95%; height: 95%; max-width: 100%; max-height: 100%; display: flex; flex-direction: column; padding: 0;">
+                <div style="padding: 20px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; background: #f8f9fa;">
+                    <div class="modal-header" id="editorModalTitle" style="margin: 0;">Edit Prompt</div>
+                    <button type="button" class="btn btn-secondary" onclick="closeEditorModal()" style="margin: 0;">✕ Close</button>
+                </div>
+                <div style="flex: 1; overflow: hidden; display: flex; flex-direction: column;">
+                    <textarea id="editorText" style="flex: 1; padding: 20px; border: none; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; font-size: 13px; line-height: 1.5; resize: none; background: #fafafa; color: #333;"></textarea>
+                </div>
+                <div style="padding: 20px; border-top: 1px solid #ddd; display: flex; justify-content: flex-end; gap: 10px; background: #f8f9fa;">
+                    <button type="button" class="btn btn-secondary" onclick="closeEditorModal()">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="savePromptEditor()">Save</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Name Edit Modal -->
+        <div id="nameEditModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">Edit Prompt Name</div>
+                <form id="nameEditForm" onsubmit="submitNameEdit(event)">
+                    <div class="form-group">
+                        <label>Prompt Name</label>
+                        <input type="text" id="nameEditInput" required placeholder="e.g., generate_texts_a1">
+                    </div>
+                    <input type="hidden" id="nameEditId">
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" onclick="closeNameEditModal()">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
         <script>
             let currentTab = null;
             let editingId = null;
             let allLLMModels = [];
             let allTTSVoices = [];
+            let currentlyEditingPromptId = null;
             
             // Load initial data
             async function initData() {{
@@ -4227,12 +4314,325 @@ async def ai_preferences_page(
                 }}
             }}
             
+            // Prompt Management Functions
+            async function openAddPromptModal(page) {{
+                currentTab = page;
+                document.getElementById('promptPage').value = page;
+                document.getElementById('promptName').value = '';
+                document.getElementById('promptText').value = '';
+                document.getElementById('promptModalTitle').textContent = 'Add Prompt for ' + page.toUpperCase();
+                document.getElementById('promptModal').classList.add('show');
+            }}
+            
+            function closePromptModal() {{
+                document.getElementById('promptModal').classList.remove('show');
+            }}
+            
+            // Prompt Editor Functions
+            async function openPromptEditor(promptId, promptName) {{
+                try {{
+                    const response = await fetch(`/admin/api/model-prompts/${{promptId}}`);
+                    const data = await response.json();
+                    
+                    currentlyEditingPromptId = promptId;
+                    document.getElementById('editorText').value = data.prompt;
+                    document.getElementById('editorModalTitle').textContent = `Edit Prompt: ${{promptName}}`;
+                    document.getElementById('editorModal').classList.add('show');
+                }} catch (err) {{
+                    alert('Error loading prompt: ' + err.message);
+                }}
+            }}
+            
+            function closeEditorModal() {{
+                document.getElementById('editorModal').classList.remove('show');
+                currentlyEditingPromptId = null;
+            }}
+            
+            async function savePromptEditor() {{
+                if (!currentlyEditingPromptId) return;
+                
+                const newPrompt = document.getElementById('editorText').value;
+                
+                try {{
+                    const response = await fetch(`/admin/api/model-prompts/${{currentlyEditingPromptId}}`, {{
+                        method: 'PUT',
+                        headers: {{'Content-Type': 'application/json'}},
+                        body: JSON.stringify({{ prompt: newPrompt }})
+                    }});
+                    
+                    const result = await response.json();
+                    if (result.ok) {{
+                        closeEditorModal();
+                        await loadPromptsForTab(currentTab);
+                        alert('Prompt saved successfully!');
+                    }} else {{
+                        alert('Error: ' + (result.error || 'Unknown error'));
+                    }}
+                }} catch (err) {{
+                    alert('Error: ' + err.message);
+                }}
+            }}
+            
+            // Name Edit Functions
+            async function editPromptName(promptId, promptName) {{
+                document.getElementById('nameEditId').value = promptId;
+                document.getElementById('nameEditInput').value = promptName;
+                document.getElementById('nameEditModal').classList.add('show');
+            }}
+            
+            function closeNameEditModal() {{
+                document.getElementById('nameEditModal').classList.remove('show');
+            }}
+            
+            async function submitNameEdit(event) {{
+                event.preventDefault();
+                const promptId = document.getElementById('nameEditId').value;
+                const newName = document.getElementById('nameEditInput').value;
+                
+                try {{
+                    const response = await fetch(`/admin/api/model-prompts/${{promptId}}`, {{
+                        method: 'PUT',
+                        headers: {{'Content-Type': 'application/json'}},
+                        body: JSON.stringify({{ name: newName }})
+                    }});
+                    
+                    const result = await response.json();
+                    if (result.ok) {{
+                        closeNameEditModal();
+                        await loadPromptsForTab(currentTab);
+                        alert('Name updated successfully!');
+                    }} else {{
+                        alert('Error: ' + (result.error || 'Unknown error'));
+                    }}
+                }} catch (err) {{
+                    alert('Error: ' + err.message);
+                }}
+            }}
+            
+            async function submitPromptForm(event) {{
+                event.preventDefault();
+                const name = document.getElementById('promptName').value;
+                const page = document.getElementById('promptPage').value;
+                const prompt = document.getElementById('promptText').value;
+                
+                try {{
+                    const response = await fetch('/admin/api/model-prompts', {{
+                        method: 'POST',
+                        headers: {{'Content-Type': 'application/json'}},
+                        body: JSON.stringify({{ name, page, prompt }})
+                    }});
+                    
+                    const result = await response.json();
+                    if (result.ok) {{
+                        closePromptModal();
+                        await loadPromptsForTab(currentTab);
+                    }} else {{
+                        alert('Error: ' + (result.error || 'Unknown error'));
+                    }}
+                }} catch (err) {{
+                    alert('Error: ' + err.message);
+                }}
+            }}
+            
+            async function loadPromptsForTab(tab) {{
+                try {{
+                    const response = await fetch(`/admin/api/model-prompts?page=${{tab}}`);
+                    const prompts = await response.json();
+                    
+                    const tableDiv = document.getElementById(`${{tab}}-prompts-table`);
+                    if (!prompts || prompts.length === 0) {{
+                        tableDiv.innerHTML = '<p style="color: #999;">No prompts yet.</p>';
+                        return;
+                    }}
+                    
+                    let html = '<table><tr><th>Name</th><th>Preview</th><th>Actions</th></tr>';
+                    for (const p of prompts) {{
+                        const preview = p.prompt.substring(0, 100) + (p.prompt.length > 100 ? '...' : '');
+                        html += `
+                            <tr>
+                                <td>${{p.name}}</td>
+                                <td><small style="color: #666;">${{preview}}</small></td>
+                                <td style="display: flex; gap: 5px;">
+                                    <button class="btn btn-warning" style="padding: 5px 10px; font-size: 0.85em;" onclick="editPromptName(${{p.id}}, '${{p.name}}')">✏️ Name</button>
+                                    <button class="btn btn-info" style="padding: 5px 10px; font-size: 0.85em;" onclick="openPromptEditor(${{p.id}}, '${{p.name}}')">📝 Prompt</button>
+                                    <button class="btn btn-danger" style="padding: 5px 10px; font-size: 0.85em;" onclick="deletePrompt(${{p.id}}, '${{tab}}')">🗑️</button>
+                                </td>
+                            </tr>
+                        `;
+                    }}
+                    html += '</table>';
+                    tableDiv.innerHTML = html;
+                }} catch (err) {{
+                    alert('Error loading prompts: ' + err.message);
+                }}
+            }}
+            
+            async function deletePrompt(id, tab) {{
+                if (!confirm('Are you sure?')) return;
+                
+                try {{
+                    const response = await fetch(`/admin/api/model-prompts/${{id}}`, {{
+                        method: 'DELETE'
+                    }});
+                    
+                    const result = await response.json();
+                    if (result.ok) {{
+                        await loadPromptsForTab(tab);
+                    }} else {{
+                        alert('Error: ' + (result.error || 'Unknown error'));
+                    }}
+                }} catch (err) {{
+                    alert('Error: ' + err.message);
+                }}
+            }}
+            
+            // Load prompts for all tabs on init
+            async function loadAllPrompts() {{
+                const pages = ['texts', 'words', 'sentences', 'speaking'];
+                for (const page of pages) {{
+                    await loadPromptsForTab(page);
+                }}
+            }}
+            
             // Initialize on page load
-            document.addEventListener('DOMContentLoaded', initData);
+            document.addEventListener('DOMContentLoaded', () => {{
+                initData();
+                loadAllPrompts();
+            }});
         </script>
     </body>
     </html>
     """
     
     return html
+
+
+# ============================================================================
+# MODEL PROMPTS API ENDPOINTS
+# ============================================================================
+
+@router.post("/api/model-prompts")
+async def create_model_prompt(
+    data: ModelPromptCreate,
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a new model prompt"""
+    try:
+        new_prompt = ModelPrompt(
+            name=data.name,
+            page=data.page,
+            prompt=data.prompt
+        )
+        db.add(new_prompt)
+        await db.commit()
+        return {"ok": True}
+    except Exception as e:
+        await db.rollback()
+        return {"ok": False, "error": str(e)}
+
+
+@router.get("/api/model-prompts")
+async def get_model_prompts(
+    page: str = None,
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get model prompts, optionally filtered by page"""
+    try:
+        query = select(ModelPrompt)
+        if page:
+            query = query.where(ModelPrompt.page == page)
+        
+        result = await db.execute(query)
+        prompts = result.scalars().all()
+        
+        return [
+            {
+                "id": p.id,
+                "name": p.name,
+                "page": p.page,
+                "prompt": p.prompt,
+                "created_at": p.created_at.isoformat() if p.created_at else None,
+                "updated_at": p.updated_at.isoformat() if p.updated_at else None
+            }
+            for p in prompts
+        ]
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@router.get("/api/model-prompts/{prompt_id}")
+async def get_model_prompt(
+    prompt_id: int,
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get a specific model prompt"""
+    try:
+        result = await db.execute(select(ModelPrompt).where(ModelPrompt.id == prompt_id))
+        prompt = result.scalar_one_or_none()
+        
+        if not prompt:
+            return {"error": "Prompt not found"}
+        
+        return {
+            "id": prompt.id,
+            "name": prompt.name,
+            "page": prompt.page,
+            "prompt": prompt.prompt
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@router.put("/api/model-prompts/{prompt_id}")
+async def update_model_prompt(
+    prompt_id: int,
+    data: ModelPromptUpdate,
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update a model prompt"""
+    try:
+        result = await db.execute(select(ModelPrompt).where(ModelPrompt.id == prompt_id))
+        prompt = result.scalar_one_or_none()
+        
+        if not prompt:
+            return {"ok": False, "error": "Prompt not found"}
+        
+        if data.name:
+            prompt.name = data.name
+        if data.prompt:
+            prompt.prompt = data.prompt
+        if data.page:
+            prompt.page = data.page
+        
+        await db.commit()
+        return {"ok": True}
+    except Exception as e:
+        await db.rollback()
+        return {"ok": False, "error": str(e)}
+
+
+@router.delete("/api/model-prompts/{prompt_id}")
+async def delete_model_prompt(
+    prompt_id: int,
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete a model prompt"""
+    try:
+        result = await db.execute(select(ModelPrompt).where(ModelPrompt.id == prompt_id))
+        prompt = result.scalar_one_or_none()
+        
+        if not prompt:
+            return {"ok": False, "error": "Prompt not found"}
+        
+        await db.delete(prompt)
+        await db.commit()
+        return {"ok": True}
+    except Exception as e:
+        await db.rollback()
+        return {"ok": False, "error": str(e)}
 

@@ -227,3 +227,15 @@ class AIPreference(Base):
     # Relationships (для зручного доступу)
     llm_model: Mapped[Optional["LLMModel"]] = relationship("LLMModel")
     tts_voice: Mapped[Optional["TTSVoice"]] = relationship("TTSVoice")
+
+
+class ModelPrompt(Base):
+    __tablename__ = "model_prompts"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)  # Custom name (e.g., "generate_texts_a1")
+    page: Mapped[str] = mapped_column(String, nullable=False)  # "texts" | "words" | "sentences" | "speaking"
+    prompt: Mapped[str] = mapped_column(DBText, nullable=False)  # Large text value with the prompt
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
+
