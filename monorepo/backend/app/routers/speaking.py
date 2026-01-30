@@ -63,7 +63,8 @@ async def evaluate_audio(
     audio_bytes = await audio.read()
     lang_code = 'uk' if current_user.interface_language == 'ukr' else 'en'
     
-    result = services.evaluate_audio_with_gemini(original_text, audio_bytes, lang_code, audio.content_type)
+    # Використовуємо динамічну модель з ai_preferences 'speaking_feedback' job
+    result = await services.evaluate_audio_with_gemini(original_text, audio_bytes, lang_code, db=db, mime_type=audio.content_type)
     
     # Calculate average
     avg = int((result.get('pronunciation_score', 0) + result.get('context_score', 0) + result.get('grammar_score', 0)) / 3)

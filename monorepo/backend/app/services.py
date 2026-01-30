@@ -277,9 +277,20 @@ async def get_tts_audio(text, lang='de', db: AsyncSession = None, job_name='gene
         print(f"ERROR in get_tts_audio: {str(e)} for text='{text}', lang={lang}")
         return None
 
-def evaluate_audio_with_gemini(original_text, audio_bytes, interface_lang, mime_type='audio/webm'):
-    """Оцінює аудіо-файл через Gemini. Відновлено гнучку логіку вчителя."""
+async def evaluate_audio_with_gemini(original_text, audio_bytes, interface_lang, db: AsyncSession = None, mime_type='audio/webm'):
+    """Оцінює аудіо-файл через Gemini. Використовує модель з ai_preferences 'speaking_feedback' job."""
     feedback_lang = "Ukrainian" if interface_lang == 'uk' else "English"
+    
+    # Отримуємо модель з ai_preferences
+    llm_model_name = "gemini-2.0-flash"  # Default fallback
+    if db:
+        try:
+            llm_model_name = await get_llm_model_for_job("speaking_feedback", db)
+            if not llm_model_name:
+                llm_model_name = "gemini-2.0-flash"
+        except:
+            # Якщо щось пішло не так, використовуємо default
+            llm_model_name = "gemini-2.0-flash"
     
     prompt = f"""
     Role: Strict Goethe-Institut Examiner.
@@ -315,7 +326,7 @@ def evaluate_audio_with_gemini(original_text, audio_bytes, interface_lang, mime_
     
     try:
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model=llm_model_name,
             contents=[
                 prompt,
                 types.Part(
