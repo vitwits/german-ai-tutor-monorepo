@@ -3420,6 +3420,31 @@ async def get_llm_models(
     return [{"id": m.id, "human_name": m.human_name, "is_active": m.is_active} for m in models]
 
 
+@router.get("/api/ai-preferences/tts-voices-by-lang")
+async def get_tts_voices_by_lang(
+    lang: str = Query(...),
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get TTS voices filtered by language"""
+    result = await db.execute(
+        select(TTSVoice)
+        .where(TTSVoice.lang == lang, TTSVoice.is_active == True)
+        .order_by(TTSVoice.gender, TTSVoice.voice_name)
+    )
+    voices = result.scalars().all()
+    return [
+        {
+            "id": v.id,
+            "voice_name": v.voice_name,
+            "lang": v.lang,
+            "gender": v.gender,
+            "is_active": v.is_active
+        }
+        for v in voices
+    ]
+
+
 @router.get("/api/ai-preferences/tts-voices")
 async def get_tts_voices(
     current_user: User = Depends(check_admin_access),
@@ -3462,6 +3487,7 @@ async def get_ai_preferences(
             "page": p.page,
             "model_type": p.model_type,
             "lang": p.lang,
+            "gender": p.gender,
             "llm_model_id": p.llm_model_id,
             "tts_voice_id": p.tts_voice_id
         }
@@ -3486,6 +3512,7 @@ async def get_ai_preference(
         "page": pref.page,
         "model_type": pref.model_type,
         "lang": pref.lang,
+        "gender": pref.gender,
         "llm_model_id": pref.llm_model_id,
         "tts_voice_id": pref.tts_voice_id
     }
@@ -3524,6 +3551,7 @@ async def create_ai_preference(
             page=page,
             model_type=model_type,
             lang=data.get("lang"),
+            gender=data.get("gender"),
             llm_model_id=data.get("llm_model_id"),
             tts_voice_id=data.get("tts_voice_id")
         )
@@ -3563,6 +3591,7 @@ async def update_ai_preference(
                 return {"ok": False, "error": "tts_voice_id required for TTS"}
             if not data.get("lang"):
                 return {"ok": False, "error": "lang required for TTS"}
+            # Gender is optional but can be set for TTS
         elif model_type == "llm":
             if not data.get("llm_model_id"):
                 return {"ok": False, "error": "llm_model_id required for LLM"}
@@ -3573,6 +3602,7 @@ async def update_ai_preference(
         pref.page = page
         pref.model_type = model_type
         pref.lang = data.get("lang")
+        pref.gender = data.get("gender")  # Add gender support
         pref.llm_model_id = data.get("llm_model_id")
         pref.tts_voice_id = data.get("tts_voice_id")
         
@@ -3797,6 +3827,14 @@ async def ai_preferences_page(
                             <option value="UA">Ukrainian</option>
                         </select>
                     </div>
+                    <div class="form-group" id="genderGroup" style="display: none;">
+                        <label>Gender</label>
+                        <select id="gender" onchange="loadTTSVoices()">
+                            <option value="">Select gender</option>
+                            <option value="male">Male</option>
+                            <option value="female">Female</option>
+                        </select>
+                    </div>
                     <div class="form-group" id="ttsVoiceGroup" style="display: none;">
                         <label>TTS Voice</label>
                         <select id="ttsVoiceId"></select>
@@ -3847,10 +3885,15 @@ async def ai_preferences_page(
             
             function loadTTSVoices() {{
                 const lang = document.getElementById('lang').value;
+                const gender = document.getElementById('gender').value;
                 const select = document.getElementById('ttsVoiceId');
                 select.innerHTML = '<option value="">Select voice</option>';
                 allTTSVoices.forEach(voice => {{
-                    if (voice.lang === lang && voice.is_active) {{
+                    // Filter by language and gender (gender is optional)
+                    const langMatch = voice.lang === lang;
+                    const genderMatch = !gender || voice.gender === gender;
+                    
+                    if (langMatch && genderMatch && voice.is_active) {{
                         select.innerHTML += `<option value="${{voice.id}}">${{voice.voice_name}}</option>`;
                     }}
                 }});
@@ -3859,20 +3902,24 @@ async def ai_preferences_page(
             function updateModelTypeFields() {{
                 const modelType = document.getElementById('modelType').value;
                 const langGroup = document.getElementById('langGroup');
+                const genderGroup = document.getElementById('genderGroup');
                 const ttsVoiceGroup = document.getElementById('ttsVoiceGroup');
                 const llmModelGroup = document.getElementById('llmModelGroup');
                 
                 if (modelType === 'tts') {{
                     langGroup.style.display = 'block';
+                    genderGroup.style.display = 'block';
                     ttsVoiceGroup.style.display = 'block';
                     llmModelGroup.style.display = 'none';
                 }} else if (modelType === 'llm') {{
                     langGroup.style.display = 'none';
+                    genderGroup.style.display = 'none';
                     ttsVoiceGroup.style.display = 'none';
                     llmModelGroup.style.display = 'block';
                     populateLLMDropdown();
                 }} else {{
                     langGroup.style.display = 'none';
+                    genderGroup.style.display = 'none';
                     ttsVoiceGroup.style.display = 'none';
                     llmModelGroup.style.display = 'none';
                 }}
@@ -3915,7 +3962,7 @@ async def ai_preferences_page(
                     return;
                 }}
                 
-                let html = '<table><thead><tr><th>Job</th><th>Type</th><th>Language</th><th>Model</th><th>Actions</th></tr></thead><tbody>';
+                let html = '<table><thead><tr><th>Job</th><th>Type</th><th>Language</th><th>Gender</th><th>Model</th><th>Actions</th></tr></thead><tbody>';
                 prefs.forEach(pref => {{
                     const modelName = pref.model_type === 'tts' 
                         ? (allTTSVoices.find(v => v.id === pref.tts_voice_id)?.voice_name || 'N/A')
@@ -3926,6 +3973,7 @@ async def ai_preferences_page(
                             <td>${{pref.job}}</td>
                             <td><strong>${{pref.model_type.toUpperCase()}}</strong></td>
                             <td>${{pref.lang || '-'}}</td>
+                            <td>${{pref.gender || '-'}}</td>
                             <td>${{modelName}}</td>
                             <td>
                                 <button class="btn btn-sm btn-warning" onclick="editPreference(${{pref.id}}, '${{tab}}')">Edit</button>
@@ -3949,6 +3997,7 @@ async def ai_preferences_page(
                 document.getElementById('page').value = pref.page;
                 document.getElementById('modelType').value = pref.model_type;
                 document.getElementById('lang').value = pref.lang || '';
+                document.getElementById('gender').value = pref.gender || '';
                 
                 updateModelTypeFields();
                 
@@ -3971,6 +4020,7 @@ async def ai_preferences_page(
                     page: document.getElementById('page').value,
                     model_type: document.getElementById('modelType').value,
                     lang: document.getElementById('lang').value || null,
+                    gender: document.getElementById('gender').value || null,
                     llm_model_id: document.getElementById('llmModelId').value ? parseInt(document.getElementById('llmModelId').value) : null,
                     tts_voice_id: document.getElementById('ttsVoiceId').value ? parseInt(document.getElementById('ttsVoiceId').value) : null
                 }};

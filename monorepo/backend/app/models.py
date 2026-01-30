@@ -214,6 +214,7 @@ class AIPreference(Base):
     page: Mapped[str] = mapped_column(String, nullable=False)  # "texts" | "words" | "sentences" | "speaking"
     model_type: Mapped[str] = mapped_column(String, nullable=False)  # "tts" | "llm"
     lang: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # "DE" | "EN" | "UA" | NULL
+    gender: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # "male" | "female" | NULL (for TTS only)
     
     # Foreign Keys
     llm_model_id: Mapped[Optional[int]] = mapped_column(ForeignKey("llm_models.id"), nullable=True)
