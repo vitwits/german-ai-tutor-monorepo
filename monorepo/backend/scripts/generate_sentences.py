@@ -50,10 +50,10 @@ def load_cefr_guidelines_from_db():
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         
-        # Шукаємо запис з CEFR Guidelines
+        # Точний query: шукаємо запис з точною назвою 'cefr_guidelines'
         cursor.execute("""
             SELECT prompt FROM model_prompts 
-            WHERE name = 'cefr_guidelines' OR name LIKE '%cefr%'
+            WHERE name = 'cefr_guidelines'
             LIMIT 1
         """)
         
@@ -88,12 +88,13 @@ def load_topics_from_db(level):
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         
-        # Шукаємо запис з Topics для рівня
+        # Точний query: шукаємо запис з точною назвою '{level}_topics' (нижній регістр)
+        topic_name = f"{level.lower()}_topics"
         cursor.execute("""
             SELECT prompt FROM model_prompts 
-            WHERE name = ? OR name LIKE ?
+            WHERE name = ?
             LIMIT 1
-        """, (f"{level}_topics", f"%{level}_topics%"))
+        """, (topic_name,))
         
         result = cursor.fetchone()
         conn.close()
@@ -140,18 +141,19 @@ def load_prompt_template_from_db(template_name):
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         
+        # Точний query: шукаємо запис з точною назвою '{template_name}' (нижній регістр)
         cursor.execute("""
             SELECT prompt FROM model_prompts 
             WHERE name = ?
             LIMIT 1
-        """, (template_name,))
+        """, (template_name.lower(),))
         
         result = cursor.fetchone()
         conn.close()
         
         return result[0] if result else None
     except Exception as e:
-        print(f"Error loading prompt template: {e}")
+        print(f"Error loading prompt template '{template_name}': {e}")
         return None
 
 # ============================================================
@@ -197,11 +199,12 @@ def generate_batch(level, count, topics_subset):
     level_rules = CEFR_GUIDELINES.get(level.upper(), "")
     topics_str = ", ".join(topics_subset)
     
-    # Завантажуємо шаблон промпту з БД
-    prompt_template = load_prompt_template_from_db("General Guidelines")
+    # 📋 Використовуємо ЗАПИС 8️⃣: GENERAL GUIDELINES (основний шаблон промпту)
+    # Це шаблон з плейсхолдерами, який буде повний промпт
+    prompt_template = load_prompt_template_from_db("general_guidelines")
     
     if not prompt_template:
-        print("Error: Prompt template 'General Guidelines' not found in database")
+        print("Error: Prompt template 'general_guidelines' not found in database")
         return []
     
     # Підставляємо значення у шаблон
