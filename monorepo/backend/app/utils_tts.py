@@ -83,7 +83,7 @@ async def get_cached_or_generate_tts(
 
     # 3. Генерація (якщо файлу немає)
     # Використовуємо оригінальний текст для TTS (щоб зберегти регістр та інтонацію)
-    audio_content = services.get_tts_audio(text, lang)
+    audio_content = await services.get_tts_audio(text, lang, db=db)
     
     if audio_content:
         # Billing: Списуємо кредити тільки за генерацію

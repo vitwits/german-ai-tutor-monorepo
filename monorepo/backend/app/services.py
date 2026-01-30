@@ -2,11 +2,14 @@ import os
 import re
 import json
 import random
+from typing import Optional
 from google import genai
 from google.genai import types
 from google.cloud import texttospeech
 from dotenv import load_dotenv
 import azure.cognitiveservices.speech as speechsdk
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 # Визначаємо корінь monorepo (на два рівні вище від app/services.py)
 MONOREPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
@@ -58,7 +61,73 @@ def clean_json_response(text):
 
     return text
 
-def generate_german_text(topic, count, level, style='neutral'):
+# ============================================================================
+# HELPER FUNCTIONS: Get AI preferences from database
+# ============================================================================
+
+async def get_llm_model_for_job(job_name: str, db: AsyncSession) -> str:
+    """
+    Отримує model_id LLM за назвою job з таблиці ai_preferences.
+    Приклад: job='generate_texts' → 'gemini-2.5-flash-lite'
+    
+    Args:
+        job_name: назва job ('generate_texts', 'generate_text_grammar')
+        db: AsyncSession для запиту до БД
+    
+    Returns:
+        model_id або fallback 'gemini-2.5-flash-lite'
+    """
+    try:
+        from .models import AIPreference, LLMModel
+        
+        result = await db.execute(
+            select(LLMModel.model_id).join(
+                AIPreference, AIPreference.llm_model_id == LLMModel.id
+            ).where(
+                AIPreference.job == job_name,
+                LLMModel.is_active == True
+            )
+        )
+        model_id = result.scalar_one_or_none()
+        return model_id or "gemini-2.5-flash-lite"
+    except Exception as e:
+        print(f"Error getting LLM model for {job_name}: {e}")
+        return "gemini-2.5-flash-lite"
+
+async def get_tts_voice_for_job(job_name: str, lang: str, db: AsyncSession) -> Optional[str]:
+    """
+    Отримує voice_name TTS за назвою job і мовою з таблиці ai_preferences.
+    Приклад: job='generate_text_audio', lang='DE' → 'de-DE-Standard-B'
+    
+    Args:
+        job_name: назва job ('generate_text_audio')
+        lang: мова ('DE', 'EN', 'UA')
+        db: AsyncSession для запиту до БД
+    
+    Returns:
+        voice_name або None
+    """
+    try:
+        from .models import AIPreference, TTSVoice
+        
+        result = await db.execute(
+            select(TTSVoice.voice_name).join(
+                AIPreference, AIPreference.tts_voice_id == TTSVoice.id
+            ).where(
+                AIPreference.job == job_name,
+                TTSVoice.lang == lang,
+                TTSVoice.is_active == True
+            )
+        )
+        voice_name = result.scalar_one_or_none()
+        return voice_name
+    except Exception as e:
+        print(f"Error getting TTS voice for {job_name}/{lang}: {e}")
+        return None
+
+# ============================================================================
+
+async def generate_german_text(topic, count, level, style='neutral', db: AsyncSession = None):
     # Використовуємо змінну level. Якщо значення некоректне - фолбек на A2 (глобальний дефолт)
     if level not in CEFR_GUIDELINES:
         level = "A2"
@@ -136,8 +205,13 @@ def generate_german_text(topic, count, level, style='neutral'):
     }}"""
     
     try:
+        # Get model_id from database if db is provided
+        model_id = "gemini-2.5-flash-lite"  # Default fallback
+        if db:
+            model_id = await get_llm_model_for_job('generate_texts', db)
+        
         response = client.models.generate_content(
-            model="gemini-2.5-flash-lite",
+            model=model_id,
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
@@ -153,28 +227,42 @@ def generate_german_text(topic, count, level, style='neutral'):
         print(f"Gen Error: {e}")
         return {"sentences": [], "title_ua": "Error", "title_de": "Error", "title_en": "Error"}
 
-def get_tts_audio(text, lang='de'):
+async def get_tts_audio(text, lang='de', db: AsyncSession = None):
     """
     Generates audio via Google TTS.
-    lang: 'de' (German), 'uk' (Ukrainian), 'en' (English)
+    
+    Args:
+        text: текст для озвучування
+        lang: 'de' (German), 'uk' (Ukrainian), 'en' (English)
+        db: AsyncSession для отримання голосу з БД (optional)
     """
     if not text: return None
 
     tts_client = get_tts_client()
     if not tts_client: return None
 
-    if lang == 'de':
-        language_code = "de-DE"
-        name = "de-DE-Standard-B" 
-    elif lang == 'uk':
-        language_code = "uk-UA"
-        name = "uk-UA-Standard-B" # As requested
-    else:
-        language_code = "en-US"
-        name = "en-US-Standard-C"
+    # Спочатку намагаємся отримати voice з DB
+    voice_name = None
+    lang_code_map = {'de': 'DE', 'uk': 'UA', 'en': 'EN'}
+    
+    if db:
+        tts_lang = lang_code_map.get(lang, 'DE')
+        voice_name = await get_tts_voice_for_job('generate_text_audio', tts_lang, db)
+    
+    # Якщо не отримали з DB, користуємо fallback
+    if not voice_name:
+        if lang == 'de':
+            voice_name = "de-DE-Standard-B"
+        elif lang == 'uk':
+            voice_name = "uk-UA-Standard-B"
+        else:
+            voice_name = "en-US-Standard-C"
+    
+    # Витягуємо language_code з voice_name (перші 5 символів: de-DE, uk-UA, en-US)
+    language_code = voice_name[:5]
 
     s_input = texttospeech.SynthesisInput(text=text)
-    voice = texttospeech.VoiceSelectionParams(language_code=language_code, name=name)
+    voice = texttospeech.VoiceSelectionParams(language_code=language_code, name=voice_name)
     audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.OGG_OPUS)
     
     try:
@@ -334,13 +422,21 @@ def translate_word(text, ctx):
         print(f"Translate Error: {e}")
         return {"display": text, "ua": "Error", "en": "Error", "level": "?"}
 
-def explain_grammar_text(prompt_text):
+def explain_grammar_text(prompt_text, db: AsyncSession = None):
     """
     Виконує запит на пояснення граматики.
+    
+    Args:
+        prompt_text: сформульований промпт
+        db: AsyncSession для отримання моделі з БД (optional)
     """
     try:
+        # NOTE: This is a sync function but needs async DB access
+        # For now, use fallback model. Should be refactored to async in future
+        model_id = "gemini-2.5-flash-lite"  # Default fallback
+        
         response = client.models.generate_content(
-            model="gemini-2.5-flash-lite",
+            model=model_id,
             contents=prompt_text
         )
         return response.text

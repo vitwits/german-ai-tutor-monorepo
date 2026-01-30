@@ -31,8 +31,8 @@ async def generate_text_endpoint(
     # Billing
     new_bal = await billing.deduct_credits(current_user.id, billing.PRICING['lesson_generation'])
     
-    # Generation
-    data = services.generate_german_text(req.topic, count, req.level, req.style)
+    # Generation (pass db to get model from AI preferences)
+    data = await services.generate_german_text(req.topic, count, req.level, req.style, db=db)
     
     title_json = json.dumps({'de': data.get('title_de', req.topic), 'ukr': data.get('title_ua'), 'eng': data.get('title_en')})
     tid = str(uuid.uuid4())
@@ -236,13 +236,13 @@ async def explain_grammar(
     Respond in {target_lang_name}.
     """
 
-    explanation = services.explain_grammar_text(prompt)
+    explanation = services.explain_grammar_text(prompt, db=db)
     
     # Save
     if explanation and req.text_id:
         db.add(GrammarExplanation(
             text_id=req.text_id, 
-            sentence_index=req.sentence_index, 
+            sentence_index=req.sentence_index,
             language=current_user.interface_language,
             explanation=explanation
         ))
