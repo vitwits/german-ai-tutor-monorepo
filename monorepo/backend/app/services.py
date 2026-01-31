@@ -338,64 +338,18 @@ async def evaluate_audio_with_gemini(original_text, audio_bytes, interface_lang,
 
 async def translate_word(text, ctx, db: AsyncSession = None):
     # Отримуємо модель з DB або використовуємо fallback
-    model_id = "gemini-2.5-flash-lite"  # Fallback
-    if db:
-        model_id = await get_llm_model_for_job('translate_vocabulary', db)
+    model_id = await get_llm_model_for_job('translate_vocabulary', db)
     
-    # ПОВНИЙ, ОРИГІНАЛЬНИЙ ПРОМПТ
-    prompt = f"""Translate the German word or phrase: "{text}". Context: "{ctx}".
-    The input "{text}" has {len(text.split())} words.
-
-    STRICT GRAMMAR RULES (NO EXCEPTIONS):
-
-    0. **PRIORITY ORDER**: First, determine if the input is a phrase (2+ words) or a single word (exactly 1 word). Then apply rules.
-    1. COLLOQUIALISMS, SLANG, AND CONTRACTIONS (HIGHEST PRIORITY):
-       - IF the input is a spoken contraction (e.g., "hast'e", "hab's", "bist'e", "gib's", "mach's") or slang ("nix", "ne"):
-       - **YOU MUST PRESERVE** the colloquial spelling in the 'display' field.
-       - DO NOT expand it to standard German (e.g. DO NOT change "hast'e" to "hast du").
-       - Format: "colloquial_form (standard_form)".
-       - Examples: 
-         * Input: "hast'e" -> Display: "hast'e (hast du)"
-         * Input: "hab's" -> Display: "hab's (habe es)"
-         * Input: "nix" -> Display: "nix (nichts)"
-
-    1. PHRASES (2+ words):
-       - If the input is a phrase (e.g., "kontinuierliche Innovationen", "ferne Sternensysteme"):
-       - Convert to Nominative Singular: "die kontinuierliche Innovation".
-       - NEVER use brackets "()" or dashes "(-)" for phrases. 
-       - If there is more than one word, the result MUST be clean text only.
-       - NO "die kontinuierliche Innovation (die kontinuierlichen Innovationen)" - ONLY "die kontinuierliche Innovation".
-
-    2. SINGLE WORDS (Exactly 1 word):
-       - **Nouns**: MUST include the correct definite article (der, die, das) in nominative singular, followed by the plural form in brackets. Example: "das Haus (die Häuser)".
-       - Pluraletantum: "Leute (Pl.)".
-       - Singularetantum: "das Obst (-)".
-       
-    3. SINGLE WORDS - EVERYTHING ELSE (Verbs, Adjectives, Pronouns, Adverbs):
-       - **STRICT RULE**: Provide ONLY the base/infinitive form.
-       - **FORBIDDEN**: Do not include any declensions, comparative forms, or endings in brackets.
-       - **EXAMPLES**: 
-          - "mein" -> "mein" (NOT "mein (meine, meiner)")
-          - "langsam" -> "langsam" (NOT "langsam (langsamer)")
-          - "machen" -> "machen"
-
-
-    4. TRANSLATIONS:
-       - 1-2 main meanings. Clean text only.
-
-    5. CEFR LEVEL (CRITICAL):
-       - Determine the specific CEFR level where this word/phrase is typically introduced.
-       - OUTPUT MUST BE EXACTLY ONE OF: "A1", "A2", "B1", "B2", "C1", "C2".
-       - NEVER return ranges like "A1-C2".
-       - Example: "Haus" -> "A1", "Argument" -> "B1".
-
-    Provide JSON:
-    {{
-      "display": "Correct German form (No brackets for 2+ words)",
-      "ua": "Meanings in Ukrainian",
-      "en": "Meanings in English",
-      "level": "A1-C2"
-    }}"""
+    # Завантажуємо prompt з БД
+    from .models import ModelPrompt
+    result = await db.execute(
+        select(ModelPrompt.prompt).where(
+            ModelPrompt.name == "translate_vocabulary_prompt"
+        )
+    )
+    prompt_template = result.scalar_one_or_none() or ""
+    # Замінюємо placeholders
+    prompt = prompt_template.replace("{text}", text).replace("{ctx}", ctx).replace("{word_count}", str(len(text.split())))
     
     try:
         response = client.models.generate_content(
