@@ -219,22 +219,19 @@ async def explain_grammar(
     lang = current_user.interface_language
     target_lang_name = "Ukrainian" if lang == 'ukr' else "English"
 
-    prompt = f"""
-    Act as a concise German tutor for a {target_lang_name}-speaking student.
-    Analyze this German sentence (Level {text_level}): "{req.sentence}"
-
-    RULES FOR EXPLANATION:
-    1. KEEP IT SHORT. Maximum 3-4 bullet points. No long paragraphs. No intro, no Let's start no small talk.
-    2. DO NOT define obvious words (e.g., don't say "Computer is a noun").
-    3. FOCUS ONLY on grammar nuances relevant to Level {text_level}:
-       - Why this specific article/ending? (Case/Gender)
-       - Word order (Why is the verb here?)
-       - Verb conjugations or tenses.
-    4. If the sentence is very simple (A1/A2), just give 1 sentence summary like: "Standard structure: Subject + Verb + Adjective."
-    5. Highlight key grammar parts in **bold**.
-
-    Respond in {target_lang_name}.
-    """
+    # Завантажуємо промпт з БД
+    from ..models import ModelPrompt
+    result_prompt = await db.execute(select(ModelPrompt.prompt).where(
+        ModelPrompt.name == "grammar_explanation_prompt"
+    ))
+    prompt_template = result_prompt.scalar_one_or_none() or ""
+    
+    # Замінюємо placeholders
+    prompt = (prompt_template
+        .replace("{target_lang_name}", target_lang_name)
+        .replace("{text_level}", text_level)
+        .replace("{sentence}", req.sentence)
+    )
 
     explanation = await services.explain_grammar_text(prompt, db=db)
     

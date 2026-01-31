@@ -24,16 +24,6 @@ if creds and not os.path.isabs(creds):
 # Ініціалізація клієнта (New SDK)
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
-# ПОВНІ ПРАВИЛА CEFR
-CEFR_GUIDELINES = {
-    "A1": "Use natural but simple sentences (5-9 words). Avoid 3-word sentences. Structure: Subject-Verb-Complement/Object. Present tense. Use common nouns and basic adjectives (e.g., instead of 'Das Kino ist klein', use 'Das kleine Kino ist sehr modern').",
-    "A2": "Sentences 8-12 words. Avoid 6-word sentences. Use simple connectors (und, aber, oder). Use Perfekt for past tense. Topics: shopping, work, immediate environment.",
-    "B1": "Sentences 10-15 words. MUST use subordinate clauses (weil, wenn, dass). Use Präteritum for modals. Introduce simple abstract topics. Start using distinct connecting words.",
-    "B2": "Average length: 13-16 words. STRICT LIMIT: No sentence over 18 words and less than 13. Focus on syntactic variety: use Passive voice in one sentence, a Relative clause in another, and ONE multi-part connector (e.g., 'zwar... aber') in a third. DO NOT combine these in a single sentence. Include one idiom. Use abstract vocabulary, but keep the flow concise and teacher-like.",
-    "C1": "Sophisticated structure (14-18 words). No sentence over 19 words and less than 13. Use nominalization, complex syntax, fixed idiomatic expressions, and nuances. Text must flow logically with high cohesion. Advanced vocabulary is required.",
-    "C2": "Mastery level. Long, nuanced sentences (16-22 words). No sentence over 22 words and less than 15. Use rhetorical devices, irony, and implicit meanings. Vocabulary must be highly specific, academic, or literary depending on context."
-}
-
 def get_tts_client():
     if os.path.exists(os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")):
         return texttospeech.TextToSpeechClient()
@@ -131,81 +121,51 @@ async def get_tts_voice_for_job(job_name: str, lang: str, db: AsyncSession) -> O
 # ============================================================================
 
 async def generate_german_text(topic, count, level, style='neutral', db: AsyncSession = None):
-    # Використовуємо змінну level. Якщо значення некоректне - фолбек на A2 (глобальний дефолт)
-    if level not in CEFR_GUIDELINES:
-        level = "A2"
-    level_rules = CEFR_GUIDELINES[level]
+    # Завантажуємо CEFR_GUIDELINES з БД
+    from .models import ModelPrompt
+    result = await db.execute(
+        select(ModelPrompt.prompt).where(
+            ModelPrompt.name == "texts_cefr_guidelines"
+        )
+    )
+    cefr_json = result.scalar_one_or_none()
+    cefr_guidelines = {}
+    if cefr_json:
+        try:
+            cefr_guidelines = json.loads(cefr_json)
+        except Exception as e:
+            print(f"Error parsing cefr_guidelines: {e}")
     
-    # Визначаємо інструкцію для стилю (ПОВНА ВЕРСІЯ)
-    style_instruction = ""
-    if style == 'formal':
-        style_instruction = "Tone: Formal, academic, or professional. Use complex sentence structures suitable for the level."
-    elif style == 'conversational':
-        style_instruction = """Tone: Authentic spoken German (Umgangssprache). 
-        - Focus on how native speakers actually talk, not textbook German.
-        - Use modal particles (e.g., 'halt', 'doch', 'mal', 'ja', 'eh') to make it sound natural.
-        - Use common colloquial idioms and phrasing suitable for the level.
-        - Avoid stiff or overly written constructions."""
-    elif style == 'dialogue_informal':
-        style_instruction = """Format: A realistic dialogue between close friends or family. 
-        Tone: Highly Informal/Colloquial (Umgangssprache). 
-        - MANDATORY use of 'Du'.
-        - Use slang, conversational fillers, and interjections (e.g., 'Na?', 'Ach so', 'Echt jetzt?').
-        - Use spoken contractions (e.g., 'mach's' instead of 'mache es', 'hast'e' instead of 'hast du' if appropriate).
-        - Sentences should be dynamic, sometimes elliptical (incomplete), typical of real chats."""
-    elif style == 'dialogue_formal':
-        style_instruction = "Format: A dialogue between two people. Tone: Polite/Formal (use 'Sie'). Structured and courteous."
-    else: # neutral
-        style_instruction = "Tone: Neutral, descriptive, standard article style."
-
-    prompt = f"""You are an expert German linguist and teacher. 
-    Generate a high-quality, coherent German text about "{topic}".
+    # Отримуємо правила для рівня, або пустий string якщо рівня немає
+    level_rules = cefr_guidelines.get(level, "")
     
-    TARGET LEVEL: {level} (Strictly adhere to CEFR standards).
-    LENGTH: Exactly {count} sentences.
+    # Завантажуємо інструкцію для стилю з БД
+    style_key = f"texts_style_{style}"
+    result_style = await db.execute(
+        select(ModelPrompt.prompt).where(
+            ModelPrompt.name == style_key
+        )
+    )
+    style_instruction = result_style.scalar_one_or_none() or ""
+    if not style_instruction:
+        print(f"⚠️ Style '{style_key}' not found in DB, using empty string")
     
-    STYLE/TONE INSTRUCTIONS:
-    {style_instruction}
+    # Завантажуємо шаблон промпту з БД
+    result_prompt = await db.execute(
+        select(ModelPrompt.prompt).where(
+            ModelPrompt.name == "texts_generation_prompt"
+        )
+    )
+    prompt_template = result_prompt.scalar_one_or_none() or ""
     
-    LINGUISTIC REQUIREMENTS FOR {level}:
-    {level_rules}
-    
-    INSTRUCTIONS:
-    1. The text must make sense as a story or logical explanation (or dialogue if specified), not just random sentences.
-    2. Translate each sentence into Ukrainian (ua) and English (en).
-    3. "de" field must contain ONLY natural German text. 
-       - NO brackets with translations.
-       - NO grammatical hints inside the text.
-    !ABSOLUTE MAXIMUM: No sentence should ever exceed 22 words, even for C2!
-    NO CLUTTER: Do not use multiple complex grammatical structures in a single sentence. Spread them across the text.
-    NATURAL FLOW: The text must sound like it was written by a human teacher, not a grammar-obsessed robot.
-
-    ADDITIONALLY GENERATE A QUIZ:
-    - Create exactly 4 multiple-choice questions based on the text.
-    - Language: German (questions and options).
-    - Level: Same as text.
-    - Format: 4 options per question, 1 correct answer. No duplicates.
-    
-    Return ONLY JSON:
-    {{
-      "title_de": "German Title ({level})", 
-      "title_ua": "Ukrainian Title", 
-      "title_en": "English Title",
-      "sentences": [ 
-          {{
-              "de": "German sentence adhering to rules.", 
-              "ua": "Ukrainian translation", 
-              "en": "English translation"
-          }}
-      ],
-      "quiz": [
-          {{
-              "question": "Question in German?",
-              "options": ["Option A", "Option B", "Option C", "Option D"],
-              "correct_index": 0  // Index of the correct option (0-3)
-          }}
-      ]
-    }}"""
+    # Замінюємо placeholders у промпті
+    prompt = (prompt_template
+        .replace("{topic}", topic)
+        .replace("{level}", level)
+        .replace("{count}", str(count))
+        .replace("{style_instruction}", style_instruction)
+        .replace("{level_rules}", level_rules)
+    )
     
     try:
         # Get model_id from database if db is provided
