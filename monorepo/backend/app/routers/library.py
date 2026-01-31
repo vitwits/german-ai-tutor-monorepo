@@ -218,6 +218,7 @@ async def explain_grammar(
 
     lang = current_user.interface_language
     target_lang_name = "Ukrainian" if lang == 'ukr' else "English"
+    output_lang = "uk" if lang == 'ukr' else "en"
 
     # Завантажуємо промпт з БД
     from ..models import ModelPrompt
@@ -233,7 +234,12 @@ async def explain_grammar(
         .replace("{sentence}", req.sentence)
     )
 
-    explanation = await services.explain_grammar_text(prompt, db=db)
+    explanation = await services.explain_grammar_text(
+        prompt,
+        db=db,
+        user_id=current_user.id,
+        output_lang=output_lang
+    )
     
     # Save
     if explanation and req.text_id:

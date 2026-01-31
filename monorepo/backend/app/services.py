@@ -328,13 +328,23 @@ async def translate_word(text, ctx, db: AsyncSession = None):
         print(f"Translate Error: {e}")
         return {"display": text, "ua": "Error", "en": "Error", "level": "?"}
 
-async def explain_grammar_text(prompt_text, db: AsyncSession = None):
+async def explain_grammar_text(
+    prompt_text,
+    db: AsyncSession = None,
+    user_id: str = None,
+    output_lang: str = "uk"
+):
     """
-    Виконує запит на пояснення граматики.
+    Виконує запит на пояснення граматики та записує вартість.
     
     Args:
-        prompt_text: сформульований промпт
-        db: AsyncSession для отримання моделі з БД (optional)
+        prompt_text: сформульований промпт (input)
+        db: AsyncSession для отримання моделі з БД та запису вартості (optional)
+        user_id: ID юзера для запису вартості (optional)
+        output_lang: Мова вихідного тексту ('en', 'de', 'uk'). Default: 'uk'
+    
+    Returns:
+        Пояснення граматики (str) або None при помилці
     """
     try:
         # Отримуємо модель з DB або використовуємо fallback
@@ -346,7 +356,23 @@ async def explain_grammar_text(prompt_text, db: AsyncSession = None):
             model=model_id,
             contents=prompt_text
         )
-        return response.text
+        
+        explanation = response.text
+        
+        # Записуємо вартість якщо є всі необхідні параметри
+        if db and user_id and explanation:
+            from . import cost_calculation
+            await cost_calculation.record_grammar_explanation_cost(
+                user_id=user_id,
+                prompt_text=prompt_text,
+                response_text=explanation,
+                model_id=model_id,
+                input_lang="en",  # Промпт містить переважно англійський текст
+                output_lang=output_lang,
+                db=db
+            )
+        
+        return explanation
     except Exception as e:
         print(f"Grammar Error: {e}")
         return None

@@ -8,9 +8,9 @@ from typing import Literal
 # Constants for LLM token calculation
 # Characters to tokens ratio per language for text output
 LANGUAGE_CHAR_TO_TOKEN_RATIO = {
-    "en": 4.1,      # English: 4.1 characters = 1 token
-    "de": 3.6,      # German: 3.6 characters = 1 token
-    "uk": 1.6,      # Ukrainian: 1.6 characters = 1 token
+    "en": 4.0,      # English: 4.1 characters = 1 token
+    "de": 3.5,      # German: 3.6 characters = 1 token
+    "uk": 2.2,      # Ukrainian: 1.6 characters = 1 token
 }
 
 # Audio input constant
@@ -106,3 +106,100 @@ def is_error_response(status_code: int) -> bool:
         True if error (400 or 500 range), False otherwise
     """
     return 400 <= status_code < 600
+
+
+async def record_grammar_explanation_cost(
+    user_id: str,
+    prompt_text: str,
+    response_text: str,
+    model_id: str,
+    input_lang: str = "en",
+    output_lang: str = "uk",
+    db=None
+) -> float:
+    """
+    Record cost for grammar explanation generation and update user's llm_cost.
+    
+    Args:
+        user_id: User ID to charge
+        prompt_text: Input prompt text (input data)
+        response_text: Generated response text (output data)
+        model_id: Model ID used for generation (e.g., 'gemini-2.5-flash-lite')
+        input_lang: Language of input prompt ('en', 'de', 'uk')
+        output_lang: Language of output response ('en', 'de', 'uk')
+        db: AsyncSession for database operations
+        
+    Returns:
+        Total cost calculated for input and output combined
+    """
+    if not db or not response_text:
+        return 0.0
+    
+    try:
+        # Step 1: Calculate tokens for input and output
+        input_tokens = calculate_text_output_tokens(prompt_text, input_lang)
+        output_tokens = calculate_text_output_tokens(response_text, output_lang)
+        
+        # Step 2: Get LLM model info from database
+        from sqlalchemy import select
+        from .models import LLMModel, LLMPrice
+        
+        # Find the model by model_id
+        model_result = await db.execute(
+            select(LLMModel).where(LLMModel.model_id == model_id)
+        )
+        model = model_result.scalar_one_or_none()
+        
+        if not model:
+            print(f"⚠️ Model not found: {model_id}")
+            return 0.0
+        
+        # Step 3: Get prices for input and output
+        input_price_result = await db.execute(
+            select(LLMPrice).where(
+                LLMPrice.llm_model_id == model.id,
+                LLMPrice.direction == "input",
+                LLMPrice.data_type == "text",
+                LLMPrice.is_active == True
+            )
+        )
+        input_price = input_price_result.scalar_one_or_none()
+        
+        output_price_result = await db.execute(
+            select(LLMPrice).where(
+                LLMPrice.llm_model_id == model.id,
+                LLMPrice.direction == "output",
+                LLMPrice.data_type == "text",
+                LLMPrice.is_active == True
+            )
+        )
+        output_price = output_price_result.scalar_one_or_none()
+        
+        if not input_price or not output_price:
+            print(f"⚠️ Price not found for model: {model_id}")
+            return 0.0
+        
+        # Step 4: Calculate total cost
+        # Price is per 1 million tokens, so: (tokens / 1_000_000) * price_per_unit
+        input_cost = (input_tokens / 1_000_000) * input_price.price_per_unit
+        output_cost = (output_tokens / 1_000_000) * output_price.price_per_unit
+        total_cost = input_cost + output_cost
+        
+        # Step 5: Update user's llm_cost
+        from .models import User
+        user_result = await db.execute(select(User).where(User.id == user_id))
+        user = user_result.scalar_one_or_none()
+        
+        if user:
+            user.llm_cost = (user.llm_cost or 0.0) + total_cost
+            user.total_cost = (user.total_cost or 0.0) + total_cost
+            await db.commit()
+            
+            return total_cost
+        
+        return 0.0
+        
+    except Exception as e:
+        print(f"❌ Error recording grammar explanation cost: {e}")
+        return 0.0
+
