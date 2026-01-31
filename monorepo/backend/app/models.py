@@ -16,6 +16,11 @@ class User(Base):
     credits: Mapped[float] = mapped_column(Float, default=1000.0)
     is_admin: Mapped[int] = mapped_column(Integer, default=0)
     
+    # Cost tracking
+    llm_cost: Mapped[float] = mapped_column(Float, default=0.0)
+    tts_cost: Mapped[float] = mapped_column(Float, default=0.0)
+    total_cost: Mapped[float] = mapped_column(Float, default=0.0)
+    
     # Settings
     library_view_mode: Mapped[Optional[str]] = mapped_column(String, default='list')
     library_per_page: Mapped[Optional[int]] = mapped_column(Integer, default=20)
