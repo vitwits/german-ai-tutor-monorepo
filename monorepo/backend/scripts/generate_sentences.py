@@ -61,14 +61,30 @@ def load_cefr_guidelines_from_db():
         conn.close()
         
         if result:
-            guidelines_json = result[0]
-            # Припускаємо що в БД зберігається JSON
-            guidelines = json.loads(guidelines_json)
-            # ✅ ЗАПИС 1 ЗАВАНТАЖЕНО: CEFR Guidelines (рівні A1-C2)
-            print(f"✅ Loaded CEFR Guidelines from database")
-            return guidelines
+            guidelines_text = result[0]
+            
+            # Спроба 1: парсити як JSON
+            try:
+                guidelines = json.loads(guidelines_text)
+                # ✅ ЗАПИС 1 ЗАВАНТАЖЕНО: CEFR Guidelines (рівні A1-C2)
+                print(f"✅ Loaded CEFR Guidelines from database (JSON format)")
+                return guidelines
+            except json.JSONDecodeError:
+                pass
+            
+            # Спроба 2: оцінити як Python об'єкт
+            try:
+                guidelines = eval(guidelines_text)
+                if isinstance(guidelines, dict):
+                    print(f"✅ Loaded CEFR Guidelines from database (Python dict format)")
+                    return guidelines
+            except:
+                pass
+            
+            print("Warning: CEFR Guidelines found but could not be parsed. Using empty guidelines.")
+            return {}
         else:
-            print("Warning: CEFR Guidelines not found in database. Using empty guidelines.")
+            print("❌ CEFR Guidelines not found in database at name='cefr_guidelines'")
             return {}
             
     except Exception as e:
@@ -106,6 +122,7 @@ def load_topics_from_db(level):
             try:
                 topics = json.loads(topics_text)
                 if isinstance(topics, list):
+                    print(f"✅ Loaded {level.upper()}_TOPICS from database (JSON format, {len(topics)} items)")
                     return topics
             except json.JSONDecodeError:
                 pass
@@ -114,10 +131,12 @@ def load_topics_from_db(level):
             try:
                 topics = eval(topics_text)
                 if isinstance(topics, list):
+                    print(f"✅ Loaded {level.upper()}_TOPICS from database (Python format, {len(topics)} items)")
                     return topics
             except:
                 pass
         
+        print(f"❌ {level.upper()}_TOPICS not found in database at name='{level.lower()}_topics'")
         return []
             
     except Exception as e:
@@ -154,6 +173,15 @@ def load_prompt_template_from_db(template_name):
         return result[0] if result else None
     except Exception as e:
         print(f"Error loading prompt template '{template_name}': {e}")
+        return None
+    
+    if result:
+        print(f"✅ Loaded prompt template '{template_name}' from database")
+        print(f"   📝 Template length: {len(result[0])} chars")
+        print(f"   📝 Placeholders found: {', '.join([p for p in ['{count}', '{level}', '{topics_str}', '{level_rules}'] if p in result[0]])}")
+        return result[0]
+    else:
+        print(f"❌ Prompt template '{template_name}' not found in database")
         return None
 
 # ============================================================
@@ -208,6 +236,14 @@ def generate_batch(level, count, topics_subset):
         return []
     
     # Підставляємо значення у шаблон
+    prompt = prompt_template.format(
+        count=count,
+        level=level.upper(),
+        topics_str=topics_str,
+        level_rules=level_rules
+    )
+    
+    # Підставляємо значення у шаблон (count, level, topics_str, level_rules)
     prompt = prompt_template.format(
         count=count,
         level=level.upper(),
