@@ -77,6 +77,9 @@ async def get_llm_model_for_job(job_name: str, db: AsyncSession) -> str:
     Returns:
         model_id або fallback 'gemini-2.5-flash-lite'
     """
+    if not db:
+        return "gemini-2.5-flash-lite"
+    
     try:
         from .models import AIPreference, LLMModel
         
@@ -278,51 +281,22 @@ async def get_tts_audio(text, lang='de', db: AsyncSession = None, job_name='gene
         return None
 
 async def evaluate_audio_with_gemini(original_text, audio_bytes, interface_lang, db: AsyncSession = None, mime_type='audio/webm'):
-    """Оцінює аудіо-файл через Gemini. Використовує модель з ai_preferences 'speaking_feedback' job."""
+    """Оцінює аудіо-файл через Gemini. Завантажує модель і prompt з БД."""
     feedback_lang = "Ukrainian" if interface_lang == 'uk' else "English"
     
-    # Отримуємо модель з ai_preferences
-    llm_model_name = "gemini-2.0-flash"  # Default fallback
-    if db:
-        try:
-            llm_model_name = await get_llm_model_for_job("speaking_feedback", db)
-            if not llm_model_name:
-                llm_model_name = "gemini-2.0-flash"
-        except:
-            # Якщо щось пішло не так, використовуємо default
-            llm_model_name = "gemini-2.0-flash"
+    # Отримуємо модель з ai_preferences за job 'speaking_feedback'
+    llm_model_name = await get_llm_model_for_job("speaking_feedback", db)
     
-    prompt = f"""
-    Role: Strict Goethe-Institut Examiner.
-    Task: Evaluate the user's spoken German.
-    
-    REFERENCE GERMAN SENTENCE: "{original_text}"
-    
-    AUDIO ANALYSIS RULES:
-    1. **Transcription**: Transcribe EXACTLY what is heard in the audio.
-       - If the audio contains coughing, tapping, silence, or non-speech sounds -> Output "[NOISE]" and set ALL scores to 1.
-       - If the user speaks a different language -> Set scores to 1.
-       - **CRITICAL**: Do NOT hallucinate the Reference Sentence if it is not present in the audio. If the audio is unclear, transcribe what you hear (e.g., "mumble", "noise"), do not guess the sentence.
-    
-    2. **Scoring** (1-100):
-       - Be highly critical. 100 is for native-level perfection only.
-       - **Pronunciation**: Deduct heavily for strong accents or unclear phonemes.
-       - **Context/Accuracy**: Compare the spoken text to the REFERENCE sentence. 
-         * ACCEPT valid synonyms (e.g. 'günstig' instead of 'billig/niedrig'), alternative word orders, or phrasing IF the meaning remains correct and natural.
-         * Do NOT penalize if the user uses a different but correct way to express the same idea.
-         * Deduct points only if the meaning is changed, wrong, or words are missing.
-       - **Grammar**: Deduct for wrong articles, endings, or structure.
-       - If the user says nothing relevant -> Score 1.
-    
-    Output JSON ONLY:
-    {{
-        "transcribed_text": "Verbatim transcription or [NOISE]",
-        "pronunciation_score": 1-100 (integer),
-        "context_score": 1-100 (integer),
-        "grammar_score": 1-100 (integer),
-        "correction": "Correct German version (if needed, else null)"
-    }}
-    """
+    # Завантажуємо prompt з БД
+    from .models import ModelPrompt
+    result = await db.execute(
+        select(ModelPrompt.prompt).where(
+            ModelPrompt.name == "speaking_feedback_prompt"
+        )
+    )
+    prompt_template = result.scalar_one_or_none() or ""
+    # Замінюємо {original_text} без format() щоб не конфліктувати з JSON дужками
+    prompt = prompt_template.replace("{original_text}", original_text)
     
     try:
         response = client.models.generate_content(
