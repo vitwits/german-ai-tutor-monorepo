@@ -205,19 +205,19 @@ async def record_grammar_explanation_cost(
         print(f"   output_price (per 1M tokens): ${output_price.price_per_unit}")
         print(f"   input_cost: ${input_cost:.6f}")
         print(f"   output_cost: ${output_cost:.6f}")
-        if user:
-            user.llm_cost = (user.llm_cost or 0.0) + total_cost
-            user.total_cost = (user.total_cost or 0.0) + total_cost
-            await db.commit()
-            
-            print(f"✅ Grammar explanation cost recorded: ${total_cost:.6f} for user {user_id}")
-            return total_costalar_one_or_none()
+        print(f"   total_cost: ${total_cost:.6f}\n")
+        
+        # Step 5: Update user's llm_cost
+        from .models import User
+        user_result = await db.execute(select(User).where(User.id == user_id))
+        user = user_result.scalar_one_or_none()
         
         if user:
             user.llm_cost = (user.llm_cost or 0.0) + total_cost
             user.total_cost = (user.total_cost or 0.0) + total_cost
             await db.commit()
             
+            print(f"✅ Grammar explanation cost recorded: ${total_cost:.6f} for user {user_id}")
             return total_cost
         
         return 0.0
