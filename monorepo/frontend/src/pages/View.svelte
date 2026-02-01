@@ -127,9 +127,9 @@
         // const userLang = $user ? $user.interface_language : 'ukr';
         const userLang = $user?.interface_language || 'ukr';
         // Fallback logic: try target lang, then english, then whatever is available
-        let transText = s.uk;
-        if (userLang !== 'ukr') transText = s.en || s.uk;
-        if (!transText) transText = s.en || s.uk;
+        let transText = s.ua;  // Changed from 'uk' to 'ua' to match API response
+        if (userLang !== 'ukr') transText = s.en || s.ua;
+        if (!transText) transText = s.en || s.ua;
 
         return { ...s, de_html: html, index: idx, has_grammar: grammarIndices.includes(idx), grammar_explanation: null, display_trans: transText };
       });
