@@ -121,7 +121,13 @@ async def get_tts_voice_for_job(job_name: str, lang: str, db: AsyncSession) -> O
 # ============================================================================
 
 async def generate_german_text(topic, count, level, style='neutral', db: AsyncSession = None):
-    # Завантажуємо CEFR_GUIDELINES з БД
+    """
+    Generate German text with translations.
+    
+    Returns:
+        Tuple of (data_dict, prompt_text, raw_response_text, model_id)
+        Where data_dict contains: title_de, title_ua, title_en, sentences, quiz
+    """
     from .models import ModelPrompt
     result = await db.execute(
         select(ModelPrompt.prompt).where(
@@ -181,14 +187,27 @@ async def generate_german_text(topic, count, level, style='neutral', db: AsyncSe
                 temperature=0.7
             )
         )
-        data = json.loads(clean_json_response(response.text))
+        
+        raw_response_text = response.text
+        
+        # 🔍 DEBUG: Print full raw response as received from API
+        print("\n" + "="*80)
+        print("🔍 DEBUG: FULL RAW RESPONSE FROM GEMINI API")
+        print("="*80)
+        print(raw_response_text)
+        print("="*80 + "\n")
+        
+        data = json.loads(clean_json_response(raw_response_text))
         # Handle edge case where LLM returns a list instead of a dict
         if isinstance(data, list):
             data = data[0] if data else {}
-        return data
+        
+        # Return tuple: (data, prompt, raw_response, model_id)
+        return (data, prompt, raw_response_text, model_id)
     except Exception as e:
         print(f"Gen Error: {e}")
-        return {"sentences": [], "title_ua": "Error", "title_de": "Error", "title_en": "Error"}
+        error_data = {"sentences": [], "title_ua": "Error", "title_de": "Error", "title_en": "Error"}
+        return (error_data, "", "", "gemini-2.5-flash-lite")
 
 async def get_tts_audio(text, lang='de', db: AsyncSession = None, job_name='generate_text_audio'):
     """

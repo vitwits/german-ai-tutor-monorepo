@@ -9,7 +9,7 @@ from ..database import get_db
 from ..models import User, Text, Vocabulary, GrammarExplanation, QuizResult
 from ..schemas import TextGenerateRequest, TextReadSchema, ToggleFavRequest, GrammarExplainRequest, QuizResultRequest, VocabWordSchema
 from ..dependencies import get_current_user
-from .. import services, billing
+from .. import services, billing, cost_calculation
 from ..utils_tts import delete_sentence_audio_cache
 
 router = APIRouter(prefix="/api", tags=["library"])
@@ -32,9 +32,22 @@ async def generate_text_endpoint(
     new_bal = await billing.deduct_credits(current_user.id, billing.PRICING['lesson_generation'])
     
     # Generation (pass db to get model from AI preferences)
-    data = await services.generate_german_text(req.topic, count, req.level, req.style, db=db)
+    # Now returns tuple: (data, prompt, raw_response, model_id)
+    data, prompt_text, raw_response_text, model_id = await services.generate_german_text(
+        req.topic, count, req.level, req.style, db=db
+    )
     
-    title_json = json.dumps({'de': data.get('title_de', req.topic), 'ukr': data.get('title_ua'), 'eng': data.get('title_en')})
+    # Record cost for text generation
+    if data.get('sentences') and raw_response_text:
+        await cost_calculation.record_text_generation_cost(
+            user_id=current_user.id,
+            prompt_text=prompt_text,
+            response_text=raw_response_text,
+            model_id=model_id,
+            db=db
+        )
+    
+    title_json = json.dumps({'de': data.get('title_de', req.topic), 'ukr': data.get('title_ua'), 'eng': data.get('title_en')}, ensure_ascii=False)
     tid = str(uuid.uuid4())
     
     new_text = Text(
@@ -42,8 +55,8 @@ async def generate_text_endpoint(
         user_id=current_user.id,
         title=title_json,
         level=req.level,
-        content_json=json.dumps(data.get('sentences', [])),
-        quiz_json=json.dumps(data.get('quiz', []))
+        content_json=json.dumps(data.get('sentences', []), ensure_ascii=False),
+        quiz_json=json.dumps(data.get('quiz', []), ensure_ascii=False)
     )
     db.add(new_text)
     await db.commit()
