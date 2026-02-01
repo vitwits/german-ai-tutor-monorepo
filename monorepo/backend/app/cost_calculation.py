@@ -95,6 +95,39 @@ def calculate_llm_total_tokens(
     return audio_tokens + text_tokens
 
 
+def repair_json_response(json_text: str) -> str:
+    """
+    Repair common JSON syntax errors from Gemini API responses.
+    
+    Fixes:
+    - Duplicate keys: "key":"value":"value" -> "key":"value"
+    - Trailing commas before closing brackets
+    - Multiple colons in succession
+    
+    Args:
+        json_text: Potentially malformed JSON string
+        
+    Returns:
+        Repaired JSON string
+    """
+    import re
+    
+    # Fix: "key":"value":"value" -> "key":"value"
+    # Pattern: "...":"...":" followed by more content
+    json_text = re.sub(r'(":?")([^}{\[\]]*?)(":[\d]+")', r'\1\3', json_text)
+    
+    # Fix: "correct_index":2":2" -> "correct_index":2
+    json_text = re.sub(r'("correct_index":(\d+))":(\d+)"', r'\1', json_text)
+    
+    # Fix: trailing commas before ] or }
+    json_text = re.sub(r',(\s*[}\]])', r'\1', json_text)
+    
+    # Fix: double colons :: -> :
+    json_text = re.sub(r'::+', ':', json_text)
+    
+    return json_text
+
+
 def is_error_response(status_code: int) -> bool:
     """
     Check if response status indicates an error that should not be charged.
@@ -266,31 +299,54 @@ async def record_text_generation_cost(
         # Step 1: Calculate input tokens (entire prompt as English)
         input_tokens = calculate_text_output_tokens(prompt_text, "en")
         
-        # Step 2: Parse JSON response and extract text by language
-        data = json.loads(response_text)
+        # Step 2: Repair and parse JSON response
+        repaired_response = repair_json_response(response_text)
         
-        # Extract content for each language (without spaces between elements)
-        ua_title = data.get("title_ua", "")
-        ua_sentences = "".join([sentence.get("ua", "") for sentence in data.get("sentences", [])])
-        ua_content = ua_title + ua_sentences
-        ua_chars = len(ua_content)
+        try:
+            data = json.loads(repaired_response)
+        except json.JSONDecodeError as e:
+            print(f"⚠️ WARNING: Could not parse JSON even after repair: {e}")
+            print(f"   Original: {response_text[:200]}...")
+            print(f"   Repaired: {repaired_response[:200]}...")
+            print(f"   Fallback: counting entire response as German\n")
+            
+            # Fallback: count entire response as German
+            total_json_chars = len(response_text)
+            de_chars = total_json_chars
+            ua_chars = 0
+            en_chars = 0
+            
+            ua_tokens = ua_chars / LANGUAGE_CHAR_TO_TOKEN_RATIO["uk"]
+            en_tokens = en_chars / LANGUAGE_CHAR_TO_TOKEN_RATIO["en"]
+            de_tokens = de_chars / LANGUAGE_CHAR_TO_TOKEN_RATIO["de"]
+            total_output_tokens = ua_tokens + en_tokens + de_tokens
+            
+            data = None  # Skip structured extraction
         
-        en_title = data.get("title_en", "")
-        en_sentences = "".join([sentence.get("en", "") for sentence in data.get("sentences", [])])
-        en_content = en_title + en_sentences
-        en_chars = len(en_content)
-        
-        # Total JSON length - UA and EN content = remainder (mostly German)
-        total_json_chars = len(response_text)
-        de_chars = total_json_chars - ua_chars - en_chars
-        
-        # DEBUG: Print character count breakdown
-        print(f"🔍 DEBUG character count breakdown:")
-        print(f"   input_text (EN): {len(prompt_text)} chars")
-        print(f"   output_text (RAW JSON total): {total_json_chars} chars")
-        print(f"      UA content: {ua_chars} chars")
-        print(f"      EN content: {en_chars} chars")
-        print(f"      DE (remainder): {de_chars} chars\n")
+        # Only extract if JSON parsing succeeded
+        if data:
+            # Extract content for each language (without spaces between elements)
+            ua_title = data.get("title_ua", "")
+            ua_sentences = "".join([sentence.get("ua", "") for sentence in data.get("sentences", [])])
+            ua_content = ua_title + ua_sentences
+            ua_chars = len(ua_content)
+            
+            en_title = data.get("title_en", "")
+            en_sentences = "".join([sentence.get("en", "") for sentence in data.get("sentences", [])])
+            en_content = en_title + en_sentences
+            en_chars = len(en_content)
+            
+            # Total JSON length - UA and EN content = remainder (mostly German)
+            total_json_chars = len(response_text)
+            de_chars = total_json_chars - ua_chars - en_chars
+            
+            # DEBUG: Print character count breakdown
+            print(f"🔍 DEBUG character count breakdown:")
+            print(f"   input_text (EN): {len(prompt_text)} chars")
+            print(f"   output_text (RAW JSON total): {total_json_chars} chars")
+            print(f"      UA content: {ua_chars} chars")
+            print(f"      EN content: {en_chars} chars")
+            print(f"      DE (remainder): {de_chars} chars\n")
         
         # Step 3: Calculate output tokens for each language
         # Convert character counts to tokens using language-specific ratios
