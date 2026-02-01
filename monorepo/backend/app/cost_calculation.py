@@ -136,9 +136,24 @@ async def record_grammar_explanation_cost(
         return 0.0
     
     try:
+        # DEBUG: Print received parameters
+        print(f"\n🔍 DEBUG record_grammar_explanation_cost:")
+        print(f"   user_id: {user_id}")
+        print(f"   model_id: {model_id}")
+        print(f"   input_lang: {input_lang}")
+        print(f"   output_lang: {output_lang}")
+        print(f"   prompt_text length: {len(prompt_text)} chars")
+        print(f"   response_text length: {len(response_text)} chars")
+        print(f"\n   📝 FULL INPUT TEXT:\n{prompt_text}\n")
+        print(f"   📝 FULL OUTPUT TEXT:\n{response_text}\n")
+        
         # Step 1: Calculate tokens for input and output
         input_tokens = calculate_text_output_tokens(prompt_text, input_lang)
         output_tokens = calculate_text_output_tokens(response_text, output_lang)
+        
+        print(f"🔍 DEBUG tokens calculated:")
+        print(f"   input_tokens: {input_tokens:.2f}")
+        print(f"   output_tokens: {output_tokens:.2f}\n")
         
         # Step 2: Get LLM model info from database
         from sqlalchemy import select
@@ -185,10 +200,18 @@ async def record_grammar_explanation_cost(
         output_cost = (output_tokens / 1_000_000) * output_price.price_per_unit
         total_cost = input_cost + output_cost
         
-        # Step 5: Update user's llm_cost
-        from .models import User
-        user_result = await db.execute(select(User).where(User.id == user_id))
-        user = user_result.scalar_one_or_none()
+        print(f"🔍 DEBUG pricing found:")
+        print(f"   input_price (per 1M tokens): ${input_price.price_per_unit}")
+        print(f"   output_price (per 1M tokens): ${output_price.price_per_unit}")
+        print(f"   input_cost: ${input_cost:.6f}")
+        print(f"   output_cost: ${output_cost:.6f}")
+        if user:
+            user.llm_cost = (user.llm_cost or 0.0) + total_cost
+            user.total_cost = (user.total_cost or 0.0) + total_cost
+            await db.commit()
+            
+            print(f"✅ Grammar explanation cost recorded: ${total_cost:.6f} for user {user_id}")
+            return total_costalar_one_or_none()
         
         if user:
             user.llm_cost = (user.llm_cost or 0.0) + total_cost
