@@ -40,6 +40,38 @@ class Text(Base):
     is_favorite: Mapped[int] = mapped_column(Integer, default=0)
     quiz_json: Mapped[Optional[str]] = mapped_column(DBText)
 
+class Lesson(Base):
+    __tablename__ = "lessons"
+    
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    title: Mapped[Optional[str]] = mapped_column(String)  # JSON: {"de": "...", "ua": "...", "en": "..."}
+    level: Mapped[Optional[str]] = mapped_column(String)  # A1, A2, B1, B2, C1, C2
+    content_json: Mapped[Optional[str]] = mapped_column(DBText)  # Sentences array
+    quiz_json: Mapped[Optional[str]] = mapped_column(DBText)  # Quiz questions
+    audio_status: Mapped[str] = mapped_column(String, default='pending')  # pending, generating, completed, partial_failed
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
+
+class UserLesson(Base):
+    __tablename__ = "user_lessons"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    lesson_id: Mapped[str] = mapped_column(ForeignKey("lessons.id"), nullable=False)
+    is_favorite: Mapped[int] = mapped_column(Integer, default=0)
+    added_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+
+class LessonAudio(Base):
+    __tablename__ = "lesson_audio"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    lesson_id: Mapped[str] = mapped_column(ForeignKey("lessons.id"), nullable=False)
+    sentence_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    lang: Mapped[str] = mapped_column(String, default='de')  # de, en, uk
+    audio_path: Mapped[Optional[str]] = mapped_column(String)  # Relative path: cache/de/ab/abc123.ogg
+    status: Mapped[str] = mapped_column(String, default='pending')  # pending, generated, failed
+    generated_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+
 class Vocabulary(Base):
     __tablename__ = "vocabulary"
     
@@ -102,7 +134,8 @@ class QuizResult(Base):
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
-    text_id: Mapped[str] = mapped_column(ForeignKey("texts.id"), nullable=False)
+    text_id: Mapped[Optional[str]] = mapped_column(ForeignKey("texts.id"), nullable=True)  # Old user-specific texts
+    lesson_id: Mapped[Optional[str]] = mapped_column(ForeignKey("lessons.id"), nullable=True)  # New global lessons
     score: Mapped[Optional[int]] = mapped_column(Integer)
     total_questions: Mapped[Optional[int]] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
