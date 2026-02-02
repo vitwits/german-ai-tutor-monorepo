@@ -112,6 +112,10 @@ class TTSPairRequest(BaseModel):
     de_text: str
     trans_text: str
 
+class TTSBatchRequest(BaseModel):
+    sentences: List[str]  # List of German sentences
+    lang: str = 'de'
+
 class ReportSentenceRequest(BaseModel):
     id: int
 

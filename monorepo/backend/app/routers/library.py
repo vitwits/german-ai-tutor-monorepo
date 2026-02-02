@@ -1,6 +1,7 @@
 import json
 import uuid
 import math
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -61,7 +62,67 @@ async def generate_text_endpoint(
     db.add(new_text)
     await db.commit()
     
+    # Запускаємо batch генерацію аудіо в фоні (не чекаємо завершення)
+    # Отримуємо sentences з даних
+    sentences_list = data.get('sentences', [])
+    if sentences_list:
+        sentence_texts = [s.get('de', '') for s in sentences_list if s.get('de')]
+        # Запускаємо як background task
+        asyncio.create_task(
+            _generate_audio_batch_background(
+                user_id=current_user.id,
+                sentences=sentence_texts,
+                lang='de',
+                db=db
+            )
+        )
+    
     return {"id": tid, "credits": new_bal}
+
+async def _generate_audio_batch_background(user_id: str, sentences: list, lang: str, db: AsyncSession):
+    """Фонова функція для генерації аудіо після створення тексту"""
+    try:
+        from .tts import generate_audio_batch_endpoint
+        from ..schemas import TTSBatchRequest
+        
+        req = TTSBatchRequest(sentences=sentences, lang=lang)
+        
+        # Імітуємо виклик endpoint'а в фоні
+        from fastapi.requests import Request
+        # Просто викликаємо логіку батч генерації
+        completed = 0
+        for idx, sentence_text in enumerate(sentences):
+            if not sentence_text or not sentence_text.strip():
+                continue
+            
+            audio_url = None
+            retry_count = 0
+            max_retries = 2
+            
+            while retry_count <= max_retries and not audio_url:
+                try:
+                    from ..utils_tts import get_cached_or_generate_tts
+                    audio_url = await get_cached_or_generate_tts(
+                        sentence_text,
+                        lang,
+                        user_id,
+                        db
+                    )
+                except Exception as e:
+                    print(f"⚠️ Error generating audio for sentence {idx} (attempt {retry_count + 1}): {e}")
+                    retry_count += 1
+                    if retry_count > max_retries:
+                        break
+                    await asyncio.sleep(0.5)
+            
+            if audio_url:
+                completed += 1
+        
+        print(f"✅ Background audio generation completed: {completed}/{len(sentences)} sentences")
+    except Exception as e:
+        print(f"❌ Error in background audio generation: {e}")
+        import traceback
+        traceback.print_exc()
 
 @router.get("/library", response_model=dict)
 async def get_library(

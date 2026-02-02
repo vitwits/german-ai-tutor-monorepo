@@ -1,5 +1,6 @@
 import os
 import hashlib
+import asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 from . import services, billing
 from .models import TTSLog
@@ -8,6 +9,9 @@ from .models import TTSLog
 # Структура: monorepo/backend/app/utils_tts.py -> monorepo/backend/static/audio/cache
 STATIC_AUDIO_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../static/audio"))
 CACHE_DIR = os.path.join(STATIC_AUDIO_DIR, "cache")
+
+# Глобальні lock'и для попередження дублювання генерацій
+_tts_generation_locks: dict[str, asyncio.Lock] = {}
 
 def delete_sentence_audio_cache(text: str, lang: str = 'de') -> bool:
     """
@@ -52,6 +56,8 @@ async def get_cached_or_generate_tts(
     """
     Повертає URL аудіофайлу. Якщо файлу немає - генерує його, зберігає і списує кредити.
     Використовує логіку хешування та шардінгу (перші 2 символи хешу) як у старому проекті.
+    
+    Має вбудовану синхронізацію (lock) щоб уникнути дублювання генерацій при паралельних запитах.
     """
     if not text: return None
     
@@ -69,6 +75,9 @@ async def get_cached_or_generate_tts(
     web_path = f"/static/audio/cache/{lang}/{shard}/{filename}"
     
     char_count = len(text)
+    
+    # Cache key для lock'а (lang + hash)
+    cache_key = f"{lang}:{file_hash}"
 
     # 2. Перевірка наявності файлу (використовуємо старий кеш)
     if os.path.exists(filepath):
@@ -82,39 +91,54 @@ async def get_cached_or_generate_tts(
         return None
 
     # 3. Генерація (якщо файлу немає)
-    # Використовуємо оригінальний текст для TTS (щоб зберегти регістр та інтонацію)
-    # Визначаємо job_name для отримання правильного голосу з БД
-    job_name_map = {'de': 'vocabulary_tts_de', 'uk': 'vocabulary_tts_ua', 'en': 'vocabulary_tts_en'}
-    job_name = job_name_map.get(lang, 'generate_text_audio')
+    # Створюємо або беремо існуючий lock для цього файлу
+    if cache_key not in _tts_generation_locks:
+        _tts_generation_locks[cache_key] = asyncio.Lock()
     
-    audio_content = await services.get_tts_audio(text, lang, db=db, job_name=job_name)
+    lock = _tts_generation_locks[cache_key]
     
-    if audio_content:
-        # Billing: Списуємо кредити тільки за генерацію
-        provider = 'google'
-        cost = billing.calculate_tts_cost(text, provider)
-        await billing.deduct_credits(user_id, cost)
+    async with lock:
+        # Перевіряємо знову (можливо інший запит уже згенерував поки ми чекали)
+        if os.path.exists(filepath):
+            if log_stats:
+                db.add(TTSLog(language=lang, chars=char_count, source='cache'))
+                await db.commit()
+            return web_path
         
-        # Cost Calculation: Record TTS generation cost (тільки при генерації, не з кешу!)
-        from . import cost_calculation
-        await cost_calculation.record_tts_text_generation_cost(
-            user_id=user_id,
-            text=text,
-            lang=lang,
-            job_name=job_name,
-            db=db
-        )
+        # Тепер генеруємо (тільки один запит одночасно)
+        # Використовуємо оригінальний текст для TTS (щоб зберегти регістр та інтонацію)
+        # Визначаємо job_name для отримання правильного голосу з БД
+        job_name_map = {'de': 'vocabulary_tts_de', 'uk': 'vocabulary_tts_ua', 'en': 'vocabulary_tts_en'}
+        job_name = job_name_map.get(lang, 'generate_text_audio')
         
-        # Збереження файлу (створюємо папку шарду, якщо її немає)
-        os.makedirs(target_dir, exist_ok=True)
-        with open(filepath, "wb") as out:
-            out.write(audio_content)
+        audio_content = await services.get_tts_audio(text, lang, db=db, job_name=job_name)
+        
+        if audio_content:
+            # Billing: Списуємо кредити тільки за генерацію
+            provider = 'google'
+            cost = billing.calculate_tts_cost(text, provider)
+            await billing.deduct_credits(user_id, cost)
             
-        if log_stats:
-            db.add(TTSLog(language=lang, chars=char_count, source='api'))
-            await db.commit()
+            # Cost Calculation: Record TTS generation cost (тільки при генерації, не з кешу!)
+            from . import cost_calculation
+            await cost_calculation.record_tts_text_generation_cost(
+                user_id=user_id,
+                text=text,
+                lang=lang,
+                job_name=job_name,
+                db=db
+            )
             
-        return web_path
-    
-    print(f"ERROR: Failed to generate TTS audio for '{text}' in {lang}")
-    return None
+            # Збереження файлу (створюємо папку шарду, якщо її немає)
+            os.makedirs(target_dir, exist_ok=True)
+            with open(filepath, "wb") as out:
+                out.write(audio_content)
+                
+            if log_stats:
+                db.add(TTSLog(language=lang, chars=char_count, source='api'))
+                await db.commit()
+                
+            return web_path
+        
+        print(f"ERROR: Failed to generate TTS audio for '{text}' in {lang}")
+        return None
