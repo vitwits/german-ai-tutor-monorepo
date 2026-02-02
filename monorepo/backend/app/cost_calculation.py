@@ -100,6 +100,7 @@ def repair_json_response(json_text: str) -> str:
     Repair common JSON syntax errors from Gemini API responses.
     
     Fixes:
+    - Duplicate closing sequences and garbage at the end
     - Duplicate keys: "key":"value":"value" -> "key":"value"
     - Trailing commas before closing brackets
     - Multiple colons in succession
@@ -112,12 +113,29 @@ def repair_json_response(json_text: str) -> str:
     """
     import re
     
+    # AGGRESSIVE FIX: Find the FIRST valid }]} and remove everything after it
+    # This handles cases where Gemini repeats garbage like:
+    # }]}
+    # index":1}]}
+    # correct_index":1}]}
+    # index":1}]}
+    first_closing = json_text.rfind('"]}')  # Find last occurrence of "}]
+    if first_closing > 0:
+        # Find the actual first complete }]} (after the quiz closing)
+        # Look for pattern: }]} that closes the main array
+        pattern = r'(\}]\})'
+        matches = list(re.finditer(pattern, json_text))
+        if matches:
+            # Keep only up to the first }]}
+            first_match_end = matches[0].end()
+            json_text = json_text[:first_match_end]
+    
     # Fix: "key":"value":"value" -> "key":"value"
-    # Pattern: "...":"...":" followed by more content
     json_text = re.sub(r'(":?")([^}{\[\]]*?)(":[\d]+")', r'\1\3', json_text)
     
-    # Fix: "correct_index":2":2" -> "correct_index":2
-    json_text = re.sub(r'("correct_index":(\d+))":(\d+)"', r'\1', json_text)
+    # Fix: "correct_index":2":2" or "correct_index":1":2 -> "correct_index":1
+    # Pattern matches: "correct_index":<digit>":(<digit>) and keeps only first digit
+    json_text = re.sub(r'"correct_index":(\d+)":\d+', r'"correct_index":\1', json_text)
     
     # Fix: trailing commas before ] or }
     json_text = re.sub(r',(\s*[}\]])', r'\1', json_text)
