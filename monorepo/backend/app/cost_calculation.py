@@ -336,3 +336,109 @@ async def record_text_generation_cost(
         import traceback
         traceback.print_exc()
         return 0.0
+
+
+async def record_tts_text_generation_cost(
+    user_id: str,
+    text: str,
+    lang: str,
+    job_name: str = "generate_text_audio",
+    db=None
+) -> float:
+    """
+    Record cost for TTS audio generation and update user's tts_cost.
+    
+    Args:
+        user_id: User ID to charge
+        text: Text to be converted to speech
+        lang: Language code ('de', 'en', 'uk')
+        job_name: Job name for AI preference lookup (default: 'generate_text_audio')
+        db: AsyncSession for database operations
+        
+    Returns:
+        Total cost calculated for TTS generation
+    """
+    if not db or not text:
+        return 0.0
+    
+    try:
+        # DEBUG: Print received parameters
+        print(f"\n🔍 DEBUG record_tts_text_generation_cost:")
+        print(f"   user_id: {user_id}")
+        print(f"   lang: {lang}")
+        print(f"   job_name: {job_name}")
+        print(f"   text length: {len(text)} chars")
+        print(f"   📝 FULL TEXT:\n{text}\n")
+        
+        # Step 1: Get TTS voice from AI preferences
+        from sqlalchemy import select
+        from .models import AIPreference, TTSVoice, TTSModel, User
+        
+        # Find TTS voice for this job and language
+        voice_result = await db.execute(
+            select(TTSVoice).join(
+                AIPreference, AIPreference.tts_voice_id == TTSVoice.id
+            ).where(
+                AIPreference.job == job_name,
+                TTSVoice.lang == lang.upper(),
+                TTSVoice.is_active == True
+            )
+        )
+        voice = voice_result.scalar_one_or_none()
+        
+        if not voice:
+            print(f"⚠️ TTS voice not found for job={job_name}, lang={lang}")
+            return 0.0
+        
+        print(f"🔍 DEBUG TTS voice found:")
+        print(f"   voice_name: {voice.voice_name}")
+        print(f"   tts_model_id: {voice.tts_model_id}")
+        
+        # Step 2: Get TTS model pricing
+        model_result = await db.execute(
+            select(TTSModel).where(TTSModel.id == voice.tts_model_id)
+        )
+        model = model_result.scalar_one_or_none()
+        
+        if not model:
+            print(f"⚠️ TTS model not found for voice: {voice.voice_name}")
+            return 0.0
+        
+        print(f"🔍 DEBUG TTS model found:")
+        print(f"   human_name: {model.human_name}")
+        print(f"   provider: {model.provider}")
+        print(f"   price_per_1m_chars: ${model.price_per_unit}")
+        
+        # Step 3: Calculate cost based on input characters
+        # TTS is charged per character (input only)
+        # price_per_unit is price per 1M characters, convert to price per character
+        char_count = len(text)
+        price_per_char = model.price_per_unit / 1_000_000
+        
+        # Calculate cost: characters × price_per_character
+        total_cost = char_count * price_per_char
+        
+        print(f"🔍 DEBUG TTS cost calculation:")
+        print(f"   char_count: {char_count}")
+        print(f"   price_per_char: ${price_per_char:.9f}")
+        print(f"   total_cost: ${total_cost:.6f}\n")
+        
+        # Step 4: Update user's tts_cost
+        user_result = await db.execute(select(User).where(User.id == user_id))
+        user = user_result.scalar_one_or_none()
+        
+        if user:
+            user.tts_cost = (user.tts_cost or 0.0) + total_cost
+            user.total_cost = (user.total_cost or 0.0) + total_cost
+            await db.commit()
+            
+            print(f"✅ TTS generation cost recorded: ${total_cost:.6f} for user {user_id}")
+            return total_cost
+        
+        return 0.0
+        
+    except Exception as e:
+        print(f"❌ Error recording TTS generation cost: {e}")
+        import traceback
+        traceback.print_exc()
+        return 0.0

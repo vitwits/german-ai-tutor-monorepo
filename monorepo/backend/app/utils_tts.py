@@ -95,6 +95,16 @@ async def get_cached_or_generate_tts(
         cost = billing.calculate_tts_cost(text, provider)
         await billing.deduct_credits(user_id, cost)
         
+        # Cost Calculation: Record TTS generation cost (тільки при генерації, не з кешу!)
+        from . import cost_calculation
+        await cost_calculation.record_tts_text_generation_cost(
+            user_id=user_id,
+            text=text,
+            lang=lang,
+            job_name=job_name,
+            db=db
+        )
+        
         # Збереження файлу (створюємо папку шарду, якщо її немає)
         os.makedirs(target_dir, exist_ok=True)
         with open(filepath, "wb") as out:
