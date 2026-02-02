@@ -392,38 +392,6 @@
         activeTranslationText = "";
     }
   }
-
-  // --- GRAMMAR ---
-
-  async function explainGrammar(idx) {
-      const s = sentences[idx];
-      if (s.grammar_explanation) {
-          s.grammar_explanation = null; // Toggle off
-          sentences = [...sentences];
-          return;
-      }
-
-      // Loading state
-      s.grammar_loading = true;
-      sentences = [...sentences];
-
-      try {
-          const res = await api.post('/explain_grammar', {
-              sentence: s.de,
-              text_id: id,
-              sentence_index: idx
-          });
-          
-          // Format HTML
-          let formatted = res.data.explanation.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
-          s.grammar_explanation = formatted;
-      } catch (e) {
-          addToast("Failed to explain grammar", "error");
-      } finally {
-          s.grammar_loading = false;
-          sentences = [...sentences];
-      }
-  }
   
   function scrollToWord(wid) {
       const el = document.querySelector(`.learned[data-wid="${wid}"]`);
@@ -739,17 +707,10 @@
                             </button>
                             <span class="de-text">{@html s.de_html}</span>
                         </div>
-            <button class="btn-text" onclick={() => explainGrammar(i)} title={ui.grammar_tooltip} style="color: var(--primary); opacity: {s.has_grammar ? 1 : 0.5};">
-                            <span class="material-symbols-outlined">{s.grammar_loading ? 'sync' : 'quiz'}</span>
-                        </button>
                     </div>
                     
                     {#if showTrans}
                         <div class="trans-row">{s.display_trans}</div>
-                    {/if}
-                    
-                    {#if s.grammar_explanation}
-                        <div class="grammar-box">{@html s.grammar_explanation}</div>
                     {/if}
                 </div>
             {/each}

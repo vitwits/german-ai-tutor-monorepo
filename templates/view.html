@@ -276,12 +276,8 @@
                 </button>
                 <span class="de-text" style="font-size:1.1rem; font-weight:400; line-height:1.6;">{{ s.de_html | safe }}</span>
             </div>
-            <button class="btn-text" onclick="explainGrammar(this, '{{text.id}}', {{loop.index0}})" title="{{ ui.grammar_tooltip }}" style="color: var(--primary); opacity: {{ '1' if s.has_grammar else '0.5' }};">
-                <span class="material-symbols-outlined">quiz</span>
-            </button>
         </div>
         <div class="trans-row" style="color:var(--primary); padding-left:44px; font-size:1rem; display:none; margin-top:4px;">{{ s.trans }}</div>
-        <div class="grammar-box" style="margin-left: 44px;"></div>
     </div>
     {% endfor %}
 </div>
@@ -1101,51 +1097,7 @@ async function rmWord(id) {
 }
 
 // 7. ПОЯСНЕННЯ ГРАМАТИКИ
-async function explainGrammar(btn, textId, sentIdx) {
-    // Знаходимо контейнер для пояснення (він знаходиться в тому ж батьківському елементі .de-line)
-    const lineDiv = btn.closest('.de-line');
-    // Беремо текст речення з атрибуту data-text, щоб уникнути проблем з лапками
-    const sentence = lineDiv.getAttribute('data-text');
-    const box = lineDiv.querySelector('.grammar-box');
-    
-    // Якщо вже відкрито - закриваємо
-    if (box.style.display === 'block') {
-        box.style.display = 'none';
-        return;
-    }
-    
-    // Якщо контенту ще немає - завантажуємо
-    if (!box.innerHTML) {
-        const originalIcon = btn.innerHTML;
-        btn.innerHTML = '<span class="material-symbols-outlined" style="animation: spin 1s linear infinite;">sync</span>';
-        btn.disabled = true;
-        
-        try {
-            const res = await fetch('/api/explain_grammar', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    sentence: sentence,
-                    text_id: textId,
-                    sentence_index: sentIdx
-                })
-            });
-            const data = await res.json();
-            // Простий конвертер Markdown bold -> HTML bold
-            let formatted = data.explanation.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
-            formatted = formatted.replace(/\n/g, '<br>');
-            box.innerHTML = formatted;
-            btn.style.opacity = '1';
-        } catch (e) {
-            box.innerHTML = "{{ ui.grammar_explanation_error }}";
-        }
-        
-        btn.innerHTML = originalIcon;
-        btn.disabled = false;
-    }
-    
-    box.style.display = 'block';
-}
+
 
 var hideTimeout;
 if (window.handleViewClick) document.removeEventListener('click', window.handleViewClick);

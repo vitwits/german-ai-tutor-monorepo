@@ -121,11 +121,6 @@ class ToggleSentenceFavRequest(BaseModel):
 class RemoveFavSentenceRequest(BaseModel):
     id: int
 
-class GrammarExplainRequest(BaseModel):
-    sentence: str
-    text_id: Optional[str] = None
-    sentence_index: Optional[int] = None
-
 class QuizResultRequest(BaseModel):
     text_id: str
     score: int

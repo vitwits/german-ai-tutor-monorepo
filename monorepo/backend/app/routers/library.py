@@ -6,8 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from ..database import get_db
-from ..models import User, Text, Vocabulary, GrammarExplanation, QuizResult
-from ..schemas import TextGenerateRequest, TextReadSchema, ToggleFavRequest, GrammarExplainRequest, QuizResultRequest, VocabWordSchema
+from ..models import User, Text, Vocabulary, QuizResult
+from ..schemas import TextGenerateRequest, TextReadSchema, ToggleFavRequest, QuizResultRequest, VocabWordSchema
 from ..dependencies import get_current_user
 from .. import services, billing, cost_calculation
 from ..utils_tts import delete_sentence_audio_cache
@@ -159,22 +159,7 @@ async def delete_text(
     for result in quiz_results:
         await db.delete(result)
     
-    # 3. Видаляємо пояснення граматики для цього тексту
-    await db.execute(
-        select(GrammarExplanation).where(
-            GrammarExplanation.text_id == text_id
-        )
-    )
-    grammar_exps = (await db.execute(
-        select(GrammarExplanation).where(
-            GrammarExplanation.text_id == text_id
-        )
-    )).scalars().all()
-    
-    for exp in grammar_exps:
-        await db.delete(exp)
-    
-    # 4. Видаляємо слова що привязані ТІЛЬКИ до цього тексту (is_favorite=0)
+    # 3. Видаляємо слова що привязані ТІЛЬКИ до цього тексту (is_favorite=0)
     # Слова з is_favorite=1 залишаються, але text_id стає NULL
     vocab_items = (await db.execute(
         select(Vocabulary).where(
@@ -189,7 +174,7 @@ async def delete_text(
         else:
             vocab.text_id = None  # Зберігаємо улюблене слово, але без прив'язки до тексту
     
-    # 5. Видаляємо сам текст
+    # 4. Видаляємо сам текст
     await db.delete(text)
     await db.commit()
     return {"ok": True}
@@ -206,67 +191,6 @@ async def toggle_text_fav(
         await db.commit()
     return {"ok": True}
 
-@router.post("/explain_grammar")
-async def explain_grammar(
-    req: GrammarExplainRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    # Check cache
-    if req.text_id and req.sentence_index is not None:
-        res = await db.execute(select(GrammarExplanation).where(
-            GrammarExplanation.text_id == req.text_id,
-            GrammarExplanation.sentence_index == req.sentence_index,
-            GrammarExplanation.language == current_user.interface_language
-        ))
-        cached = res.scalar_one_or_none()
-        if cached: return {"explanation": cached.explanation}
-
-    # Generate
-    # Fetch text level
-    text_level = "B1" # Default
-    if req.text_id:
-        res = await db.execute(select(Text.level).where(Text.id == req.text_id))
-        text_level = res.scalar_one_or_none() or "B1"
-
-    lang = current_user.interface_language
-    target_lang_name = "Ukrainian" if lang == 'ukr' else "English"
-    output_lang = "uk" if lang == 'ukr' else "en"
-
-    # Завантажуємо промпт з БД
-    from ..models import ModelPrompt
-    result_prompt = await db.execute(select(ModelPrompt.prompt).where(
-        ModelPrompt.name == "grammar_explanation_prompt"
-    ))
-    prompt_template = result_prompt.scalar_one_or_none() or ""
-    
-    # Замінюємо placeholders
-    prompt = (prompt_template
-        .replace("{target_lang_name}", target_lang_name)
-        .replace("{text_level}", text_level)
-        .replace("{sentence}", req.sentence)
-    )
-
-    explanation = await services.explain_grammar_text(
-        prompt,
-        db=db,
-        user_id=current_user.id,
-        output_lang=output_lang
-    )
-    
-    # Save
-    if explanation and req.text_id:
-        db.add(GrammarExplanation(
-            text_id=req.text_id, 
-            sentence_index=req.sentence_index,
-            language=current_user.interface_language,
-            explanation=explanation
-        ))
-        await billing.deduct_credits(current_user.id, billing.PRICING['grammar_explanation'])
-        await db.commit()
-        
-    return {"explanation": explanation}
-
 @router.get("/texts/{text_id}")
 async def get_text(text_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     # Use select instead of get for better reliability with aiosqlite
@@ -282,13 +206,6 @@ async def get_text(text_id: str, db: AsyncSession = Depends(get_db), current_use
     
     text_model = TextReadSchema.model_validate(text)
     vocab_models = [VocabWordSchema.model_validate(v) for v in vocab]
-    
-    # Fetch grammar availability
-    g_res = await db.execute(select(GrammarExplanation.sentence_index).where(
-        GrammarExplanation.text_id == text_id,
-        GrammarExplanation.language == current_user.interface_language
-    ))
-    grammar_indices = g_res.scalars().all()
 
     # Fetch last quiz result
     q_res = await db.execute(select(QuizResult).where(
@@ -301,7 +218,7 @@ async def get_text(text_id: str, db: AsyncSession = Depends(get_db), current_use
     if last_result:
         last_result_data = {"score": last_result.score, "total_questions": last_result.total_questions}
     
-    return {"text": text_model, "vocab": vocab_models, "last_quiz_result": last_result_data, "grammar_indices": grammar_indices}
+    return {"text": text_model, "vocab": vocab_models, "last_quiz_result": last_result_data}
 
 @router.post("/save_quiz_result")
 async def save_quiz_result(

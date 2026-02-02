@@ -68,14 +68,6 @@ class Vocabulary(Base):
     # Study tracking
     study_view_count: Mapped[int] = mapped_column(Integer, default=0)
 
-class GrammarExplanation(Base):
-    __tablename__ = "grammar_explanations"
-    
-    text_id: Mapped[str] = mapped_column(String, primary_key=True)
-    sentence_index: Mapped[int] = mapped_column(Integer, primary_key=True)
-    language: Mapped[str] = mapped_column(String, primary_key=True)
-    explanation: Mapped[Optional[str]] = mapped_column(DBText)
-
 class Sentence(Base):
     __tablename__ = "sentences"
     

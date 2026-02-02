@@ -2396,7 +2396,7 @@ async def llm_models_page(
     for model in models:
         status = "✅ Active" if model.is_active else "⏸️ Inactive"
         rows_html += f"""
-        <tr>
+        <tr data-model-id="{model.id}" data-model-name="{model.human_name}">
             <td>{model.human_name}</td>
             <td><code>{model.model_id}</code></td>
             <td>{model.provider}</td>
@@ -2600,7 +2600,17 @@ async def llm_models_page(
             }}
             
             async function deleteLLMModel(id) {{
-                if (confirm('Delete this LLM model?')) {{
+                const modelRow = document.querySelector(`[data-model-id="${{id}}"]`);
+                const modelName = modelRow ? modelRow.getAttribute('data-model-name') : 'Unknown';
+                
+                const confirmName = prompt(`⚠️ ВАЖЛИВО!\\n\\nВведіть точну назву моделі щоб підтвердити видалення:\\n\\n"${{modelName}}"`);
+                
+                if (confirmName !== modelName) {{
+                    alert('❌ Назва не збігається. Видалення скасовано.');
+                    return;
+                }}
+                
+                if (confirm(`Видалити модель "${{modelName}}"? Цю дію неможливо скасувати!`)) {{
                     try {{
                         const response = await fetch(`/admin/api/llm-models/${{id}}`, {{
                             method: 'DELETE'
@@ -2637,7 +2647,7 @@ async def tts_models_page(
         status = "✅ Active" if model.is_active else "⏸️ Inactive"
         price_display = f"{model.price_per_unit:g}"
         rows_html += f"""
-        <tr data-id="{model.id}" data-price="{model.price_per_unit}" data-active="{model.is_active}">
+        <tr data-id="{model.id}" data-tts-model-id="{model.id}" data-tts-model-name="{model.human_name}" data-price="{model.price_per_unit}" data-active="{model.is_active}">
             <td>{model.human_name}</td>
             <td>{model.family}</td>
             <td>{model.provider}</td>
@@ -2844,7 +2854,17 @@ async def tts_models_page(
             }}
             
             async function deleteTTSModel(id) {{
-                if (confirm('Delete this TTS model?')) {{
+                const modelRow = document.querySelector(`[data-tts-model-id="${{id}}"]`);
+                const modelName = modelRow ? modelRow.getAttribute('data-tts-model-name') : 'Unknown';
+                
+                const confirmName = prompt(`⚠️ ВАЖЛИВО!\\n\\nВведіть точну назву моделі щоб підтвердити видалення:\\n\\n"${{modelName}}"`);
+                
+                if (confirmName !== modelName) {{
+                    alert('❌ Назва не збігається. Видалення скасовано.');
+                    return;
+                }}
+                
+                if (confirm(`Видалити модель "${{modelName}}"? Цю дію неможливо скасувати!`)) {{
                     try {{
                         const response = await fetch(`/admin/api/tts-models/${{id}}`, {{
                             method: 'DELETE'
@@ -4217,7 +4237,7 @@ async def ai_preferences_page(
                         : (allLLMModels.find(m => m.id === pref.llm_model_id)?.human_name || 'N/A');
                     
                     html += `
-                        <tr>
+                        <tr data-preference-id="${{pref.id}}" data-preference-name="${{pref.job.replace(/"/g, '&quot;').replace(/&/g, '&amp;')}}">
                             <td>${{pref.job}}</td>
                             <td><strong>${{pref.model_type.toUpperCase()}}</strong></td>
                             <td>${{pref.lang || '-'}}</td>
@@ -4299,7 +4319,21 @@ async def ai_preferences_page(
             }}
             
             async function deletePreference(id, tab) {{
-                if (!confirm('Are you sure?')) return;
+                const prefRow = document.querySelector(`[data-preference-id="${{id}}"]`);
+                const prefNameEscaped = prefRow ? prefRow.getAttribute('data-preference-name') : 'Unknown';
+                // Декодуємо HTML entities
+                const prefName = prefNameEscaped
+                    .replace(/&quot;/g, '"')
+                    .replace(/&amp;/g, '&');
+                
+                const confirmName = prompt(`⚠️ ВАЖЛИВО!\\n\\nВведіть точну назву налаштування щоб підтвердити видалення:\\n\\n"${{prefName}}"`);
+                
+                if (confirmName !== prefName) {{
+                    alert('❌ Назва не збігається. Видалення скасовано.');
+                    return;
+                }}
+                
+                if (!confirm(`Видалити налаштування "${{prefName}}"? Цю дію неможливо скасувати!`)) return;
                 
                 try {{
                     const response = await fetch(`/admin/api/ai-preferences/${{id}}`, {{ method: 'DELETE' }});
@@ -4455,13 +4489,14 @@ async def ai_preferences_page(
                     let html = '<table><tr><th>Name</th><th>Preview</th><th>Actions</th></tr>';
                     for (const p of prompts) {{
                         const preview = p.prompt.substring(0, 100) + (p.prompt.length > 100 ? '...' : '');
+                        const escapedName = p.name.replace(/"/g, '&quot;').replace(/&/g, '&amp;');
                         html += `
-                            <tr>
+                            <tr data-prompt-id="${{p.id}}" data-prompt-name="${{escapedName}}">
                                 <td>${{p.name}}</td>
                                 <td><small style="color: #666;">${{preview}}</small></td>
                                 <td style="display: flex; gap: 5px;">
-                                    <button class="btn btn-warning" style="padding: 5px 10px; font-size: 0.85em;" onclick="editPromptName(${{p.id}}, '${{p.name}}')">✏️ Name</button>
-                                    <button class="btn btn-info" style="padding: 5px 10px; font-size: 0.85em;" onclick="openPromptEditor(${{p.id}}, '${{p.name}}')">📝 Prompt</button>
+                                    <button class="btn btn-warning" style="padding: 5px 10px; font-size: 0.85em;" onclick="editPromptName(${{p.id}}, '${{p.name.replace(/'/g, "\\'")}}')">✏️ Name</button>
+                                    <button class="btn btn-info" style="padding: 5px 10px; font-size: 0.85em;" onclick="openPromptEditor(${{p.id}}, '${{p.name.replace(/'/g, "\\'")}}')">📝 Prompt</button>
                                     <button class="btn btn-danger" style="padding: 5px 10px; font-size: 0.85em;" onclick="deletePrompt(${{p.id}}, '${{tab}}')">🗑️</button>
                                 </td>
                             </tr>
@@ -4476,7 +4511,21 @@ async def ai_preferences_page(
             }}
             
             async function deletePrompt(id, tab) {{
-                if (!confirm('Are you sure?')) return;
+                const promptRow = document.querySelector(`[data-prompt-id="${{id}}"]`);
+                const promptNameEscaped = promptRow ? promptRow.getAttribute('data-prompt-name') : 'Unknown';
+                // Декодуємо HTML entities
+                const promptName = promptNameEscaped
+                    .replace(/&quot;/g, '"')
+                    .replace(/&amp;/g, '&');
+                
+                const confirmName = prompt(`⚠️ ВАЖЛИВО!\\n\\nВведіть точну назву промпту щоб підтвердити видалення:\\n\\n"${{promptName}}"`);
+                
+                if (confirmName !== promptName) {{
+                    alert('❌ Назва не збігається. Видалення скасовано.');
+                    return;
+                }}
+                
+                if (!confirm(`Видалити промпт "${{promptName}}"? Цю дію неможливо скасувати!`)) return;
                 
                 try {{
                     const response = await fetch(`/admin/api/model-prompts/${{id}}`, {{
