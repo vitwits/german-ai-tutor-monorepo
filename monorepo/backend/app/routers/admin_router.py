@@ -2605,6 +2605,10 @@ async def llm_models_page(
                 
                 const confirmName = prompt(`⚠️ ВАЖЛИВО!\\n\\nВведіть точну назву моделі щоб підтвердити видалення:\\n\\n"${{modelName}}"`);
                 
+                if (confirmName === null) {{
+                    return;
+                }}
+                
                 if (confirmName !== modelName) {{
                     alert('❌ Назва не збігається. Видалення скасовано.');
                     return;
@@ -2858,6 +2862,10 @@ async def tts_models_page(
                 const modelName = modelRow ? modelRow.getAttribute('data-tts-model-name') : 'Unknown';
                 
                 const confirmName = prompt(`⚠️ ВАЖЛИВО!\\n\\nВведіть точну назву моделі щоб підтвердити видалення:\\n\\n"${{modelName}}"`);
+                
+                if (confirmName === null) {{
+                    return;
+                }}
                 
                 if (confirmName !== modelName) {{
                     alert('❌ Назва не збігається. Видалення скасовано.');
@@ -4328,6 +4336,10 @@ async def ai_preferences_page(
                 
                 const confirmName = prompt(`⚠️ ВАЖЛИВО!\\n\\nВведіть точну назву налаштування щоб підтвердити видалення:\\n\\n"${{prefName}}"`);
                 
+                if (confirmName === null) {{
+                    return;
+                }}
+                
                 if (confirmName !== prefName) {{
                     alert('❌ Назва не збігається. Видалення скасовано.');
                     return;
@@ -4519,6 +4531,10 @@ async def ai_preferences_page(
                     .replace(/&amp;/g, '&');
                 
                 const confirmName = prompt(`⚠️ ВАЖЛИВО!\\n\\nВведіть точну назву промпту щоб підтвердити видалення:\\n\\n"${{promptName}}"`);
+                
+                if (confirmName === null) {{
+                    return;
+                }}
                 
                 if (confirmName !== promptName) {{
                     alert('❌ Назва не збігається. Видалення скасовано.');

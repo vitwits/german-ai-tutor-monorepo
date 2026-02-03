@@ -3,37 +3,46 @@
   import api from "../lib/api";
   import { router } from "tinro";
   import { getUI } from "../lib/ui";
+  import ProgressSplash from "../components/ProgressSplash.svelte";
 
   let topic = "";
   let style = "neutral";
   let size = "M";
   let loading = false;
+  let showSplash = false;
+  let generatedTextId = null;
+  let apiArrived = false;
 
   $: ui = getUI($user?.interface_language || 'ukr');
 
-    async function handleSubmit() {
+  async function handleSubmit() {
     if (!$user) {
         router.goto('/login');
         return;
     }
     loading = true;
+    showSplash = true;
+    apiArrived = false;
+    generatedTextId = null;
+
     try {
       const res = await api.post("/generate", {
         topic,
-        level: $user.level, // Беремо рівень з профілю юзера
+        level: $user.level,
         style,
         size
       });
       
-      // ЯКЩО УСПІХ -> ЙДЕМО ЧИТАТИ
       if (res.data.id) {
-          router.goto(`/view/${res.data.id}`); 
+        generatedTextId = res.data.id;
+        apiArrived = true;
+        // Splash екран자동으로перенаправить на /view/{id}
       }
     } catch (e) {
       console.error(e);
-      alert("Error generating text: " + (e.response?.data?.detail || e.message));
-    } finally {
+      showSplash = false;
       loading = false;
+      alert("Error generating text: " + (e.response?.data?.detail || e.message));
     }
   }
 
@@ -48,13 +57,13 @@
     <div class="form-group">
         <label class="form-label" for="topic">{ui.topic}</label>
         <!-- svelte-ignore a11y-autofocus -->
-        <input type="text" id="topic" bind:value={topic} class="form-control control-height" placeholder={ui.topic_placeholder} required autofocus>
+        <input type="text" id="topic" bind:value={topic} class="form-control control-height" placeholder={ui.topic_placeholder} required autofocus disabled={loading}>
     </div>
 
     <div class="controls-row">
         <div class="form-group" style="flex: 1;">
             <label class="form-label" for="style">{ui.style_label}</label>
-            <select id="style" bind:value={style} class="form-control control-height">
+            <select id="style" bind:value={style} class="form-control control-height" disabled={loading}>
                 <option value="neutral">{ui.style_neutral}</option>
                 <option value="formal">{ui.style_formal}</option>
                 <option value="conversational">{ui.style_conversational}</option>
@@ -66,7 +75,7 @@
             <span class="form-label">{ui.count}</span>
             <div class="size-selector">
                 {#each ['S', 'M', 'L'] as s}
-                    <button type="button" class:active={size === s} onclick={() => size = s}>{s}</button>
+                    <button type="button" class:active={size === s} onclick={() => size = s} disabled={loading}>{s}</button>
                 {/each}
             </div>
         </div>
@@ -80,6 +89,14 @@
         {/if}
     </button>
 </form>
+
+<ProgressSplash 
+  isVisible={showSplash}
+  userLanguage={$user?.interface_language || 'ukr'}
+  apiArrived={apiArrived}
+  textId={generatedTextId}
+  userLevel={$user?.level || 'B1'}
+/>
 
 <style>
     .form-container { max-width: 500px; margin: 40px auto; padding: 40px; text-align: center; }
