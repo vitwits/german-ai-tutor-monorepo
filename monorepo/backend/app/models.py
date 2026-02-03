@@ -16,6 +16,11 @@ class User(Base):
     credits: Mapped[float] = mapped_column(Float, default=1000.0)
     is_admin: Mapped[int] = mapped_column(Integer, default=0)
     
+    # Cost tracking
+    llm_cost: Mapped[float] = mapped_column(Float, default=0.0)
+    tts_cost: Mapped[float] = mapped_column(Float, default=0.0)
+    total_cost: Mapped[float] = mapped_column(Float, default=0.0)
+    
     # Settings
     library_view_mode: Mapped[Optional[str]] = mapped_column(String, default='list')
     library_per_page: Mapped[Optional[int]] = mapped_column(Integer, default=20)
@@ -34,6 +39,38 @@ class Text(Base):
     content_json: Mapped[Optional[str]] = mapped_column(DBText)
     is_favorite: Mapped[int] = mapped_column(Integer, default=0)
     quiz_json: Mapped[Optional[str]] = mapped_column(DBText)
+
+class Lesson(Base):
+    __tablename__ = "lessons"
+    
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    title: Mapped[Optional[str]] = mapped_column(String)  # JSON: {"de": "...", "ua": "...", "en": "..."}
+    level: Mapped[Optional[str]] = mapped_column(String)  # A1, A2, B1, B2, C1, C2
+    content_json: Mapped[Optional[str]] = mapped_column(DBText)  # Sentences array
+    quiz_json: Mapped[Optional[str]] = mapped_column(DBText)  # Quiz questions
+    audio_status: Mapped[str] = mapped_column(String, default='pending')  # pending, generating, completed, partial_failed
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
+
+class UserLesson(Base):
+    __tablename__ = "user_lessons"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    lesson_id: Mapped[str] = mapped_column(ForeignKey("lessons.id"), nullable=False)
+    is_favorite: Mapped[int] = mapped_column(Integer, default=0)
+    added_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+
+class LessonAudio(Base):
+    __tablename__ = "lesson_audio"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    lesson_id: Mapped[str] = mapped_column(ForeignKey("lessons.id"), nullable=False)
+    sentence_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    lang: Mapped[str] = mapped_column(String, default='de')  # de, en, uk
+    audio_path: Mapped[Optional[str]] = mapped_column(String)  # Relative path: cache/de/ab/abc123.ogg
+    status: Mapped[str] = mapped_column(String, default='pending')  # pending, generated, failed
+    generated_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
 
 class Vocabulary(Base):
     __tablename__ = "vocabulary"
@@ -62,14 +99,6 @@ class Vocabulary(Base):
     
     # Study tracking
     study_view_count: Mapped[int] = mapped_column(Integer, default=0)
-
-class GrammarExplanation(Base):
-    __tablename__ = "grammar_explanations"
-    
-    text_id: Mapped[str] = mapped_column(String, primary_key=True)
-    sentence_index: Mapped[int] = mapped_column(Integer, primary_key=True)
-    language: Mapped[str] = mapped_column(String, primary_key=True)
-    explanation: Mapped[Optional[str]] = mapped_column(DBText)
 
 class Sentence(Base):
     __tablename__ = "sentences"
@@ -105,7 +134,8 @@ class QuizResult(Base):
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
-    text_id: Mapped[str] = mapped_column(ForeignKey("texts.id"), nullable=False)
+    text_id: Mapped[Optional[str]] = mapped_column(ForeignKey("texts.id"), nullable=True)  # Old user-specific texts
+    lesson_id: Mapped[Optional[str]] = mapped_column(ForeignKey("lessons.id"), nullable=True)  # New global lessons
     score: Mapped[Optional[int]] = mapped_column(Integer)
     total_questions: Mapped[Optional[int]] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
@@ -214,6 +244,7 @@ class AIPreference(Base):
     page: Mapped[str] = mapped_column(String, nullable=False)  # "texts" | "words" | "sentences" | "speaking"
     model_type: Mapped[str] = mapped_column(String, nullable=False)  # "tts" | "llm"
     lang: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # "DE" | "EN" | "UA" | NULL
+    gender: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # "male" | "female" | NULL (for TTS only)
     
     # Foreign Keys
     llm_model_id: Mapped[Optional[int]] = mapped_column(ForeignKey("llm_models.id"), nullable=True)
@@ -226,3 +257,15 @@ class AIPreference(Base):
     # Relationships (для зручного доступу)
     llm_model: Mapped[Optional["LLMModel"]] = relationship("LLMModel")
     tts_voice: Mapped[Optional["TTSVoice"]] = relationship("TTSVoice")
+
+
+class ModelPrompt(Base):
+    __tablename__ = "model_prompts"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)  # Custom name (e.g., "generate_texts_a1")
+    page: Mapped[str] = mapped_column(String, nullable=False)  # "texts" | "words" | "sentences" | "speaking"
+    prompt: Mapped[str] = mapped_column(DBText, nullable=False)  # Large text value with the prompt
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
+

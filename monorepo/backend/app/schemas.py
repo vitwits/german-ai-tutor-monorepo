@@ -112,6 +112,10 @@ class TTSPairRequest(BaseModel):
     de_text: str
     trans_text: str
 
+class TTSBatchRequest(BaseModel):
+    sentences: List[str]  # List of German sentences
+    lang: str = 'de'
+
 class ReportSentenceRequest(BaseModel):
     id: int
 
@@ -120,11 +124,6 @@ class ToggleSentenceFavRequest(BaseModel):
 
 class RemoveFavSentenceRequest(BaseModel):
     id: int
-
-class GrammarExplainRequest(BaseModel):
-    sentence: str
-    text_id: Optional[str] = None
-    sentence_index: Optional[int] = None
 
 class QuizResultRequest(BaseModel):
     text_id: str

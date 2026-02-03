@@ -10,14 +10,26 @@ import datetime
 import uuid
 from typing import Optional
 from datetime import timedelta
+from pydantic import BaseModel
 
 from ..database import get_db
-from ..models import User, Sentence, SentenceBatch, TempSentence, TTSLog, LLMModel, TTSModel, LLMPrice, TTSVoice, AIPreference
+from ..models import User, Sentence, SentenceBatch, TempSentence, TTSLog, LLMModel, TTSModel, LLMPrice, TTSVoice, AIPreference, ModelPrompt
 from ..dependencies import get_current_user
 from ..security import verify_password, create_access_token
 from sqlalchemy import delete
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+# Pydantic models for API requests
+class ModelPromptCreate(BaseModel):
+    name: str
+    page: str
+    prompt: str
+
+class ModelPromptUpdate(BaseModel):
+    name: Optional[str] = None
+    page: Optional[str] = None
+    prompt: Optional[str] = None
 
 # Dependency to check admin access - returns None if not authenticated
 async def get_admin_user(request: Request, db: AsyncSession = Depends(get_db)) -> Optional[User]:
@@ -881,9 +893,7 @@ async def reported_sentences(
                     <a href="/admin/sentence/{s.id}/edit" class="btn btn-primary action-btn" title="Edit">
                         <span class="material-symbols-outlined">edit</span>
                     </a>
-                    <form action="/admin/sentence/{s.id}/unreport" method="POST" style="display:inline;">
-                        <button type="submit" class="btn btn-warning action-btn" title="Un-report">✓</button>
-                    </form>
+                    <button type="button" class="btn btn-warning action-btn" title="Un-report" onclick="unreportSentence({s.id}, this)">✓</button>
                     <form action="/admin/sentence/{s.id}/delete" method="POST" style="display:inline;">
                         <button type="submit" class="btn btn-danger action-btn" title="Delete">
                             <span class="material-symbols-outlined">delete</span>
@@ -1059,6 +1069,24 @@ async def reported_sentences(
                 currentRow = null;
                 currentAudio = null;
                 stopPlayback = false;
+            }}
+            
+            async function unreportSentence(sentenceId, btn) {{
+                try {{
+                    const response = await fetch(`/admin/sentence/${{sentenceId}}/unreport`, {{
+                        method: 'POST',
+                        headers: {{'Content-Type': 'application/json'}}
+                    }});
+                    
+                    if (response.ok) {{
+                        const row = btn.closest('tr');
+                        row.remove();
+                    }} else {{
+                        alert('Error un-reporting sentence');
+                    }}
+                }} catch (error) {{
+                    alert('Error: ' + error.message);
+                }}
             }}
         </script>
     </body>
@@ -2368,7 +2396,7 @@ async def llm_models_page(
     for model in models:
         status = "✅ Active" if model.is_active else "⏸️ Inactive"
         rows_html += f"""
-        <tr>
+        <tr data-model-id="{model.id}" data-model-name="{model.human_name}">
             <td>{model.human_name}</td>
             <td><code>{model.model_id}</code></td>
             <td>{model.provider}</td>
@@ -2572,7 +2600,21 @@ async def llm_models_page(
             }}
             
             async function deleteLLMModel(id) {{
-                if (confirm('Delete this LLM model?')) {{
+                const modelRow = document.querySelector(`[data-model-id="${{id}}"]`);
+                const modelName = modelRow ? modelRow.getAttribute('data-model-name') : 'Unknown';
+                
+                const confirmName = prompt(`⚠️ ВАЖЛИВО!\\n\\nВведіть точну назву моделі щоб підтвердити видалення:\\n\\n"${{modelName}}"`);
+                
+                if (confirmName === null) {{
+                    return;
+                }}
+                
+                if (confirmName !== modelName) {{
+                    alert('❌ Назва не збігається. Видалення скасовано.');
+                    return;
+                }}
+                
+                if (confirm(`Видалити модель "${{modelName}}"? Цю дію неможливо скасувати!`)) {{
                     try {{
                         const response = await fetch(`/admin/api/llm-models/${{id}}`, {{
                             method: 'DELETE'
@@ -2609,7 +2651,7 @@ async def tts_models_page(
         status = "✅ Active" if model.is_active else "⏸️ Inactive"
         price_display = f"{model.price_per_unit:g}"
         rows_html += f"""
-        <tr data-id="{model.id}" data-price="{model.price_per_unit}" data-active="{model.is_active}">
+        <tr data-id="{model.id}" data-tts-model-id="{model.id}" data-tts-model-name="{model.human_name}" data-price="{model.price_per_unit}" data-active="{model.is_active}">
             <td>{model.human_name}</td>
             <td>{model.family}</td>
             <td>{model.provider}</td>
@@ -2816,7 +2858,21 @@ async def tts_models_page(
             }}
             
             async function deleteTTSModel(id) {{
-                if (confirm('Delete this TTS model?')) {{
+                const modelRow = document.querySelector(`[data-tts-model-id="${{id}}"]`);
+                const modelName = modelRow ? modelRow.getAttribute('data-tts-model-name') : 'Unknown';
+                
+                const confirmName = prompt(`⚠️ ВАЖЛИВО!\\n\\nВведіть точну назву моделі щоб підтвердити видалення:\\n\\n"${{modelName}}"`);
+                
+                if (confirmName === null) {{
+                    return;
+                }}
+                
+                if (confirmName !== modelName) {{
+                    alert('❌ Назва не збігається. Видалення скасовано.');
+                    return;
+                }}
+                
+                if (confirm(`Видалити модель "${{modelName}}"? Цю дію неможливо скасувати!`)) {{
                     try {{
                         const response = await fetch(`/admin/api/tts-models/${{id}}`, {{
                             method: 'DELETE'
@@ -3420,6 +3476,31 @@ async def get_llm_models(
     return [{"id": m.id, "human_name": m.human_name, "is_active": m.is_active} for m in models]
 
 
+@router.get("/api/ai-preferences/tts-voices-by-lang")
+async def get_tts_voices_by_lang(
+    lang: str = Query(...),
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get TTS voices filtered by language"""
+    result = await db.execute(
+        select(TTSVoice)
+        .where(TTSVoice.lang == lang, TTSVoice.is_active == True)
+        .order_by(TTSVoice.gender, TTSVoice.voice_name)
+    )
+    voices = result.scalars().all()
+    return [
+        {
+            "id": v.id,
+            "voice_name": v.voice_name,
+            "lang": v.lang,
+            "gender": v.gender,
+            "is_active": v.is_active
+        }
+        for v in voices
+    ]
+
+
 @router.get("/api/ai-preferences/tts-voices")
 async def get_tts_voices(
     current_user: User = Depends(check_admin_access),
@@ -3462,6 +3543,7 @@ async def get_ai_preferences(
             "page": p.page,
             "model_type": p.model_type,
             "lang": p.lang,
+            "gender": p.gender,
             "llm_model_id": p.llm_model_id,
             "tts_voice_id": p.tts_voice_id
         }
@@ -3486,6 +3568,7 @@ async def get_ai_preference(
         "page": pref.page,
         "model_type": pref.model_type,
         "lang": pref.lang,
+        "gender": pref.gender,
         "llm_model_id": pref.llm_model_id,
         "tts_voice_id": pref.tts_voice_id
     }
@@ -3524,6 +3607,7 @@ async def create_ai_preference(
             page=page,
             model_type=model_type,
             lang=data.get("lang"),
+            gender=data.get("gender"),
             llm_model_id=data.get("llm_model_id"),
             tts_voice_id=data.get("tts_voice_id")
         )
@@ -3563,6 +3647,7 @@ async def update_ai_preference(
                 return {"ok": False, "error": "tts_voice_id required for TTS"}
             if not data.get("lang"):
                 return {"ok": False, "error": "lang required for TTS"}
+            # Gender is optional but can be set for TTS
         elif model_type == "llm":
             if not data.get("llm_model_id"):
                 return {"ok": False, "error": "llm_model_id required for LLM"}
@@ -3573,6 +3658,7 @@ async def update_ai_preference(
         pref.page = page
         pref.model_type = model_type
         pref.lang = data.get("lang")
+        pref.gender = data.get("gender")  # Add gender support
         pref.llm_model_id = data.get("llm_model_id")
         pref.tts_voice_id = data.get("tts_voice_id")
         
@@ -3742,6 +3828,10 @@ async def ai_preferences_page(
                 <h2 style="margin-top: 30px; margin-bottom: 20px;">Models</h2>
                 <button class="btn btn-primary btn-add" onclick="openAddModal('texts')">+ Add Model</button>
                 <div id="texts-models-table" style="margin-top: 20px;"></div>
+                
+                <h2 style="margin-top: 50px; margin-bottom: 20px;">Prompts</h2>
+                <button class="btn btn-primary btn-add" onclick="openAddPromptModal('texts')">+ Add Prompt</button>
+                <div id="texts-prompts-table" style="margin-top: 20px;"></div>
             </div>
             
             <!-- WORDS TAB -->
@@ -3750,14 +3840,25 @@ async def ai_preferences_page(
                 <h2 style="margin-top: 30px; margin-bottom: 20px;">Models</h2>
                 <button class="btn btn-primary btn-add" onclick="openAddModal('words')">+ Add Model</button>
                 <div id="words-models-table" style="margin-top: 20px;"></div>
+                
+                <h2 style="margin-top: 50px; margin-bottom: 20px;">Prompts</h2>
+                <button class="btn btn-primary btn-add" onclick="openAddPromptModal('words')">+ Add Prompt</button>
+                <div id="words-prompts-table" style="margin-top: 20px;"></div>
             </div>
             
             <!-- SENTENCES TAB -->
             <div class="tab-content {('active' if tab == 'sentences' else '')}">
                 <p>{TABS['sentences']['description']}</p>
                 <h2 style="margin-top: 30px; margin-bottom: 20px;">Models</h2>
-                <button class="btn btn-primary btn-add" onclick="openAddModal('sentences')">+ Add Model</button>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <button class="btn btn-primary btn-add" onclick="openAddModal('sentences')">+ Add Model</button>
+                    <button class="btn btn-outline-secondary" style="width: 32px; height: 32px; padding: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: help;" onclick="showHelpModal('sentences')" title="How to add models?">?</button>
+                </div>
                 <div id="sentences-models-table" style="margin-top: 20px;"></div>
+                
+                <h2 style="margin-top: 50px; margin-bottom: 20px;">Prompts</h2>
+                <button class="btn btn-primary btn-add" onclick="openAddPromptModal('sentences')">+ Add Prompt</button>
+                <div id="sentences-prompts-table" style="margin-top: 20px;"></div>
             </div>
             
             <!-- SPEAKING TAB -->
@@ -3766,6 +3867,10 @@ async def ai_preferences_page(
                 <h2 style="margin-top: 30px; margin-bottom: 20px;">Models</h2>
                 <button class="btn btn-primary btn-add" onclick="openAddModal('speaking')">+ Add Model</button>
                 <div id="speaking-models-table" style="margin-top: 20px;"></div>
+                
+                <h2 style="margin-top: 50px; margin-bottom: 20px;">Prompts</h2>
+                <button class="btn btn-primary btn-add" onclick="openAddPromptModal('speaking')">+ Add Prompt</button>
+                <div id="speaking-prompts-table" style="margin-top: 20px;"></div>
             </div>
         </div>
         
@@ -3797,6 +3902,14 @@ async def ai_preferences_page(
                             <option value="UA">Ukrainian</option>
                         </select>
                     </div>
+                    <div class="form-group" id="genderGroup" style="display: none;">
+                        <label>Gender</label>
+                        <select id="gender" onchange="loadTTSVoices()">
+                            <option value="">Select gender</option>
+                            <option value="male">Male</option>
+                            <option value="female">Female</option>
+                        </select>
+                    </div>
                     <div class="form-group" id="ttsVoiceGroup" style="display: none;">
                         <label>TTS Voice</label>
                         <select id="ttsVoiceId"></select>
@@ -3813,11 +3926,70 @@ async def ai_preferences_page(
             </div>
         </div>
         
+        <!-- Prompts Modal -->
+        <div id="promptModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header" id="promptModalTitle">Add Model Prompt</div>
+                <form id="promptForm" onsubmit="submitPromptForm(event)">
+                    <div class="form-group">
+                        <label>Prompt Name</label>
+                        <input type="text" id="promptName" required placeholder="e.g., generate_texts_a1">
+                    </div>
+                    <!-- Hidden field for page -->
+                    <input type="hidden" id="promptPage">
+                    <div class="form-group">
+                        <label>Prompt Text</label>
+                        <textarea id="promptText" required placeholder="Enter the prompt..." style="width: 100%; height: 300px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 0.9em;"></textarea>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" onclick="closePromptModal()">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Fullscreen Prompt Editor Modal -->
+        <div id="editorModal" class="modal" style="z-index: 2000;">
+            <div class="modal-content" style="width: 95%; height: 95%; max-width: 100%; max-height: 100%; display: flex; flex-direction: column; padding: 0;">
+                <div style="padding: 20px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; background: #f8f9fa;">
+                    <div class="modal-header" id="editorModalTitle" style="margin: 0;">Edit Prompt</div>
+                    <button type="button" class="btn btn-secondary" onclick="closeEditorModal()" style="margin: 0;">✕ Close</button>
+                </div>
+                <div style="flex: 1; overflow: hidden; display: flex; flex-direction: column;">
+                    <textarea id="editorText" style="flex: 1; padding: 20px; border: none; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; font-size: 13px; line-height: 1.5; resize: none; background: #fafafa; color: #333;"></textarea>
+                </div>
+                <div style="padding: 20px; border-top: 1px solid #ddd; display: flex; justify-content: flex-end; gap: 10px; background: #f8f9fa;">
+                    <button type="button" class="btn btn-secondary" onclick="closeEditorModal()">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="savePromptEditor()">Save</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Name Edit Modal -->
+        <div id="nameEditModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">Edit Prompt Name</div>
+                <form id="nameEditForm" onsubmit="submitNameEdit(event)">
+                    <div class="form-group">
+                        <label>Prompt Name</label>
+                        <input type="text" id="nameEditInput" required placeholder="e.g., generate_texts_a1">
+                    </div>
+                    <input type="hidden" id="nameEditId">
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" onclick="closeNameEditModal()">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
         <script>
             let currentTab = null;
             let editingId = null;
             let allLLMModels = [];
             let allTTSVoices = [];
+            let currentlyEditingPromptId = null;
             
             // Load initial data
             async function initData() {{
@@ -3847,10 +4019,15 @@ async def ai_preferences_page(
             
             function loadTTSVoices() {{
                 const lang = document.getElementById('lang').value;
+                const gender = document.getElementById('gender').value;
                 const select = document.getElementById('ttsVoiceId');
                 select.innerHTML = '<option value="">Select voice</option>';
                 allTTSVoices.forEach(voice => {{
-                    if (voice.lang === lang && voice.is_active) {{
+                    // Filter by language and gender (gender is optional)
+                    const langMatch = voice.lang === lang;
+                    const genderMatch = !gender || voice.gender === gender;
+                    
+                    if (langMatch && genderMatch && voice.is_active) {{
                         select.innerHTML += `<option value="${{voice.id}}">${{voice.voice_name}}</option>`;
                     }}
                 }});
@@ -3859,20 +4036,24 @@ async def ai_preferences_page(
             function updateModelTypeFields() {{
                 const modelType = document.getElementById('modelType').value;
                 const langGroup = document.getElementById('langGroup');
+                const genderGroup = document.getElementById('genderGroup');
                 const ttsVoiceGroup = document.getElementById('ttsVoiceGroup');
                 const llmModelGroup = document.getElementById('llmModelGroup');
                 
                 if (modelType === 'tts') {{
                     langGroup.style.display = 'block';
+                    genderGroup.style.display = 'block';
                     ttsVoiceGroup.style.display = 'block';
                     llmModelGroup.style.display = 'none';
                 }} else if (modelType === 'llm') {{
                     langGroup.style.display = 'none';
+                    genderGroup.style.display = 'none';
                     ttsVoiceGroup.style.display = 'none';
                     llmModelGroup.style.display = 'block';
                     populateLLMDropdown();
                 }} else {{
                     langGroup.style.display = 'none';
+                    genderGroup.style.display = 'none';
                     ttsVoiceGroup.style.display = 'none';
                     llmModelGroup.style.display = 'none';
                 }}
@@ -3895,6 +4076,148 @@ async def ai_preferences_page(
                 currentTab = null;
             }}
             
+            function showHelpModal(page) {{
+                const helpContent = {{
+                    'texts': `
+                        <h4>🔧 How Models Are Used for Text Generation</h4>
+                        <p><strong>Job Name:</strong> <code>generate_texts</code></p>
+                        <p>When you click "Generate Text" in the app, the system:</p>
+                        <ol>
+                            <li>Looks up <strong>generate_texts</strong> job in AI Preferences</li>
+                            <li>Gets the LLM Model you configured (e.g., Gemini Flash 2.5)</li>
+                            <li>Uses that model to generate text</li>
+                        </ol>
+                        <p><strong>Configuration:</strong></p>
+                        <ul>
+                            <li><strong>Model Type:</strong> LLM (required)</li>
+                            <li><strong>Language:</strong> Not used (leave empty)</li>
+                            <li><strong>Gender:</strong> Not used (leave empty)</li>
+                        </ul>
+                        <p><strong>Naming:</strong> Job name must be exactly <code>generate_texts</code></p>
+                    `,
+                    'words': `
+                        <h4>🔧 How Models Are Used for Vocabulary</h4>
+                        <p><strong>Job Names:</strong> <code>translate_vocabulary</code>, <code>vocabulary_tts_de</code>, <code>vocabulary_tts_en</code>, <code>vocabulary_tts_ua</code></p>
+                        
+                        <p><strong>For Translation:</strong></p>
+                        <ol>
+                            <li>System looks for <code>translate_vocabulary</code> job</li>
+                            <li>Gets the LLM Model configured</li>
+                            <li>Uses it to translate word definitions</li>
+                        </ol>
+                        
+                        <p><strong>For Audio Generation:</strong></p>
+                        <ol>
+                            <li>System looks for <code>vocabulary_tts_de</code> (or en/ua)</li>
+                            <li>Gets the TTS Voice you configured for that language</li>
+                            <li>Uses it to generate audio for that word</li>
+                        </ol>
+                        
+                        <p><strong>Configuration:</strong></p>
+                        <ul>
+                            <li><strong>translate_vocabulary:</strong> Model Type=LLM, Language=empty, Gender=empty</li>
+                            <li><strong>vocabulary_tts_*:</strong> Model Type=TTS, Language=DE/EN/UA, Gender=empty (one voice per language)</li>
+                        </ul>
+                        
+                        <p><strong>Naming Rules:</strong></p>
+                        <ul>
+                            <li>Translation job: must be <code>translate_vocabulary</code></li>
+                            <li>Audio jobs: must be <code>vocabulary_tts_de</code>, <code>vocabulary_tts_en</code>, <code>vocabulary_tts_ua</code></li>
+                            <li>Each language gets ONE voice (not multiple like sentences)</li>
+                        </ul>
+                    `,
+                    'sentences': `
+                        <h4>🔧 How Models Are Used for Sentence Generation</h4>
+                        <p><strong>Job Names:</strong> <code>generate_sentences</code>, <code>sentences_tts_de_male</code>, <code>sentences_tts_de_female</code>, etc.</p>
+                        
+                        <p><strong>For Text Generation:</strong></p>
+                        <ol>
+                            <li>System looks for <code>generate_sentences</code> job</li>
+                            <li>Gets the LLM Model configured</li>
+                            <li>Uses it to generate sentence text</li>
+                        </ol>
+                        
+                        <p><strong>For Audio Generation:</strong></p>
+                        <ol>
+                            <li>System looks for ALL <code>sentences_tts_*</code> jobs for a language</li>
+                            <li>Finds both MALE and FEMALE voices (if configured)</li>
+                            <li>For each sentence, randomly picks one voice (50/50 male/female)</li>
+                            <li>Generates audio with that voice</li>
+                        </ol>
+                        <p>↳ This gives <strong>natural variation</strong> — no two sentences sound identical</p>
+                        
+                        <p><strong>Configuration Rules:</strong></p>
+                        <ul>
+                            <li><strong>Text generation:</strong> Model Type=LLM, Language=empty, Gender=empty</li>
+                            <li><strong>Audio (German):</strong> Model Type=TTS, Language=DE, Gender=male OR female (separate entries)</li>
+                            <li><strong>Audio (English):</strong> Model Type=TTS, Language=EN, Gender=male OR female (separate entries)</li>
+                            <li><strong>Audio (Ukrainian):</strong> Model Type=TTS, Language=UA, Gender=male OR female (separate entries)</li>
+                        </ul>
+                        
+                        <p><strong>Naming Rules:</strong></p>
+                        <ul>
+                            <li>Text generation job: must be <code>generate_sentences</code></li>
+                            <li>Audio jobs: format is <code>sentences_tts_{{lang}}_{{gender}}</code></li>
+                            <li>Examples: <code>sentences_tts_de_male</code>, <code>sentences_tts_en_female</code>, <code>sentences_tts_ua_male</code></li>
+                            <li><strong>Add BOTH male and female for each language</strong> to enable voice variation</li>
+                        </ul>
+                        
+                        <p><strong>Pro Tip:</strong> You can add more than 2 voices per language (e.g., male, female, another_male) and the system will randomly rotate through all of them.</p>
+                    `,
+                    'speaking': `
+                        <h4>🔧 How Models Are Used for Speaking Practice</h4>
+                        <p><strong>Job Names:</strong> <code>speaking_tts_de_male</code>, <code>speaking_tts_de_female</code>, etc.</p>
+                        
+                        <p><strong>For Audio Generation:</strong></p>
+                        <ol>
+                            <li>System looks for ALL <code>speaking_tts_*</code> jobs for a language</li>
+                            <li>Finds both MALE and FEMALE voices (if configured)</li>
+                            <li>For each speaking prompt, randomly picks one voice</li>
+                            <li>Generates audio with that voice</li>
+                        </ol>
+                        
+                        <p><strong>Configuration Rules:</strong></p>
+                        <ul>
+                            <li><strong>Audio (German):</strong> Model Type=TTS, Language=DE, Gender=male OR female (separate entries)</li>
+                            <li><strong>Audio (English):</strong> Model Type=TTS, Language=EN, Gender=male OR female (separate entries)</li>
+                            <li><strong>Audio (Ukrainian):</strong> Model Type=TTS, Language=UA, Gender=male OR female (separate entries)</li>
+                        </ul>
+                        
+                        <p><strong>Naming Rules:</strong></p>
+                        <ul>
+                            <li>Format: <code>speaking_tts_{{lang}}_{{gender}}</code></li>
+                            <li>Examples: <code>speaking_tts_de_male</code>, <code>speaking_tts_en_female</code>, <code>speaking_tts_ua_male</code></li>
+                            <li><strong>Add BOTH male and female for each language</strong> for voice variation</li>
+                        </ul>
+                        
+                        <p><strong>Note:</strong> Job names matter! System searches by exact job name to find models.</p>
+                    `
+                }};
+                
+                const content = helpContent[page] || '<p>Help not available</p>';
+                const modal = document.createElement('div');
+                modal.className = 'modal show';
+                modal.style.display = 'block';
+                modal.style.backgroundColor = 'rgba(0,0,0,0.5)';
+                modal.innerHTML = `
+                    <div class="modal-dialog modal-lg" style="margin: 50px auto;">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">⚙️ Model Logic & Naming</h5>
+                                <button type="button" class="close" onclick="this.closest('.modal').remove()" style="border: none; background: none; font-size: 1.5rem; cursor: pointer;">×</button>
+                            </div>
+                            <div class="modal-body" style="max-height: 600px; overflow-y: auto;">
+                                ${{content}}
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" onclick="this.closest('.modal').remove()">Close</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+            }}
+            
             async function loadAllPreferences() {{
                 const tabs = ['texts', 'words', 'sentences', 'speaking'];
                 for (const tab of tabs) {{
@@ -3915,17 +4238,18 @@ async def ai_preferences_page(
                     return;
                 }}
                 
-                let html = '<table><thead><tr><th>Job</th><th>Type</th><th>Language</th><th>Model</th><th>Actions</th></tr></thead><tbody>';
+                let html = '<table><thead><tr><th>Job</th><th>Type</th><th>Language</th><th>Gender</th><th>Model</th><th>Actions</th></tr></thead><tbody>';
                 prefs.forEach(pref => {{
                     const modelName = pref.model_type === 'tts' 
                         ? (allTTSVoices.find(v => v.id === pref.tts_voice_id)?.voice_name || 'N/A')
                         : (allLLMModels.find(m => m.id === pref.llm_model_id)?.human_name || 'N/A');
                     
                     html += `
-                        <tr>
+                        <tr data-preference-id="${{pref.id}}" data-preference-name="${{pref.job.replace(/"/g, '&quot;').replace(/&/g, '&amp;')}}">
                             <td>${{pref.job}}</td>
                             <td><strong>${{pref.model_type.toUpperCase()}}</strong></td>
                             <td>${{pref.lang || '-'}}</td>
+                            <td>${{pref.gender || '-'}}</td>
                             <td>${{modelName}}</td>
                             <td>
                                 <button class="btn btn-sm btn-warning" onclick="editPreference(${{pref.id}}, '${{tab}}')">Edit</button>
@@ -3949,6 +4273,7 @@ async def ai_preferences_page(
                 document.getElementById('page').value = pref.page;
                 document.getElementById('modelType').value = pref.model_type;
                 document.getElementById('lang').value = pref.lang || '';
+                document.getElementById('gender').value = pref.gender || '';
                 
                 updateModelTypeFields();
                 
@@ -3971,6 +4296,7 @@ async def ai_preferences_page(
                     page: document.getElementById('page').value,
                     model_type: document.getElementById('modelType').value,
                     lang: document.getElementById('lang').value || null,
+                    gender: document.getElementById('gender').value || null,
                     llm_model_id: document.getElementById('llmModelId').value ? parseInt(document.getElementById('llmModelId').value) : null,
                     tts_voice_id: document.getElementById('ttsVoiceId').value ? parseInt(document.getElementById('ttsVoiceId').value) : null
                 }};
@@ -4001,7 +4327,25 @@ async def ai_preferences_page(
             }}
             
             async function deletePreference(id, tab) {{
-                if (!confirm('Are you sure?')) return;
+                const prefRow = document.querySelector(`[data-preference-id="${{id}}"]`);
+                const prefNameEscaped = prefRow ? prefRow.getAttribute('data-preference-name') : 'Unknown';
+                // Декодуємо HTML entities
+                const prefName = prefNameEscaped
+                    .replace(/&quot;/g, '"')
+                    .replace(/&amp;/g, '&');
+                
+                const confirmName = prompt(`⚠️ ВАЖЛИВО!\\n\\nВведіть точну назву налаштування щоб підтвердити видалення:\\n\\n"${{prefName}}"`);
+                
+                if (confirmName === null) {{
+                    return;
+                }}
+                
+                if (confirmName !== prefName) {{
+                    alert('❌ Назва не збігається. Видалення скасовано.');
+                    return;
+                }}
+                
+                if (!confirm(`Видалити налаштування "${{prefName}}"? Цю дію неможливо скасувати!`)) return;
                 
                 try {{
                     const response = await fetch(`/admin/api/ai-preferences/${{id}}`, {{ method: 'DELETE' }});
@@ -4016,12 +4360,360 @@ async def ai_preferences_page(
                 }}
             }}
             
+            // Prompt Management Functions
+            async function openAddPromptModal(page) {{
+                currentTab = page;
+                document.getElementById('promptPage').value = page;
+                document.getElementById('promptName').value = '';
+                document.getElementById('promptText').value = '';
+                document.getElementById('promptModalTitle').textContent = 'Add Prompt for ' + page.toUpperCase();
+                document.getElementById('promptModal').classList.add('show');
+            }}
+            
+            function closePromptModal() {{
+                document.getElementById('promptModal').classList.remove('show');
+            }}
+            
+            // Prompt Editor Functions
+            async function openPromptEditor(promptId, promptName) {{
+                try {{
+                    const response = await fetch(`/admin/api/model-prompts/${{promptId}}`);
+                    const data = await response.json();
+                    
+                    currentlyEditingPromptId = promptId;
+                    document.getElementById('editorText').value = data.prompt;
+                    document.getElementById('editorModalTitle').textContent = `Edit Prompt: ${{promptName}}`;
+                    document.getElementById('editorModal').classList.add('show');
+                }} catch (err) {{
+                    alert('Error loading prompt: ' + err.message);
+                }}
+            }}
+            
+            function closeEditorModal() {{
+                document.getElementById('editorModal').classList.remove('show');
+                currentlyEditingPromptId = null;
+            }}
+            
+            async function savePromptEditor() {{
+                if (!currentlyEditingPromptId) return;
+                
+                const newPrompt = document.getElementById('editorText').value;
+                
+                try {{
+                    const response = await fetch(`/admin/api/model-prompts/${{currentlyEditingPromptId}}`, {{
+                        method: 'PUT',
+                        headers: {{'Content-Type': 'application/json'}},
+                        body: JSON.stringify({{ prompt: newPrompt }})
+                    }});
+                    
+                    const result = await response.json();
+                    if (result.ok) {{
+                        closeEditorModal();
+                        await loadPromptsForTab(currentTab);
+                        alert('Prompt saved successfully!');
+                    }} else {{
+                        alert('Error: ' + (result.error || 'Unknown error'));
+                    }}
+                }} catch (err) {{
+                    alert('Error: ' + err.message);
+                }}
+            }}
+            
+            // Name Edit Functions
+            async function editPromptName(promptId, promptName) {{
+                document.getElementById('nameEditId').value = promptId;
+                document.getElementById('nameEditInput').value = promptName;
+                document.getElementById('nameEditModal').classList.add('show');
+            }}
+            
+            function closeNameEditModal() {{
+                document.getElementById('nameEditModal').classList.remove('show');
+            }}
+            
+            async function submitNameEdit(event) {{
+                event.preventDefault();
+                const promptId = document.getElementById('nameEditId').value;
+                const newName = document.getElementById('nameEditInput').value;
+                
+                try {{
+                    const response = await fetch(`/admin/api/model-prompts/${{promptId}}`, {{
+                        method: 'PUT',
+                        headers: {{'Content-Type': 'application/json'}},
+                        body: JSON.stringify({{ name: newName }})
+                    }});
+                    
+                    const result = await response.json();
+                    if (result.ok) {{
+                        closeNameEditModal();
+                        await loadPromptsForTab(currentTab);
+                        alert('Name updated successfully!');
+                    }} else {{
+                        alert('Error: ' + (result.error || 'Unknown error'));
+                    }}
+                }} catch (err) {{
+                    alert('Error: ' + err.message);
+                }}
+            }}
+            
+            async function submitPromptForm(event) {{
+                event.preventDefault();
+                const name = document.getElementById('promptName').value;
+                const page = document.getElementById('promptPage').value;
+                const prompt = document.getElementById('promptText').value;
+                
+                try {{
+                    const response = await fetch('/admin/api/model-prompts', {{
+                        method: 'POST',
+                        headers: {{'Content-Type': 'application/json'}},
+                        body: JSON.stringify({{ name, page, prompt }})
+                    }});
+                    
+                    const result = await response.json();
+                    if (result.ok) {{
+                        closePromptModal();
+                        await loadPromptsForTab(currentTab);
+                    }} else {{
+                        alert('Error: ' + (result.error || 'Unknown error'));
+                    }}
+                }} catch (err) {{
+                    alert('Error: ' + err.message);
+                }}
+            }}
+            
+            async function loadPromptsForTab(tab) {{
+                try {{
+                    const tableDiv = document.getElementById(`${{tab}}-prompts-table`);
+                    
+                    // Skip if element doesn't exist (tab not yet loaded in DOM)
+                    if (!tableDiv) {{
+                        console.warn(`Element ${{tab}}-prompts-table not found, skipping load`);
+                        return;
+                    }}
+                    
+                    const response = await fetch(`/admin/api/model-prompts?page=${{tab}}`);
+                    const prompts = await response.json();
+                    
+                    if (!prompts || prompts.length === 0) {{
+                        tableDiv.innerHTML = '<p style="color: #999;">No prompts yet.</p>';
+                        return;
+                    }}
+                    
+                    let html = '<table><tr><th>Name</th><th>Preview</th><th>Actions</th></tr>';
+                    for (const p of prompts) {{
+                        const preview = p.prompt.substring(0, 100) + (p.prompt.length > 100 ? '...' : '');
+                        const escapedName = p.name.replace(/"/g, '&quot;').replace(/&/g, '&amp;');
+                        html += `
+                            <tr data-prompt-id="${{p.id}}" data-prompt-name="${{escapedName}}">
+                                <td>${{p.name}}</td>
+                                <td><small style="color: #666;">${{preview}}</small></td>
+                                <td style="display: flex; gap: 5px;">
+                                    <button class="btn btn-warning" style="padding: 5px 10px; font-size: 0.85em;" onclick="editPromptName(${{p.id}}, '${{p.name.replace(/'/g, "\\'")}}')">✏️ Name</button>
+                                    <button class="btn btn-info" style="padding: 5px 10px; font-size: 0.85em;" onclick="openPromptEditor(${{p.id}}, '${{p.name.replace(/'/g, "\\'")}}')">📝 Prompt</button>
+                                    <button class="btn btn-danger" style="padding: 5px 10px; font-size: 0.85em;" onclick="deletePrompt(${{p.id}}, '${{tab}}')">🗑️</button>
+                                </td>
+                            </tr>
+                        `;
+                    }}
+                    html += '</table>';
+                    tableDiv.innerHTML = html;
+                }} catch (err) {{
+                    console.error('Error loading prompts:', err);
+                    alert('Error loading prompts: ' + err.message);
+                }}
+            }}
+            
+            async function deletePrompt(id, tab) {{
+                const promptRow = document.querySelector(`[data-prompt-id="${{id}}"]`);
+                const promptNameEscaped = promptRow ? promptRow.getAttribute('data-prompt-name') : 'Unknown';
+                // Декодуємо HTML entities
+                const promptName = promptNameEscaped
+                    .replace(/&quot;/g, '"')
+                    .replace(/&amp;/g, '&');
+                
+                const confirmName = prompt(`⚠️ ВАЖЛИВО!\\n\\nВведіть точну назву промпту щоб підтвердити видалення:\\n\\n"${{promptName}}"`);
+                
+                if (confirmName === null) {{
+                    return;
+                }}
+                
+                if (confirmName !== promptName) {{
+                    alert('❌ Назва не збігається. Видалення скасовано.');
+                    return;
+                }}
+                
+                if (!confirm(`Видалити промпт "${{promptName}}"? Цю дію неможливо скасувати!`)) return;
+                
+                try {{
+                    const response = await fetch(`/admin/api/model-prompts/${{id}}`, {{
+                        method: 'DELETE'
+                    }});
+                    
+                    const result = await response.json();
+                    if (result.ok) {{
+                        await loadPromptsForTab(tab);
+                    }} else {{
+                        alert('Error: ' + (result.error || 'Unknown error'));
+                    }}
+                }} catch (err) {{
+                    alert('Error: ' + err.message);
+                }}
+            }}
+            
+            // Load prompts for all tabs on init
+            async function loadAllPrompts() {{
+                const pages = ['texts', 'words', 'sentences', 'speaking'];
+                for (const page of pages) {{
+                    const tableDiv = document.getElementById(`${{page}}-prompts-table`);
+                    if (tableDiv) {{
+                        // Only load prompts for visible tabs
+                        await loadPromptsForTab(page);
+                    }}
+                }}
+            }}
+            
             // Initialize on page load
-            document.addEventListener('DOMContentLoaded', initData);
+            document.addEventListener('DOMContentLoaded', () => {{
+                initData();
+                
+                // Load prompts for the currently active tab
+                const urlParams = new URLSearchParams(window.location.search);
+                const activeTab = urlParams.get('tab') || 'texts';
+                loadPromptsForTab(activeTab);
+            }});
         </script>
     </body>
     </html>
     """
     
     return html
+
+
+# ============================================================================
+# MODEL PROMPTS API ENDPOINTS
+# ============================================================================
+
+@router.post("/api/model-prompts")
+async def create_model_prompt(
+    data: ModelPromptCreate,
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a new model prompt"""
+    try:
+        new_prompt = ModelPrompt(
+            name=data.name,
+            page=data.page,
+            prompt=data.prompt
+        )
+        db.add(new_prompt)
+        await db.commit()
+        return {"ok": True}
+    except Exception as e:
+        await db.rollback()
+        return {"ok": False, "error": str(e)}
+
+
+@router.get("/api/model-prompts")
+async def get_model_prompts(
+    page: str = None,
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get model prompts, optionally filtered by page"""
+    try:
+        query = select(ModelPrompt)
+        if page:
+            query = query.where(ModelPrompt.page == page)
+        
+        result = await db.execute(query)
+        prompts = result.scalars().all()
+        
+        return [
+            {
+                "id": p.id,
+                "name": p.name,
+                "page": p.page,
+                "prompt": p.prompt,
+                "created_at": p.created_at.isoformat() if p.created_at else None,
+                "updated_at": p.updated_at.isoformat() if p.updated_at else None
+            }
+            for p in prompts
+        ]
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@router.get("/api/model-prompts/{prompt_id}")
+async def get_model_prompt(
+    prompt_id: int,
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get a specific model prompt"""
+    try:
+        result = await db.execute(select(ModelPrompt).where(ModelPrompt.id == prompt_id))
+        prompt = result.scalar_one_or_none()
+        
+        if not prompt:
+            return {"error": "Prompt not found"}
+        
+        return {
+            "id": prompt.id,
+            "name": prompt.name,
+            "page": prompt.page,
+            "prompt": prompt.prompt
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@router.put("/api/model-prompts/{prompt_id}")
+async def update_model_prompt(
+    prompt_id: int,
+    data: ModelPromptUpdate,
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update a model prompt"""
+    try:
+        result = await db.execute(select(ModelPrompt).where(ModelPrompt.id == prompt_id))
+        prompt = result.scalar_one_or_none()
+        
+        if not prompt:
+            return {"ok": False, "error": "Prompt not found"}
+        
+        if data.name:
+            prompt.name = data.name
+        if data.prompt:
+            prompt.prompt = data.prompt
+        if data.page:
+            prompt.page = data.page
+        
+        await db.commit()
+        return {"ok": True}
+    except Exception as e:
+        await db.rollback()
+        return {"ok": False, "error": str(e)}
+
+
+@router.delete("/api/model-prompts/{prompt_id}")
+async def delete_model_prompt(
+    prompt_id: int,
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete a model prompt"""
+    try:
+        result = await db.execute(select(ModelPrompt).where(ModelPrompt.id == prompt_id))
+        prompt = result.scalar_one_or_none()
+        
+        if not prompt:
+            return {"ok": False, "error": "Prompt not found"}
+        
+        await db.delete(prompt)
+        await db.commit()
+        return {"ok": True}
+    except Exception as e:
+        await db.rollback()
+        return {"ok": False, "error": str(e)}
 

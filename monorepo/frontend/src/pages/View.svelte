@@ -127,9 +127,9 @@
         // const userLang = $user ? $user.interface_language : 'ukr';
         const userLang = $user?.interface_language || 'ukr';
         // Fallback logic: try target lang, then english, then whatever is available
-        let transText = s.uk;
-        if (userLang !== 'ukr') transText = s.en || s.uk;
-        if (!transText) transText = s.en || s.uk;
+        let transText = s.ua;  // Changed from 'uk' to 'ua' to match API response
+        if (userLang !== 'ukr') transText = s.en || s.ua;
+        if (!transText) transText = s.en || s.ua;
 
         return { ...s, de_html: html, index: idx, has_grammar: grammarIndices.includes(idx), grammar_explanation: null, display_trans: transText };
       });
@@ -375,10 +375,46 @@
         });
 
         if (res.data.ok) {
+            // Оновлюємо локально без перезавантаження
+            const newWord = res.data.word;
+            
+            // Додаємо до vocab масиву
+            vocab = [...vocab, newWord];
+            vocabMap[newWord.id] = newWord;
+            
+            // Оновлюємо sentences з новим highlight
+            const sentIdx = selectionSentenceIndex;
+            const s = sentences[sentIdx];
+            const originalText = s.de;
+            
+            // Перебудовуємо HTML з новим словом
+            const sentVocab = vocab.filter(v => v.sentence_index === sentIdx);
+            sentVocab.sort((a, b) => (b.start_index || 0) - (a.start_index || 0));
+            
+            let lastIdx = originalText.length;
+            let html = "";
+            
+            sentVocab.forEach(v => {
+                const start = v.start_index;
+                const end = v.end_index;
+                
+                if (start !== null && start >= 0 && end <= originalText.length && start < end) {
+                    html = originalText.substring(end, lastIdx) + html;
+                    const wordVal = originalText.substring(start, end);
+                    html = `<span class="learned" data-wid="${v.id}">${wordVal}</span>` + html;
+                    lastIdx = start;
+                }
+            });
+            
+            html = originalText.substring(0, lastIdx) + html;
+            
+            // Оновлюємо речення
+            sentences[sentIdx] = { ...sentences[sentIdx], de_html: html };
+            sentences = sentences; // Trigger reactivity
+            
             showPopup = false;
             window.getSelection().removeAllRanges();
             addToast(ui.word_added, "success");
-            loadText(); // Reload to show highlight
         } else {
             // Показуємо "word_exists" як попередження (жовте), а не помилку (червоне)
             const toastType = res.data.error_key === 'word_exists' ? 'warning' : 'error';
@@ -391,38 +427,6 @@
         isTranslating = false;
         activeTranslationText = "";
     }
-  }
-
-  // --- GRAMMAR ---
-
-  async function explainGrammar(idx) {
-      const s = sentences[idx];
-      if (s.grammar_explanation) {
-          s.grammar_explanation = null; // Toggle off
-          sentences = [...sentences];
-          return;
-      }
-
-      // Loading state
-      s.grammar_loading = true;
-      sentences = [...sentences];
-
-      try {
-          const res = await api.post('/explain_grammar', {
-              sentence: s.de,
-              text_id: id,
-              sentence_index: idx
-          });
-          
-          // Format HTML
-          let formatted = res.data.explanation.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
-          s.grammar_explanation = formatted;
-      } catch (e) {
-          addToast("Failed to explain grammar", "error");
-      } finally {
-          s.grammar_loading = false;
-          sentences = [...sentences];
-      }
   }
   
   function scrollToWord(wid) {
@@ -739,17 +743,10 @@
                             </button>
                             <span class="de-text">{@html s.de_html}</span>
                         </div>
-            <button class="btn-text" onclick={() => explainGrammar(i)} title={ui.grammar_tooltip} style="color: var(--primary); opacity: {s.has_grammar ? 1 : 0.5};">
-                            <span class="material-symbols-outlined">{s.grammar_loading ? 'sync' : 'quiz'}</span>
-                        </button>
                     </div>
                     
                     {#if showTrans}
                         <div class="trans-row">{s.display_trans}</div>
-                    {/if}
-                    
-                    {#if s.grammar_explanation}
-                        <div class="grammar-box">{@html s.grammar_explanation}</div>
                     {/if}
                 </div>
             {/each}
@@ -1072,7 +1069,6 @@
     }
 
     #pop:disabled {
-        opacity: 0.6;
         cursor: not-allowed;
         pointer-events: none;
     }

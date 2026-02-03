@@ -17,7 +17,6 @@ PRICING = {
 
     # --- GENERATION ---
     'lesson_generation': 2.0,      # Вартість генерації уроку
-    'grammar_explanation': 1.0,    # Вартість пояснення граматики
 }
 
 def calculate_tts_cost(text, provider='google'):

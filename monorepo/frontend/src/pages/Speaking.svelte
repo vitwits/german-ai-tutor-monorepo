@@ -369,6 +369,11 @@
     if (splashTimer) clearTimeout(splashTimer);
     if (audioContext) audioContext.close();
   });
+
+  // Reload sentence when user level changes
+  $: if ($user?.level) {
+    loadNext();
+  }
 </script>
 
 <!-- SPLASH SCREEN OVERLAY -->

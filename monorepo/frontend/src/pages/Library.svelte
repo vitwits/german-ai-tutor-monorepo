@@ -3,6 +3,7 @@
   import api from "../lib/api";
   import { router } from "tinro";
   import { user } from "../stores/auth";
+  import { libraryFilters } from "../stores/libraryFilters";
   import { getUI } from "../lib/ui";
   import { confirmModal } from "../stores/confirm";
   import { addToast } from "../stores/toast";
@@ -12,13 +13,25 @@
   let totalPages = 1;
   let loading = false;
   
-  // Filters
+  // Filters - підписуємось на store
   let showFav = false;
   let selectedLevels = [];
+  let sortBy = 'date_desc';
   let searchQuery = '';
   const allLevels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
   
   let searchTimeout;
+  
+  // Підписуємось на зміни фільтрів
+  const unsubscribeFilters = libraryFilters.subscribe(filters => {
+    showFav = filters.showFav;
+    selectedLevels = filters.selectedLevels;
+    sortBy = filters.sortBy;
+  });
+
+  onMount(() => {
+    return unsubscribeFilters;
+  });
   
   function onSearchChange() {
     clearTimeout(searchTimeout);
@@ -35,7 +48,8 @@
         page,
         fav: showFav ? 1 : 0,
         levels: selectedLevels.join(','),
-        search: searchQuery
+        search: searchQuery,
+        sort: sortBy
       };
       const res = await api.get("/library", { params });
       texts = res.data.texts;
@@ -54,12 +68,14 @@
         selectedLevels = [...selectedLevels, lvl];
     }
     page = 1;
+    libraryFilters.setSelectedLevels(selectedLevels);
     loadLibrary();
   }
 
   function toggleFavFilter() {
       showFav = !showFav;
       page = 1;
+      libraryFilters.setShowFav(showFav);
       loadLibrary();
   }
 
