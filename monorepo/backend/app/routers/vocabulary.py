@@ -376,7 +376,22 @@ async def quick_translate(
     await billing.deduct_credits(current_user.id, cost)
     
     await db.commit()
-    return {"ok": True}
+    
+    return {
+        "ok": True,
+        "word": {
+            "id": wid,
+            "origin": req.text,
+            "display": word_data['display'],
+            "ua": word_data['ua'],
+            "en": word_data['en'],
+            "ctx": req.ctx,
+            "sentence_index": req.sent_idx,
+            "start_index": start_index,
+            "end_index": end_index,
+            "level": word_data.get('level')
+        }
+    }
 
 @router.post("/update_word")
 async def update_word(

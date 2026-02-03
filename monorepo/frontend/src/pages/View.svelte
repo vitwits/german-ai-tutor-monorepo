@@ -375,10 +375,46 @@
         });
 
         if (res.data.ok) {
+            // Оновлюємо локально без перезавантаження
+            const newWord = res.data.word;
+            
+            // Додаємо до vocab масиву
+            vocab = [...vocab, newWord];
+            vocabMap[newWord.id] = newWord;
+            
+            // Оновлюємо sentences з новим highlight
+            const sentIdx = selectionSentenceIndex;
+            const s = sentences[sentIdx];
+            const originalText = s.de;
+            
+            // Перебудовуємо HTML з новим словом
+            const sentVocab = vocab.filter(v => v.sentence_index === sentIdx);
+            sentVocab.sort((a, b) => (b.start_index || 0) - (a.start_index || 0));
+            
+            let lastIdx = originalText.length;
+            let html = "";
+            
+            sentVocab.forEach(v => {
+                const start = v.start_index;
+                const end = v.end_index;
+                
+                if (start !== null && start >= 0 && end <= originalText.length && start < end) {
+                    html = originalText.substring(end, lastIdx) + html;
+                    const wordVal = originalText.substring(start, end);
+                    html = `<span class="learned" data-wid="${v.id}">${wordVal}</span>` + html;
+                    lastIdx = start;
+                }
+            });
+            
+            html = originalText.substring(0, lastIdx) + html;
+            
+            // Оновлюємо речення
+            sentences[sentIdx] = { ...sentences[sentIdx], de_html: html };
+            sentences = sentences; // Trigger reactivity
+            
             showPopup = false;
             window.getSelection().removeAllRanges();
             addToast(ui.word_added, "success");
-            loadText(); // Reload to show highlight
         } else {
             // Показуємо "word_exists" як попередження (жовте), а не помилку (червоне)
             const toastType = res.data.error_key === 'word_exists' ? 'warning' : 'error';
@@ -1033,7 +1069,6 @@
     }
 
     #pop:disabled {
-        opacity: 0.6;
         cursor: not-allowed;
         pointer-events: none;
     }
