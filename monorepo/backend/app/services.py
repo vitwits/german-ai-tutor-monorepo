@@ -87,14 +87,14 @@ def get_audio_duration_exact(audio_bytes: bytes, mime_type: str = 'audio/webm') 
         return 0
 
 
-def trim_audio_silence(audio_bytes: bytes, trim_seconds: float = 2.0, audio_duration_seconds: float = None, mime_type: str = 'audio/webm') -> bytes:
+def trim_audio_silence(audio_bytes: bytes, trim_seconds: float = 1.0, audio_duration_seconds: float = None, mime_type: str = 'audio/webm') -> bytes:
     """
     Trims trailing silence from audio using ffmpeg (preserves WebM metadata).
     Uses -ss and -to flags to trim without re-encoding (stream copy).
     
     Args:
         audio_bytes: Raw audio data in WebM format (Opus codec)
-        trim_seconds: Duration to trim from the end (default: 2.0 seconds - SILENCE_AFTER_SPEECH timeout)
+        trim_seconds: Duration to trim from the end (default: 1.0 seconds - SILENCE_AFTER_SPEECH timeout)
         audio_duration_seconds: Total audio duration (required to calculate end time)
         mime_type: MIME type of audio (default: 'audio/webm')
     
@@ -493,7 +493,8 @@ async def evaluate_audio_with_gemini(original_text, audio_bytes, interface_lang,
     
     # 🔪 TRIM TRAILING SILENCE if auto-stopped (silence timeout triggered)
     if stop_type == 'auto':
-        print(f"\n   🔪 Auto-stop detected - trimming trailing silence (2.0 seconds)")
+        print(f"\n   🔪 Auto-stop detected - trimming trailing silence (1.0 second)")
+        print(f"   📦 BEFORE trim - audio_bytes size: {len(audio_bytes)} bytes ({len(audio_bytes)/1024:.1f} KB)")
         
         # Get exact duration BEFORE trimming
         duration_before = get_audio_duration_exact(audio_bytes, mime_type)
@@ -501,9 +502,11 @@ async def evaluate_audio_with_gemini(original_text, audio_bytes, interface_lang,
             duration_before = len(audio_bytes) / 16000  # Fallback estimate
         print(f"   📊 Original duration: {duration_before:.3f}s")
         
-        # Trim 2.0 seconds (silence detection SILENCE_AFTER_SPEECH timeout)
-        trim_seconds_value = 2.0
+        # Trim 1.0 second (silence detection SILENCE_AFTER_SPEECH timeout)
+        trim_seconds_value = 1.0
         audio_bytes = trim_audio_silence(audio_bytes, trim_seconds=trim_seconds_value, audio_duration_seconds=duration_before, mime_type=mime_type)
+        
+        print(f"   📦 AFTER trim - audio_bytes size: {len(audio_bytes)} bytes ({len(audio_bytes)/1024:.1f} KB)")
         
         # After trimming, calculate the new duration
         audio_duration_seconds = max(0, duration_before - trim_seconds_value)
@@ -529,9 +532,10 @@ async def evaluate_audio_with_gemini(original_text, audio_bytes, interface_lang,
     print(f"\n   📝 TEXT PROMPT:")
     print(f"      chars: {len(prompt)}")
     print(f"      content:\n{prompt}\n")
-    print(f"   🔊 AUDIO INPUT:")
+    print(f"\n   🔊 AUDIO INPUT:")
     print(f"      bytes: {len(audio_bytes)}")
     print(f"      duration: {audio_duration_seconds:.3f} seconds")
+    print(f"      (about to send to Gemini...)")
     
     try:
         response = client.models.generate_content(
