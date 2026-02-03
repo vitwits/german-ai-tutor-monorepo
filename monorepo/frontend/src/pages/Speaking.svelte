@@ -312,6 +312,18 @@
       correction = result.correction || sentence.text_de; // Use LLM correction if available, else original sentence
       phase = 'splash';
       
+      // Update energy if returned
+      if (result.energy) {
+        user.update(u => ({
+          ...u,
+          billing: {
+            ...u.billing,
+            energy_left: result.energy.energy_left,
+            daily_spending: result.energy.daily_spending
+          }
+        }));
+      }
+      
       // Show Splash
       showSplash = true;
       

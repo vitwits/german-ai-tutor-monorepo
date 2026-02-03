@@ -164,7 +164,7 @@ async def record_text_generation_cost(
     response_text: str,
     model_id: str,
     db=None
-) -> float:
+) -> dict:
     """
     Record cost for text generation with multilingual output.
     Splits output by language (DE, UA, EN) and calculates cost separately for each.
@@ -177,7 +177,7 @@ async def record_text_generation_cost(
         db: AsyncSession for database operations
         
     Returns:
-        Total cost calculated for input and all output languages combined
+        Dictionary with: {total_cost, llm_cost, tts_cost, error (if any)}
     """
     if not db or not response_text:
         return 0.0
@@ -327,15 +327,20 @@ async def record_text_generation_cost(
             await db.commit()
             
             print(f"✅ Text generation cost recorded: ${total_cost:.6f} for user {user_id}")
-            return total_cost
+            return {
+                "total_cost": round(total_cost, 6),
+                "llm_cost": round(total_cost, 6),
+                "tts_cost": 0.0,
+                "error": None
+            }
         
-        return 0.0
+        return {"total_cost": 0.0, "llm_cost": 0.0, "tts_cost": 0.0, "error": "User not found"}
         
     except Exception as e:
         print(f"❌ Error recording text generation cost: {e}")
         import traceback
         traceback.print_exc()
-        return 0.0
+        return {"total_cost": 0.0, "llm_cost": 0.0, "tts_cost": 0.0, "error": str(e)}
 
 
 async def record_tts_text_generation_cost(
@@ -936,3 +941,49 @@ async def record_feedback_cost(
         import traceback
         traceback.print_exc()
         return {"llm_cost": 0.0, "total_cost": 0.0, "error": str(e)}
+
+
+async def record_translation_cost(
+    user_id: str,
+    translation_text: str,
+    db = None
+) -> dict:
+    """
+    Record cost for vocabulary translation
+    
+    Args:
+        user_id: User ID
+        translation_text: Text that was translated
+        db: Database session
+    
+    Returns:
+        Dictionary with cost info
+    """
+    try:
+        # Translation cost is based on character count
+        # Simple fixed cost per character
+        COST_PER_CHAR = 0.0001  # $0.0001 per character
+        
+        char_count = len(translation_text)
+        translation_cost = max(0.001, char_count * COST_PER_CHAR)  # Minimum $0.001
+        
+        if db:
+            from sqlalchemy import select
+            from .models import User
+            
+            user_result = await db.execute(select(User).where(User.id == user_id))
+            user = user_result.scalar_one_or_none()
+            
+            if user:
+                user.llm_cost = (user.llm_cost or 0.0) + translation_cost
+                user.total_cost = (user.total_cost or 0.0) + translation_cost
+                await db.commit()
+        
+        return {
+            "total_cost": round(translation_cost, 6),
+            "char_count": char_count,
+            "error": None
+        }
+    except Exception as e:
+        print(f"❌ Error recording translation cost: {e}")
+        return {"total_cost": 0.0, "error": str(e)}

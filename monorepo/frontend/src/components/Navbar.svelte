@@ -46,10 +46,10 @@
 
   <div class="header-right">
     {#if $isAuthenticated}
-      <div class="credits-pill" title="Credits">
-        <span>💎</span> 
-        <span id="user-credits">{$user ? Math.floor($user.credits) : '...'}</span> 
-        <span style="opacity:0.5; font-size:0.75rem;">/ 1000</span>
+      <div class="energy-pill" title="Energy Points">
+        <span>⚡</span> 
+        <span id="user-energy">{$user && $user.billing ? Math.floor($user.billing.energy_left) : '...'}</span> 
+        <span style="opacity:0.5; font-size:0.75rem;">/ 100</span>
       </div>
 
       <div class="level-tiles">
@@ -105,7 +105,7 @@
   .brand-de { color: var(--primary); font-weight: 700; }
   .header-right { display: flex; align-items: center; gap: 8px; }
 
-  .credits-pill {
+  .energy-pill {
     background: rgba(0,0,0,0.05); border: 1px solid var(--border);
     padding: 4px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 500;
     display: flex; align-items: center; gap: 6px; color: var(--on-surface);

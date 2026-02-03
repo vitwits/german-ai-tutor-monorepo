@@ -7,7 +7,8 @@ from ..database import get_db
 from ..models import User, Sentence, UserBlockedSentence, UserFavoriteSentence, Vocabulary, Feedback
 from ..schemas import ReportSentenceRequest, ToggleSentenceFavRequest, RemoveFavSentenceRequest
 from ..dependencies import get_current_user
-from .. import services, billing
+from .. import services
+from ..services import deduct_user_energy
 
 router = APIRouter(prefix="/api", tags=["speaking"])
 
@@ -82,9 +83,20 @@ async def evaluate_audio(
         db=db
     )
     
+    spending_usd = cost_result.get("total_cost", 0)
+    
     if cost_result.get("error"):
         print(f"⚠️ Cost calculation error: {cost_result['error']}")
         # Continue anyway - don't fail evaluation if cost calc fails
+    
+    # Deduct energy based on actual spending
+    if spending_usd > 0:
+        energy_result = await deduct_user_energy(db, current_user.id, spending_usd)
+        if not energy_result.get("ok"):
+            raise HTTPException(
+                status_code=402,  # Payment Required
+                detail=f"Insufficient energy: {energy_result.get('error')}"
+            )
     
     # Calculate average
     avg = int((result.get('pronunciation_score', 0) + result.get('context_score', 0) + result.get('grammar_score', 0)) / 3)
@@ -102,9 +114,23 @@ async def evaluate_audio(
     if fb_row:
         result['feedback_audio_url'] = f"/static/audio/{fb_row.file_path}"
 
-    # Billing
-    new_bal = await billing.deduct_credits(current_user.id, billing.PRICING['speaking_evaluation'])
-    result['credits'] = new_bal
+    # Return energy status
+    from ..services import get_user_energy_status
+    energy_status = await get_user_energy_status(db, current_user.id)
+    
+    # Add energy info to result for frontend
+    if energy_status.get('ok'):
+        # Get the actual UserBilling data for energy_left and daily_spending
+        from sqlalchemy import select
+        from ..models import UserBilling
+        billing_result = await db.execute(select(UserBilling).where(UserBilling.user_id == current_user.id))
+        user_billing = billing_result.scalar_one_or_none()
+        if user_billing:
+            result['energy'] = {
+                'energy_left': user_billing.energy_left,
+                'daily_spending': user_billing.daily_spending,
+                'subscription_status': user_billing.subscription_status
+            }
     
     return result
 

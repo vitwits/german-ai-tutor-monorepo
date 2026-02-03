@@ -282,6 +282,32 @@ class BillingPlan(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
 
 
+class UserBilling(Base):
+    __tablename__ = "user_billing"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, unique=True)
+    
+    # Subscription status
+    subscription_status: Mapped[str] = mapped_column(String, default='active')  # active|inactive|cancelled
+    
+    # Billing period tracking
+    billing_start_day: Mapped[int] = mapped_column(Integer, nullable=False)  # Day of month (1-31)
+    billing_end_day: Mapped[Optional[int]] = mapped_column(Integer)  # Last day of period (informational)
+    
+    # Energy tracking
+    energy_left: Mapped[float] = mapped_column(Float, default=0.0)  # Current energy points
+    daily_spending: Mapped[float] = mapped_column(Float, default=0.0)  # USD spent today
+    
+    # Price tracking (calculated dynamically but cached for consistency)
+    price_per_point_usd: Mapped[float] = mapped_column(Float, default=0.0)  # Cost in USD for 1 energy point
+    
+    # Timestamps
+    last_energy_reset: Mapped[datetime] = mapped_column(DateTime, default=func.now())  # Last daily reset at 00:00
+    last_billing_reset: Mapped[datetime] = mapped_column(DateTime, default=func.now())  # Last monthly reset
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
+
 class ReportedLesson(Base):
     __tablename__ = "reported_lessons"
     

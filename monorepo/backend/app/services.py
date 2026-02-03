@@ -650,3 +650,136 @@ async def translate_word(text, ctx, db: AsyncSession = None):
     except Exception as e:
         print(f"Translate Error: {e}")
         return {"display": text, "ua": "Error", "en": "Error", "level": "?"}
+
+
+# ======================== BILLING ENERGY MANAGEMENT ========================
+
+async def deduct_user_energy(
+    db: AsyncSession,
+    user_id: str,
+    spending_usd: float
+) -> dict:
+    """
+    Deduct energy from user's account based on USD spending
+    
+    Args:
+        db: Database session
+        user_id: User ID
+        spending_usd: Amount spent in USD
+    
+    Returns:
+        Dictionary with result and remaining energy
+    """
+    from .models import UserBilling, BillingPlan
+    from .billing_logic import billing_manager, billing_init
+    
+    try:
+        # Get billing plan
+        plan_result = await db.execute(select(BillingPlan))
+        billing_plan = plan_result.scalar_one_or_none()
+        
+        if not billing_plan:
+            return {"ok": False, "error": "No billing plan configured"}
+        
+        # Get user billing
+        billing_result = await db.execute(
+            select(UserBilling).where(UserBilling.user_id == user_id)
+        )
+        user_billing = billing_result.scalar_one_or_none()
+        
+        # Auto-initialize billing if missing (for legacy users)
+        if not user_billing:
+            billing_data = billing_init.initialize_user_billing(
+                user_id=user_id,
+                monthly_credit_usd=billing_plan.monthly_credit,
+                max_cap_days=billing_plan.max_cap_days
+            )
+            
+            user_billing = UserBilling(
+                user_id=billing_data['user_id'],
+                subscription_status=billing_data['subscription_status'],
+                billing_start_day=billing_data['billing_start_day'],
+                billing_end_day=billing_data['billing_end_day'],
+                energy_left=billing_data['energy_left'],
+                daily_spending=billing_data['daily_spending'],
+                price_per_point_usd=billing_data['price_per_point_usd'],
+                last_energy_reset=billing_data['last_energy_reset'],
+                last_billing_reset=billing_data['last_billing_reset']
+            )
+            db.add(user_billing)
+            await db.flush()
+        
+        # Check if user can afford it
+        if not billing_manager.can_spend_energy(user_billing, spending_usd):
+            return {
+                "ok": False,
+                "error": "Insufficient energy",
+                "energy_left": user_billing.energy_left,
+                "energy_needed": spending_usd / user_billing.price_per_point_usd if user_billing.price_per_point_usd > 0 else 0
+            }
+        
+        # Deduct energy
+        updates = billing_manager.deduct_spending(
+            user_billing,
+            spending_usd,
+            billing_plan.monthly_credit
+        )
+        
+        # Apply updates
+        for key, value in updates.items():
+            setattr(user_billing, key, value)
+        
+        await db.commit()
+        
+        return {
+            "ok": True,
+            "energy_left": user_billing.energy_left,
+            "daily_spending": user_billing.daily_spending,
+            "subscription_status": user_billing.subscription_status
+        }
+    
+    except Exception as e:
+        await db.rollback()
+        return {"ok": False, "error": str(e)}
+
+
+async def get_user_energy_status(
+    db: AsyncSession,
+    user_id: str
+) -> dict:
+    """
+    Get current energy status for user
+    
+    Args:
+        db: Database session
+        user_id: User ID
+    
+    Returns:
+        Dictionary with energy status
+    """
+    from .models import UserBilling
+    from .billing_logic import billing_calc
+    
+    try:
+        billing_result = await db.execute(
+            select(UserBilling).where(UserBilling.user_id == user_id)
+        )
+        user_billing = billing_result.scalar_one_or_none()
+        
+        if not user_billing:
+            return {"error": "User billing not initialized"}
+        
+        status = billing_calc.get_energy_status(
+            user_billing.energy_left,
+            user_billing.daily_spending,
+            user_billing.price_per_point_usd
+        )
+        
+        return {
+            "ok": True,
+            "energy_status": status,
+            "subscription_status": user_billing.subscription_status
+        }
+    
+    except Exception as e:
+        return {"ok": False, "error": str(e)}

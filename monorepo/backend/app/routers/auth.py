@@ -6,10 +6,11 @@ import uuid
 import logging
 
 from ..database import get_db
-from ..models import User
+from ..models import User, UserBilling, BillingPlan
 from ..schemas import UserCreate, Token, UserRead, UserSettingsUpdate, UserLevelUpdate, UserPasswordUpdate
 from ..security import get_password_hash, verify_password, create_access_token, create_refresh_token
 from ..dependencies import get_current_user
+from ..billing_logic import billing_init
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -31,6 +32,33 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
             credits=1000.0
         )
         db.add(new_user)
+        await db.flush()  # Flush to ensure user exists before creating billing
+        
+        # Get default billing plan
+        plan_result = await db.execute(select(BillingPlan))
+        billing_plan = plan_result.scalar_one_or_none()
+        
+        if billing_plan:
+            # Initialize user billing
+            billing_data = billing_init.initialize_user_billing(
+                user_id=new_user.id,
+                monthly_credit_usd=billing_plan.monthly_credit,
+                max_cap_days=billing_plan.max_cap_days
+            )
+            
+            user_billing = UserBilling(
+                user_id=billing_data['user_id'],
+                subscription_status=billing_data['subscription_status'],
+                billing_start_day=billing_data['billing_start_day'],
+                billing_end_day=billing_data['billing_end_day'],
+                energy_left=billing_data['energy_left'],
+                daily_spending=billing_data['daily_spending'],
+                price_per_point_usd=billing_data['price_per_point_usd'],
+                last_energy_reset=billing_data['last_energy_reset'],
+                last_billing_reset=billing_data['last_billing_reset']
+            )
+            db.add(user_billing)
+        
         await db.commit()
         await db.refresh(new_user)
         
@@ -38,7 +66,10 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
         access_token = create_access_token(data={"sub": new_user.email, "uid": new_user.id})
         refresh_token = create_refresh_token(data={"sub": new_user.email, "uid": new_user.id})
         return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
+    except HTTPException:
+        raise
     except Exception as e:
+        await db.rollback()
         logging.error(f"REGISTRATION FAILED: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error during registration.")
 
@@ -64,9 +95,31 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSessi
     return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
 
 @router.get("/me", response_model=UserRead)
-async def read_users_me(current_user: User = Depends(get_current_user)):
-    """Returns the current authenticated user's data."""
-    return current_user
+async def read_users_me(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Returns the current authenticated user's data with billing info."""
+    # Load billing data if available
+    billing_result = await db.execute(
+        select(UserBilling).where(UserBilling.user_id == current_user.id)
+    )
+    billing = billing_result.scalar_one_or_none()
+    
+    # Create response with billing data
+    user_data = {
+        "id": current_user.id,
+        "email": current_user.email,
+        "level": current_user.level,
+        "credits": current_user.credits,
+        "interface_language": current_user.interface_language,
+        "billing": {
+            "energy_left": billing.energy_left if billing else 0.0,
+            "daily_spending": billing.daily_spending if billing else 0.0,
+            "price_per_point_usd": billing.price_per_point_usd if billing else 0.0,
+            "subscription_status": billing.subscription_status if billing else "inactive",
+            "billing_start_day": billing.billing_start_day if billing else 1
+        } if billing else None
+    }
+    
+    return user_data
 
 @router.post("/settings")
 async def update_settings(req: UserSettingsUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):

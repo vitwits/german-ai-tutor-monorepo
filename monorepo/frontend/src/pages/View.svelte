@@ -434,6 +434,18 @@
             sentences[sentIdx] = { ...sentences[sentIdx], de_html: html };
             sentences = sentences; // Trigger reactivity
             
+            // Update energy if returned
+            if (res.data.energy_left !== undefined) {
+              user.update(u => ({
+                ...u,
+                billing: {
+                  ...u.billing,
+                  energy_left: res.data.energy_left,
+                  daily_spending: res.data.daily_spending
+                }
+              }));
+            }
+            
             showPopup = false;
             window.getSelection().removeAllRanges();
             addToast(ui.word_added, "success");

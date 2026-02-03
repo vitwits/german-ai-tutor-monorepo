@@ -20,11 +20,22 @@ class TokenData(BaseModel):
     email: str | None = None
     user_id: str | None = None
 
+class BillingData(BaseModel):
+    energy_left: float
+    daily_spending: float
+    price_per_point_usd: float
+    subscription_status: str
+    billing_start_day: int
+    
+    class Config:
+        from_attributes = True
+
 class UserRead(UserBase):
     id: str
     level: str
     credits: float
     interface_language: str
+    billing: Optional[BillingData] = None
 
     class Config:
         from_attributes = True

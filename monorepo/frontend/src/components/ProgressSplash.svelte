@@ -128,6 +128,11 @@
     startTime = Date.now();
     updateProgress();
   }
+
+  // Перенаправляємо як тільки API повернув результат
+  $: if (apiArrived && textId) {
+    window.location.href = `/view/${textId}`;
+  }
 </script>
 
 {#if isVisible}

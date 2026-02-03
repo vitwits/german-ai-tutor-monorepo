@@ -7,10 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, update, delete
 
 from ..database import get_db
-from ..models import User, Vocabulary, UserFavoriteSentence, Sentence, ReportedLesson
+from ..models import User, Vocabulary, UserFavoriteSentence, Sentence, ReportedLesson, UserBilling
 from ..schemas import VocabUpdateRequest, VocabRemoveRequest, ToggleFavRequest, VocabProgressRequest, QuickTranslateRequest, VocabWordSchema
 from ..dependencies import get_current_user
-from .. import services, billing
+from .. import services
+from ..cost_calculation import record_translation_cost
+from ..services import deduct_user_energy
 from ..utils_tts import get_cached_or_generate_tts
 
 router = APIRouter(prefix="/api", tags=["vocabulary"])
@@ -384,10 +386,22 @@ async def quick_translate(
     )
     db.add(new_word)
     
-    cost = billing.calculate_translation_cost(req.text)
-    await billing.deduct_credits(current_user.id, cost)
+    # Deduct energy based on quick_translate cost (LLM + TTS already calculated)
+    spending_usd = cost_result.get("total_cost", 0)
+    
+    if spending_usd > 0:
+        energy_result = await deduct_user_energy(db, current_user.id, spending_usd)
+        if not energy_result.get("ok"):
+            raise HTTPException(
+                status_code=402,  # Payment Required
+                detail=f"Insufficient energy: {energy_result.get('error')}"
+            )
     
     await db.commit()
+    
+    # Get updated energy status
+    billing_result = await db.execute(select(UserBilling).where(UserBilling.user_id == current_user.id))
+    user_billing = billing_result.scalar_one_or_none()
     
     return {
         "ok": True,
@@ -402,7 +416,9 @@ async def quick_translate(
             "start_index": start_index,
             "end_index": end_index,
             "level": word_data.get('level')
-        }
+        },
+        "energy_left": user_billing.energy_left if user_billing else 0,
+        "daily_spending": user_billing.daily_spending if user_billing else 0
     }
 
 @router.post("/update_word")

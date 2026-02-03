@@ -10,7 +10,8 @@ from ..database import get_db
 from ..models import User, Text, Lesson, UserLesson, LessonAudio, Vocabulary, QuizResult
 from ..schemas import TextGenerateRequest, TextReadSchema, ToggleFavRequest, QuizResultRequest, VocabWordSchema
 from ..dependencies import get_current_user
-from .. import services, billing, cost_calculation
+from .. import services, cost_calculation
+from ..services import deduct_user_energy
 from ..utils_tts import delete_sentence_audio_cache
 
 router = APIRouter(prefix="/api", tags=["library"])
@@ -29,9 +30,6 @@ async def generate_text_endpoint(
     }
     count = sentence_map.get(req.level, sentence_map['A2']).get(req.size, 8)
 
-    # Billing
-    new_bal = await billing.deduct_credits(current_user.id, billing.PRICING['lesson_generation'])
-    
     # Generation (pass db to get model from AI preferences)
     # Now returns tuple: (data, prompt, raw_response, model_id)
     data, prompt_text, raw_response_text, model_id = await services.generate_german_text(
@@ -39,14 +37,29 @@ async def generate_text_endpoint(
     )
     
     # Record cost for text generation
+    # Start with a reasonable default
+    energy_left = 100
+    
     if data.get('sentences') and raw_response_text:
-        await cost_calculation.record_text_generation_cost(
+        cost_result = await cost_calculation.record_text_generation_cost(
             user_id=current_user.id,
             prompt_text=prompt_text,
             response_text=raw_response_text,
             model_id=model_id,
             db=db
         )
+        
+        spending_usd = cost_result.get("total_cost", 0)
+        
+        # Deduct energy based on actual spending
+        if spending_usd > 0:
+            energy_result = await deduct_user_energy(db, current_user.id, spending_usd)
+            if not energy_result.get("ok"):
+                raise HTTPException(
+                    status_code=402,  # Payment Required
+                    detail=f"Insufficient energy: {energy_result.get('error')}"
+                )
+            energy_left = energy_result.get("energy_left", 0)
     
     title_json = json.dumps({'de': data.get('title_de', req.topic), 'ukr': data.get('title_ua'), 'eng': data.get('title_en')}, ensure_ascii=False)
     tid = str(uuid.uuid4())
@@ -86,7 +99,7 @@ async def generate_text_endpoint(
             )
         )
     
-    return {"id": tid, "credits": new_bal}
+    return {"id": tid, "energy_left": energy_left}
 
 async def _generate_audio_batch_background(user_id: str, sentences: list, lang: str, db: AsyncSession):
     """Фонова функція для генерації аудіо після створення тексту"""
