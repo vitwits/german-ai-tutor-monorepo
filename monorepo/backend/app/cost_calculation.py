@@ -374,20 +374,24 @@ async def record_tts_text_generation_cost(
         from sqlalchemy import select
         from .models import AIPreference, TTSVoice, TTSModel, User
         
+        # Convert language code: 'uk' -> 'UA', 'de' -> 'DE', 'en' -> 'EN'
+        lang_code_map = {'uk': 'UA', 'de': 'DE', 'en': 'EN'}
+        db_lang = lang_code_map.get(lang.lower(), lang.upper())
+        
         # Find TTS voice for this job and language
         voice_result = await db.execute(
             select(TTSVoice).join(
                 AIPreference, AIPreference.tts_voice_id == TTSVoice.id
             ).where(
                 AIPreference.job == job_name,
-                TTSVoice.lang == lang.upper(),
+                TTSVoice.lang == db_lang,
                 TTSVoice.is_active == True
             )
         )
         voice = voice_result.scalar_one_or_none()
         
         if not voice:
-            print(f"⚠️ TTS voice not found for job={job_name}, lang={lang}")
+            print(f"⚠️ TTS voice not found for job={job_name}, lang={lang} (converted to {db_lang})")
             return 0.0
         
         print(f"🔍 DEBUG TTS voice found:")
@@ -442,3 +446,266 @@ async def record_tts_text_generation_cost(
         import traceback
         traceback.print_exc()
         return 0.0
+
+
+async def record_quick_translate_cost(
+    user_id: str,
+    word_data: dict,
+    db=None
+) -> dict:
+    """
+    Record cost for quick_translate operation (word translation + TTS generation).
+    
+    Calculates:
+    1. LLM cost: full prompt input → output (split by language: DE, UK, EN, JSON markup)
+    2. TTS cost: display + ua parts + en parts
+    
+    Writes to user: llm_cost, tts_cost, total_cost
+    
+    Args:
+        user_id: User ID to charge
+        word_data: Dict from translate_word() containing:
+                   - display, ua, en, level (translation results)
+                   - _full_prompt (entire prompt sent to LLM)
+                   - _full_response (raw JSON response from LLM)
+        db: AsyncSession for database operations
+        
+    Returns:
+        Dict with: {llm_cost, tts_cost, total_cost, error (if any)}
+    """
+    if not db:
+        return {"llm_cost": 0.0, "tts_cost": 0.0, "total_cost": 0.0, "error": "No database"}
+    
+    try:
+        from sqlalchemy import select
+        from .models import LLMModel, LLMPrice, TTSVoice, TTSModel, User, AIPreference
+        
+        # Extract data
+        full_prompt = word_data.get("_full_prompt", "")
+        full_response = word_data.get("_full_response", "")
+        display_text = word_data.get("display", "")
+        ua_text = word_data.get("ua", "")
+        en_text = word_data.get("en", "")
+        
+        print(f"\n{'='*80}")
+        print(f"🔍 DEBUG record_quick_translate_cost")
+        print(f"{'='*80}")
+        print(f"   user_id: {user_id}")
+        print(f"\n   📝 FULL LLM EXCHANGE:")
+        print(f"      INPUT prompt: {len(full_prompt)} chars")
+        print(f"      OUTPUT response: {len(full_response)} chars")
+        print(f"\n   📝 TRANSLATION RESULTS:")
+        print(f"      display (DE): '{display_text}' ({len(display_text)} chars)")
+        print(f"      ua (UK): '{ua_text}' ({len(ua_text)} chars)")
+        print(f"      en (EN): '{en_text}' ({len(en_text)} chars)")
+        
+        # ============================================
+        # PART 1: LLM COST CALCULATION
+        # ============================================
+        print(f"\n📊 PART 1: LLM COST CALCULATION")
+        print(f"{'-'*80}")
+        
+        # Step 1.1: Get LLM model
+        llm_model_result = await db.execute(
+            select(LLMModel).join(
+                AIPreference, AIPreference.llm_model_id == LLMModel.id
+            ).where(
+                AIPreference.job == "translate_vocabulary",
+                LLMModel.is_active == True
+            )
+        )
+        llm_model = llm_model_result.scalar_one_or_none()
+        
+        if not llm_model:
+            print(f"⚠️ LLM model not found for job='translate_vocabulary'")
+            return {"llm_cost": 0.0, "tts_cost": 0.0, "total_cost": 0.0, "error": "LLM model not found"}
+        
+        print(f"   LLM Model: {llm_model.human_name} (id={llm_model.model_id})")
+        
+        # Step 1.2: Get LLM prices (input + output)
+        input_price_result = await db.execute(
+            select(LLMPrice).where(
+                LLMPrice.llm_model_id == llm_model.id,
+                LLMPrice.direction == "input",
+                LLMPrice.data_type == "text",
+                LLMPrice.is_active == True
+            )
+        )
+        input_price = input_price_result.scalar_one_or_none()
+        
+        output_price_result = await db.execute(
+            select(LLMPrice).where(
+                LLMPrice.llm_model_id == llm_model.id,
+                LLMPrice.direction == "output",
+                LLMPrice.data_type == "text",
+                LLMPrice.is_active == True
+            )
+        )
+        output_price = output_price_result.scalar_one_or_none()
+        
+        if not input_price or not output_price:
+            print(f"⚠️ LLM prices not found for model {llm_model.model_id}")
+            return {"llm_cost": 0.0, "tts_cost": 0.0, "total_cost": 0.0, "error": "LLM prices not found"}
+        
+        print(f"   Input price: ${input_price.price_per_unit}/млн tokens")
+        print(f"   Output price: ${output_price.price_per_unit}/млн tokens")
+        
+        # Step 1.3: Calculate input tokens (FULL PROMPT as English)
+        input_tokens = calculate_text_output_tokens(full_prompt, "en")
+        print(f"\n   📝 INPUT TOKENS:")
+        print(f"      full_prompt chars: {len(full_prompt)}")
+        print(f"      tokens (en 4.0 ratio): {input_tokens:.2f}")
+        
+        # Step 1.4: Calculate output tokens (smart split by language)
+        # display → DE, ua → UK, en → EN
+        # Remainder (JSON markup) → EN
+        display_tokens = calculate_text_output_tokens(display_text, "de")
+        ua_tokens = calculate_text_output_tokens(ua_text, "uk")
+        en_tokens = calculate_text_output_tokens(en_text, "en")
+        
+        # Calculate remainder (JSON markup + field names + etc)
+        # remainder = full_response - display - ua - en
+        remaining_chars = len(full_response) - len(display_text) - len(ua_text) - len(en_text)
+        remaining_tokens = calculate_text_output_tokens("x" * remaining_chars, "en") if remaining_chars > 0 else 0
+        
+        total_output_tokens = display_tokens + ua_tokens + en_tokens + remaining_tokens
+        
+        print(f"\n   📝 OUTPUT TOKENS (split by language):")
+        print(f"      display (DE): '{display_text}' ({len(display_text)} chars) → {display_tokens:.2f} tokens (4.0 ratio)")
+        print(f"      ua (UK): '{ua_text}' ({len(ua_text)} chars) → {ua_tokens:.2f} tokens (2.8 ratio)")
+        print(f"      en (EN): '{en_text}' ({len(en_text)} chars) → {en_tokens:.2f} tokens (4.0 ratio)")
+        print(f"      JSON markup + rest: {remaining_chars} chars → {remaining_tokens:.2f} tokens (4.0 ratio)")
+        print(f"      TOTAL: {total_output_tokens:.2f} tokens")
+        
+        # Step 1.5: Calculate LLM costs
+        llm_input_cost = (input_tokens / 1_000_000) * input_price.price_per_unit
+        llm_output_cost = (total_output_tokens / 1_000_000) * output_price.price_per_unit
+        llm_total_cost = llm_input_cost + llm_output_cost
+        
+        print(f"\n   💰 LLM COSTS:")
+        print(f"      input_cost: ({input_tokens:.2f} / 1M) × ${input_price.price_per_unit} = ${llm_input_cost:.6f}")
+        print(f"      output_cost: ({total_output_tokens:.2f} / 1M) × ${output_price.price_per_unit} = ${llm_output_cost:.6f}")
+        print(f"      llm_total_cost: ${llm_total_cost:.6f}")
+        
+        # ============================================
+        # PART 2: TTS COST CALCULATION
+        # ============================================
+        print(f"\n📊 PART 2: TTS COST CALCULATION")
+        print(f"{'-'*80}")
+        
+        tts_total_cost = 0.0
+        
+        # Get TTS voices and models for each language
+        import re
+        tts_items = [
+            ("de", display_text, "display", "vocabulary_tts_de"),
+            ("uk", ua_text, "ua", "vocabulary_tts_ua"),
+            ("en", en_text, "en", "vocabulary_tts_en"),
+        ]
+        
+        for lang_code, text, text_type, job_name in tts_items:
+            if not text:
+                print(f"   ⏭️  Skipping {text_type.upper()} - empty text")
+                continue
+            
+            # Split by commas/semicolons just like in vocabulary.py
+            # display is NOT split (single word), but ua and en are split
+            if text_type == "display":
+                parts = [text]  # German display word is not split
+            else:
+                # Split Ukrainian and English by comma/semicolon
+                parts = [p.strip() for p in re.split(r'[,;]', text) if p.strip()]
+            
+            print(f"\n   🎤 {text_type.upper()} ({lang_code.upper()}):")
+            print(f"      original text: '{text}'")
+            print(f"      parts to TTS: {parts} ({len(parts)} part{'s' if len(parts) != 1 else ''})")
+            
+            # Get TTS voice for this job
+            voice_result = await db.execute(
+                select(TTSVoice).join(
+                    AIPreference, AIPreference.tts_voice_id == TTSVoice.id
+                ).where(
+                    AIPreference.job == job_name,
+                    TTSVoice.is_active == True
+                )
+            )
+            voice = voice_result.scalar_one_or_none()
+            
+            if not voice:
+                print(f"      ⚠️ TTS voice not found for job={job_name}")
+                continue
+            
+            print(f"      voice: {voice.voice_name}")
+            
+            # Get TTS model
+            model_result = await db.execute(
+                select(TTSModel).where(TTSModel.id == voice.tts_model_id)
+            )
+            model = model_result.scalar_one_or_none()
+            
+            if not model:
+                print(f"      ⚠️ TTS model not found")
+                continue
+            
+            print(f"      model: {model.human_name} (${model.price_per_unit}/млн chars)")
+            
+            # Calculate TTS cost for each part
+            price_per_char = model.price_per_unit / 1_000_000
+            lang_cost = 0.0
+            for part in parts:
+                char_count = len(part)
+                part_cost = char_count * price_per_char
+                lang_cost += part_cost
+                print(f"         • '{part}' ({char_count} chars) = ${part_cost:.6f}")
+            
+            tts_total_cost += lang_cost
+            print(f"      total for {text_type.upper()}: ${lang_cost:.6f}")
+        
+        print(f"\n   💰 TTS TOTAL COST: ${tts_total_cost:.6f}")
+        print(f"      ⚠️ NOTE: TTS cost already added to user.tts_cost by get_cached_or_generate_tts()")
+        print(f"      This is calculated here for tracking/logging purposes only")
+        
+        # ============================================
+        # PART 3: UPDATE USER IN DATABASE
+        # ============================================
+        print(f"\n📊 PART 3: UPDATE USER DATABASE")
+        print(f"{'-'*80}")
+        
+        # IMPORTANT: Only add LLM cost here. TTS cost is already added by get_cached_or_generate_tts calls
+        user_result = await db.execute(select(User).where(User.id == user_id))
+        user = user_result.scalar_one_or_none()
+        
+        if not user:
+            print(f"⚠️ User not found: {user_id}")
+            return {"llm_cost": 0.0, "tts_cost": 0.0, "total_cost": 0.0, "error": f"User not found"}
+        
+        # Update user costs - ONLY LLM, NOT TTS (TTS already added)
+        user.llm_cost = (user.llm_cost or 0.0) + llm_total_cost
+        # NOTE: Do NOT add tts_cost here - it's already added by get_cached_or_generate_tts
+        user.total_cost = (user.total_cost or 0.0) + llm_total_cost  # Only add LLM to total
+        await db.commit()
+        
+        print(f"   ✅ llm_cost added: ${llm_total_cost:.6f}")
+        print(f"   ℹ️  tts_cost (not added here): ${tts_total_cost:.6f} [already recorded by get_cached_or_generate_tts]")
+        print(f"   ✅ total_cost added: ${llm_total_cost:.6f} (LLM only)")
+        print(f"   User {user_id} updated successfully")
+        
+        print(f"\n{'='*80}")
+        print(f"✅ TOTAL IMPACT: ${llm_total_cost + tts_total_cost:.6f}")
+        print(f"   - LLM added to DB: ${llm_total_cost:.6f}")
+        print(f"   - TTS tracked: ${tts_total_cost:.6f} (already in DB from get_cached_or_generate_tts)")
+        print(f"{'='*80}\n")
+        
+        return {
+            "llm_cost": round(llm_total_cost, 6),
+            "tts_cost": round(tts_total_cost, 6),
+            "total_cost": round(llm_total_cost + tts_total_cost, 6),
+            "error": None
+        }
+        
+    except Exception as e:
+        print(f"❌ Error recording quick_translate cost: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"llm_cost": 0.0, "tts_cost": 0.0, "total_cost": 0.0, "error": str(e)}
+

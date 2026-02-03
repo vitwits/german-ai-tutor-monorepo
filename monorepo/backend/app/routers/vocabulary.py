@@ -350,7 +350,19 @@ async def quick_translate(
             if not await get_cached_or_generate_tts(part, 'en', current_user.id, db, log_stats=True):
                 return {"ok": False, "error_key": "audio_failed"}
     
-    # 4. Save
+    # 4. Record costs (LLM + TTS)
+    from ..cost_calculation import record_quick_translate_cost
+    cost_result = await record_quick_translate_cost(
+        user_id=current_user.id,
+        word_data=word_data,  # Pass entire word_data with _full_prompt and _full_response
+        db=db
+    )
+    
+    if cost_result.get("error"):
+        print(f"⚠️ Cost calculation error: {cost_result['error']}")
+        # Continue anyway - don't fail translation if cost calc fails
+    
+    # 5. Save
     wid = str(uuid.uuid4())
     
     # Robust indexing logic

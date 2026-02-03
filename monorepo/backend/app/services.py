@@ -30,24 +30,60 @@ def get_tts_client():
     return None
 
 def clean_json_response(text):
-    # 1. Видаляємо Markdown обгортки
+    """
+    Extracts valid JSON from text, handling:
+    1. Markdown code blocks (```json ... ```)
+    2. Multiple JSON objects (returns first valid one)
+    3. Extra text before/after JSON
+    """
+    import json
+    
+    # 1. Remove Markdown wrappers
     text = text.strip()
     text = re.sub(r'^```(?:json)?\s*', '', text)
     text = re.sub(r'\s*```$', '', text)
+    text = text.strip()
     
-    # 2. Шукаємо початок структури
+    # 2. Try to find and parse first valid JSON object/array
     idx_brace = text.find('{')
     idx_bracket = text.find('[')
     
-    # Якщо об'єкт починається раніше (або списку немає) -> це об'єкт
+    # If object starts first (or array doesn't exist) -> try parsing as object
     if idx_brace != -1 and (idx_bracket == -1 or idx_brace < idx_bracket):
+        # Extract from first { onwards
+        json_text = text[idx_brace:]
+        
+        # Try parsing with progressively shorter strings to find valid JSON
+        for end_pos in range(len(json_text), 0, -1):
+            candidate = json_text[:end_pos]
+            try:
+                json.loads(candidate)
+                return candidate  # Found valid JSON!
+            except json.JSONDecodeError:
+                continue
+        
+        # Fallback: return from first { to last }
         last_brace = text.rfind('}')
-        if last_brace != -1: return text[idx_brace:last_brace+1]
+        if last_brace != -1:
+            return text[idx_brace:last_brace+1]
 
-    # Якщо список починається раніше (або об'єкта немає) -> це список
+    # If array starts first (or object doesn't exist) -> try parsing as array
     if idx_bracket != -1 and (idx_brace == -1 or idx_bracket < idx_brace):
+        json_text = text[idx_bracket:]
+        
+        # Try parsing with progressively shorter strings
+        for end_pos in range(len(json_text), 0, -1):
+            candidate = json_text[:end_pos]
+            try:
+                json.loads(candidate)
+                return candidate
+            except json.JSONDecodeError:
+                continue
+        
+        # Fallback: return from first [ to last ]
         last_bracket = text.rfind(']')
-        if last_bracket != -1: return text[idx_bracket:last_bracket+1]
+        if last_bracket != -1:
+            return text[idx_bracket:last_bracket+1]
 
     return text
 
@@ -330,6 +366,17 @@ async def translate_word(text, ctx, db: AsyncSession = None):
     # Замінюємо placeholders
     prompt = prompt_template.replace("{text}", text).replace("{ctx}", ctx).replace("{word_count}", str(len(text.split())))
     
+    # DEBUG: Log input to LLM
+    print(f"\n{'='*80}")
+    print(f"📤 LLM INPUT TO translate_word:")
+    print(f"{'='*80}")
+    print(f"   model_id: {model_id}")
+    print(f"   text: '{text}'")
+    print(f"   ctx: '{ctx[:100]}...'")
+    print(f"\n   📝 FULL PROMPT TO GEMINI:")
+    print(f"   chars: {len(prompt)}")
+    print(f"   content:\n{prompt}\n")
+    
     try:
         response = client.models.generate_content(
             model=model_id,
@@ -338,10 +385,25 @@ async def translate_word(text, ctx, db: AsyncSession = None):
                 response_mime_type="application/json"
             )
         )
+        
+        # DEBUG: Log output from LLM
+        print(f"\n{'='*80}")
+        print(f"📥 LLM OUTPUT FROM translate_word:")
+        print(f"{'='*80}")
+        print(f"   raw response chars: {len(response.text)}")
+        print(f"   raw response:\n{response.text}\n")
+        
         data = json.loads(clean_json_response(response.text))
         # Handle edge case where LLM returns a list
         if isinstance(data, list):
             data = data[0] if data else {}
+        
+        print(f"   parsed JSON:\n{json.dumps(data, ensure_ascii=False, indent=2)}\n")
+        
+        # Store full prompt and response for cost calculation
+        data["_full_prompt"] = prompt
+        data["_full_response"] = response.text
+        
         return data
     except Exception as e:
         print(f"Translate Error: {e}")
