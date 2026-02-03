@@ -220,6 +220,7 @@ async def get_library(
     fav: bool = False,
     levels: str = None,
     search: str = None,
+    sort: str = "date_desc",
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -254,7 +255,13 @@ async def get_library(
     total_count_res = await db.execute(count_query)
     total_count = total_count_res.scalar_one()
 
-    query = query.order_by(Lesson.id.desc()).offset((page - 1) * per_page).limit(per_page)
+    # Apply sorting
+    if sort == "date_asc":
+        query = query.order_by(Lesson.created_at.asc())
+    else:  # default: date_desc
+        query = query.order_by(Lesson.created_at.desc())
+    
+    query = query.offset((page - 1) * per_page).limit(per_page)
     result = await db.execute(query)
     lessons = result.scalars().all()
     
