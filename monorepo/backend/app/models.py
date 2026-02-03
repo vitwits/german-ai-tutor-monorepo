@@ -270,6 +270,18 @@ class ModelPrompt(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
 
 
+class BillingPlan(Base):
+    __tablename__ = "billing_plans"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    monthly_credit: Mapped[float] = mapped_column(Float, nullable=False)  # USD per month
+    max_cap_days: Mapped[int] = mapped_column(Integer, nullable=False)  # Days for credit accumulation
+    day_energy: Mapped[int] = mapped_column(Integer, nullable=False)  # Energy points per day
+    
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
+
+
 class ReportedLesson(Base):
     __tablename__ = "reported_lessons"
     

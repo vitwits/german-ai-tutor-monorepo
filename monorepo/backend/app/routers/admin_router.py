@@ -13,7 +13,7 @@ from datetime import timedelta
 from pydantic import BaseModel
 
 from ..database import get_db
-from ..models import User, Sentence, SentenceBatch, TempSentence, TTSLog, LLMModel, TTSModel, LLMPrice, TTSVoice, AIPreference, ModelPrompt, Lesson, ReportedLesson, LessonAudio, Vocabulary
+from ..models import User, Sentence, SentenceBatch, TempSentence, TTSLog, LLMModel, TTSModel, LLMPrice, TTSVoice, AIPreference, ModelPrompt, Lesson, ReportedLesson, LessonAudio, Vocabulary, BillingPlan
 from ..dependencies import get_current_user
 from ..security import verify_password, create_access_token
 from sqlalchemy import delete
@@ -30,6 +30,11 @@ class ModelPromptUpdate(BaseModel):
     name: Optional[str] = None
     page: Optional[str] = None
     prompt: Optional[str] = None
+
+class BillingPlanUpdate(BaseModel):
+    monthly_credit: float
+    max_cap_days: int
+    day_energy: int
 
 # Dependency to check admin access - returns None if not authenticated
 async def get_admin_user(request: Request, db: AsyncSession = Depends(get_db)) -> Optional[User]:
@@ -378,7 +383,6 @@ async def caching_stats(
     <body>
         <nav class="navbar">
             <div class="navbar-container">
-                <a class="navbar-brand" href="/admin">🎓 Admin</a>
                 <ul class="nav-menu">
                     <li class="nav-item"><a class="nav-link" href="/admin">Dashboard</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
@@ -390,6 +394,7 @@ async def caching_stats(
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-voices">TTS Voices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/billing">Billing</a></li>
                     <li class="nav-item"><a class="nav-link active" href="/admin/caching-stats">Stats</a></li>
                 </ul>
                 <div class="nav-right">
@@ -476,7 +481,6 @@ async def admin_index(
     <body>
         <nav class="navbar">
             <div class="navbar-container">
-                <a class="navbar-brand" href="/admin">🎓 Admin</a>
                 <ul class="nav-menu">
                     <li class="nav-item"><a class="nav-link active" href="/admin">Dashboard</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
@@ -488,6 +492,7 @@ async def admin_index(
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-voices">TTS Voices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/billing">Billing</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
                 </ul>
                 <div class="nav-right">
@@ -690,7 +695,6 @@ async def sentence_list(
     <body>
         <nav class="navbar">
             <div class="navbar-container">
-                <a class="navbar-brand" href="/admin">🎓 Admin</a>
                 <ul class="nav-menu">
                     <li class="nav-item"><a class="nav-link" href="/admin">Dashboard</a></li>
                     <li class="nav-item"><a class="nav-link active" href="/admin/sentence/list">Sentences</a></li>
@@ -702,6 +706,7 @@ async def sentence_list(
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-voices">TTS Voices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/billing">Billing</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
                 </ul>
                 <div class="nav-right">
@@ -990,7 +995,6 @@ async def reported_sentences(
     <body>
         <nav class="navbar">
             <div class="navbar-container">
-                <a class="navbar-brand" href="/admin">🎓 Admin</a>
                 <ul class="nav-menu">
                     <li class="nav-item"><a class="nav-link" href="/admin">Dashboard</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
@@ -1002,6 +1006,7 @@ async def reported_sentences(
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-voices">TTS Voices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/billing">Billing</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
                 </ul>
                 <div class="nav-right">
@@ -1255,7 +1260,6 @@ async def admin_users(
     <body>
         <nav class="navbar">
             <div class="navbar-container">
-                <a class="navbar-brand" href="/admin">🎓 Admin</a>
                 <ul class="nav-menu">
                     <li class="nav-item"><a class="nav-link" href="/admin">Dashboard</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
@@ -1267,6 +1271,7 @@ async def admin_users(
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-voices">TTS Voices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/billing">Billing</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
                 </ul>
                 <div class="nav-right">
@@ -1355,7 +1360,7 @@ async def edit_user(
     <body>
         <nav class="navbar">
             <div class="navbar-container">
-                <a class="navbar-brand" href="/admin">🎓 Admin</a>
+                
                 <ul class="nav-menu">
                     <li class="nav-item"><a class="nav-link" href="/admin">Dashboard</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
@@ -1367,6 +1372,7 @@ async def edit_user(
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-voices">TTS Voices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/billing">Billing</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
                 </ul>
                 <div class="nav-right">
@@ -1529,7 +1535,7 @@ async def edit_sentence(
     </head>
     <body>
         <nav class="navbar navbar-dark bg-dark">
-            <a class="navbar-brand" href="/admin">🎓 DE Tutor Admin</a>
+            
         </nav>
         <div class="container">
             <h1>Edit Sentence #{sentence_id}</h1>
@@ -1641,7 +1647,7 @@ async def batch_preview(
     </head>
     <body>
         <nav class="navbar navbar-dark bg-dark">
-            <a class="navbar-brand" href="/admin">🎓 DE Tutor Admin</a>
+            
         </nav>
         <div class="container-fluid">
             <div class="row mb-3">
@@ -1808,7 +1814,7 @@ async def generate_view(
     <body>
         <nav class="navbar">
             <div class="navbar-container">
-                <a class="navbar-brand" href="/admin">🎓 Admin</a>
+                
                 <ul class="nav-menu">
                     <li class="nav-item"><a class="nav-link" href="/admin">Dashboard</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
@@ -1820,6 +1826,7 @@ async def generate_view(
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-voices">TTS Voices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
                     <li class="nav-item"><a class="nav-link active" href="/admin/generate">Generate</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/billing">Billing</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
                 </ul>
                 <div class="nav-right">
@@ -2283,7 +2290,7 @@ async def llm_prices_list(
     <body>
         <nav class="navbar">
             <div class="navbar-container">
-                <a class="navbar-brand" href="/admin">🎓 Admin</a>
+                
                 <ul class="nav-menu">
                     <li class="nav-item"><a class="nav-link" href="/admin">Dashboard</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
@@ -2295,6 +2302,7 @@ async def llm_prices_list(
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-voices">TTS Voices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/billing">Billing</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
                 </ul>
                 <div class="nav-right">
@@ -2557,7 +2565,7 @@ async def llm_models_page(
     <body>
         <nav class="navbar">
             <div class="navbar-container">
-                <a class="navbar-brand" href="/admin">🎓 Admin</a>
+                
                 <ul class="nav-menu">
                     <li class="nav-item"><a class="nav-link" href="/admin">Dashboard</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
@@ -2569,6 +2577,7 @@ async def llm_models_page(
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-voices">TTS Voices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/billing">Billing</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
                 </ul>
                 <div class="nav-right">
@@ -2812,7 +2821,7 @@ async def tts_models_page(
     <body>
         <nav class="navbar">
             <div class="navbar-container">
-                <a class="navbar-brand" href="/admin">🎓 Admin</a>
+                
                 <ul class="nav-menu">
                     <li class="nav-item"><a class="nav-link" href="/admin">Dashboard</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
@@ -2824,6 +2833,7 @@ async def tts_models_page(
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-voices">TTS Voices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/billing">Billing</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
                 </ul>
                 <div class="nav-right">
@@ -3303,7 +3313,7 @@ async def tts_voices_list(
     <body>
         <nav class="navbar">
             <div class="navbar-container">
-                <a class="navbar-brand" href="/admin">🎓 Admin</a>
+                
                 <ul class="nav-menu">
                     <li class="nav-item"><a class="nav-link" href="/admin">Dashboard</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
@@ -3315,6 +3325,7 @@ async def tts_voices_list(
                     <li class="nav-item"><a class="nav-link active" href="/admin/tts-voices">TTS Voices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/billing">Billing</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
                 </ul>
                 <div class="nav-right">
@@ -3895,7 +3906,7 @@ async def ai_preferences_page(
     <body>
         <nav class="navbar">
             <div class="navbar-container">
-                <a class="navbar-brand" href="/admin">🎓 Admin</a>
+                
                 <ul class="nav-menu">
                     <li class="nav-item"><a class="nav-link" href="/admin">Dashboard</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
@@ -3907,6 +3918,7 @@ async def ai_preferences_page(
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-voices">TTS Voices</a></li>
                     <li class="nav-item"><a class="nav-link active" href="/admin/ai-preferences">AI Preferences</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/billing">Billing</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
                 </ul>
                 <div class="nav-right">
@@ -4908,5 +4920,198 @@ async def delete_lesson_report(
     except Exception as e:
         await db.rollback()
         raise HTTPException(500, str(e))
+
+
+@router.get("/billing", response_class=HTMLResponse)
+async def billing_page(request: Request, db: AsyncSession = Depends(get_db)):
+    """Display billing settings page"""
+    admin_user = await get_admin_user(request, db)
+    if not admin_user:
+        return RedirectResponse(url="/admin/login")
+    
+    # Fetch billing plan from database
+    result = await db.execute(select(BillingPlan))
+    plan = result.scalar_one_or_none()
+    
+    # Default values if no plan exists
+    monthly_credit = plan.monthly_credit if plan else 10.0
+    max_cap_days = plan.max_cap_days if plan else 30
+    day_energy = plan.day_energy if plan else 100.0
+    
+    current_user = admin_user
+    
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Billing Settings - Admin Panel</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+            * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+            body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background: #f5f5f5; color: #333; }}
+            .navbar {{ display: block!important; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 30px; }}
+            .navbar-container {{ display: flex; align-items: center; justify-content: flex-start; padding: 0 30px; height: 50px; gap: 40px; }}
+            .nav-menu {{ display: flex; gap: 0; list-style: none; margin: 0; padding: 0; }}
+            .nav-item {{ position: relative; }}
+            .nav-link {{ color: rgba(255,255,255,0.9); text-decoration: none; padding: 15px 12px; font-size: 0.9em; font-weight: 500; transition: all 0.3s; border-bottom: 3px solid transparent; height: 50px; display: flex; align-items: center; white-space: nowrap; }}
+            .nav-link:hover {{ color: white; background-color: rgba(255,255,255,0.1); border-bottom-color: rgba(255,255,255,0.3); }}
+            .nav-link.active {{ color: white; background-color: rgba(255,255,255,0.15); border-bottom-color: white; }}
+            .nav-right {{ display: flex; gap: 8px; align-items: center; margin-left: auto; color: white; font-size: 0.85em; white-space: nowrap; }}
+            .nav-right a.nav-link {{ padding: 8px 12px; height: auto; border-bottom: none; }}
+            .container-main {{ max-width: 800px; margin: 0 auto; padding: 30px; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }}
+            h1 {{ font-size: 2em; margin-bottom: 10px; color: #333; }}
+            .subtitle {{ color: #666; margin-bottom: 30px; font-size: 0.95em; }}
+            .form-group {{ margin-bottom: 25px; }}
+            label {{ display: block; margin-bottom: 8px; font-weight: 600; color: #333; font-size: 0.95em; }}
+            input[type="number"], input[type="text"] {{ width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 4px; font-size: 1em; transition: border-color 0.3s; }}
+            input[type="number"]:focus, input[type="text"]:focus {{ outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); }}
+            .help-text {{ font-size: 0.85em; color: #666; margin-top: 6px; }}
+            .button-group {{ display: flex; gap: 12px; margin-top: 40px; }}
+            button {{ padding: 12px 24px; border: none; border-radius: 4px; font-size: 1em; font-weight: 600; cursor: pointer; transition: all 0.3s; }}
+            .btn-save {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }}
+            .btn-save:hover {{ transform: translateY(-2px); box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4); }}
+            .btn-cancel {{ background: #f0f0f0; color: #333; }}
+            .btn-cancel:hover {{ background: #e0e0e0; }}
+            .alert {{ padding: 16px; border-radius: 4px; margin-bottom: 20px; font-weight: 600; }}
+            .alert-success {{ background: #d4edda; color: #155724; border-left: 4px solid #28a745; }}
+            .alert-error {{ background: #f8d7da; color: #721c24; border-left: 4px solid #f5c6cb; }}
+            #message {{ display: none; }}
+        </style>
+    </head>
+    <body>
+        <nav class="navbar">
+            <div class="navbar-container">
+                <ul class="nav-menu">
+                    <li class="nav-item"><a class="nav-link" href="/admin">Dashboard</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/users">Users</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/llm-prices">LLM Prices</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/llm-models">LLM Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/tts-models">TTS Models</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/tts-voices">TTS Voices</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="/admin/billing">Billing</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
+                </ul>
+                <div class="nav-right">
+                    <span title="{current_user.email}">{current_user.email.split("@")[0]}</span>
+                    <a class="nav-link" href="/admin/logout">Logout</a>
+                </div>
+            </div>
+        </nav>
+        
+        <div class="container-main">
+            <h1>💰 Billing Settings</h1>
+            <p class="subtitle">Configure billing plans and credit parameters.</p>
+            
+            <div id="message"></div>
+            
+            <form id="billingForm">
+                <div class="form-group">
+                    <label for="monthly_credit">Monthly Credit (USD)</label>
+                    <input type="number" id="monthly_credit" name="monthly_credit" value="{monthly_credit}" step="0.01" min="0" required>
+                    <div class="help-text">💵 Total USD available per month for API calls</div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="max_cap_days">Max Cap Days</label>
+                    <input type="number" id="max_cap_days" name="max_cap_days" value="{max_cap_days}" min="1" required>
+                    <div class="help-text">📅 Number of days credits can accumulate</div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="day_energy">Daily Energy Points</label>
+                    <input type="number" id="day_energy" name="day_energy" value="{day_energy}" min="0" required>
+                    <div class="help-text">⚡ Energy points awarded to users each day</div>
+                </div>
+                
+                <div class="button-group">
+                    <button type="submit" class="btn-save">✅ Save Settings</button>
+                    <button type="button" class="btn-cancel" onclick="location.reload()">❌ Cancel</button>
+                </div>
+            </form>
+        </div>
+        
+        <script>
+            const form = document.getElementById('billingForm');
+            const messageDiv = document.getElementById('message');
+            
+            form.addEventListener('submit', async (e) => {{
+                e.preventDefault();
+                
+                const data = {{
+                    monthly_credit: parseFloat(document.getElementById('monthly_credit').value),
+                    max_cap_days: parseInt(document.getElementById('max_cap_days').value),
+                    day_energy: parseFloat(document.getElementById('day_energy').value)
+                }};
+                
+                try {{
+                    const response = await fetch('/admin/billing-settings', {{
+                        method: 'POST',
+                        headers: {{'Content-Type': 'application/json'}},
+                        body: JSON.stringify(data)
+                    }});
+                    
+                    const result = await response.json();
+                    
+                    if (response.ok) {{
+                        messageDiv.className = 'alert alert-success';
+                        messageDiv.textContent = '✅ Billing settings saved successfully!';
+                        messageDiv.style.display = 'block';
+                    }} else {{
+                        messageDiv.className = 'alert alert-error';
+                        messageDiv.textContent = '❌ Error: ' + (result.detail || 'Failed to save');
+                        messageDiv.style.display = 'block';
+                    }}
+                }} catch (error) {{
+                    messageDiv.className = 'alert alert-error';
+                    messageDiv.textContent = '❌ Error: ' + error.message;
+                    messageDiv.style.display = 'block';
+                }}
+            }});
+        </script>
+    </body>
+    </html>
+    """
+    
+    return html
+
+
+@router.post("/billing-settings")
+async def save_billing_settings(
+    data: BillingPlanUpdate,
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Save or update billing plan settings"""
+    try:
+        # Get existing plan or create new one
+        result = await db.execute(select(BillingPlan))
+        plan = result.scalar_one_or_none()
+        
+        if plan:
+            # Update existing
+            plan.monthly_credit = data.monthly_credit
+            plan.max_cap_days = data.max_cap_days
+            plan.day_energy = data.day_energy
+        else:
+            # Create new
+            plan = BillingPlan(
+                monthly_credit=data.monthly_credit,
+                max_cap_days=data.max_cap_days,
+                day_energy=data.day_energy
+            )
+            db.add(plan)
+        
+        await db.commit()
+        return {"ok": True, "message": "Billing settings saved"}
+    
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(500, str(e))
+
 
 
