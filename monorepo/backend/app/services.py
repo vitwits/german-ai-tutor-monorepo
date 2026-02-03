@@ -2,12 +2,12 @@ import os
 import re
 import json
 import random
+import subprocess
 from typing import Optional
 from google import genai
 from google.genai import types
 from google.cloud import texttospeech
 from dotenv import load_dotenv
-import azure.cognitiveservices.speech as speechsdk
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -28,6 +28,184 @@ def get_tts_client():
     if os.path.exists(os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")):
         return texttospeech.TextToSpeechClient()
     return None
+
+def get_audio_duration_exact(audio_bytes: bytes, mime_type: str = 'audio/webm') -> float:
+    """
+    Get exact audio duration using ffprobe.
+    
+    Args:
+        audio_bytes: Raw audio data
+        mime_type: MIME type of audio
+    
+    Returns:
+        Duration in seconds (float), or 0 if unable to determine
+    """
+    try:
+        import tempfile
+        
+        # Write bytes to temporary file
+        with tempfile.NamedTemporaryFile(suffix='.webm', delete=False) as tmp:
+            tmp.write(audio_bytes)
+            tmp_path = tmp.name
+        
+        try:
+            # Use ffprobe to get exact duration
+            result = subprocess.run(
+                [
+                    'ffprobe',
+                    '-v', 'error',
+                    '-show_entries', 'format=duration',
+                    '-of', 'default=noprint_wrappers=1:nokey=1',
+                    tmp_path
+                ],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            
+            if result.returncode == 0 and result.stdout.strip():
+                try:
+                    duration = float(result.stdout.strip())
+                    print(f"   ⏱️  Duration (ffprobe exact): {duration:.3f}s")
+                    return duration
+                except ValueError:
+                    print(f"   ⚠️  Could not parse ffprobe output: {result.stdout}")
+                    return 0
+            else:
+                print(f"   ⚠️  ffprobe error: {result.stderr}")
+                return 0
+        finally:
+            # Clean up temp file
+            if os.path.exists(tmp_path):
+                try:
+                    os.unlink(tmp_path)
+                except:
+                    pass
+    
+    except Exception as e:
+        print(f"   ⚠️  Error getting duration: {e}")
+        return 0
+
+
+def trim_audio_silence(audio_bytes: bytes, trim_seconds: float = 2.0, audio_duration_seconds: float = None, mime_type: str = 'audio/webm') -> bytes:
+    """
+    Trims trailing silence from audio using ffmpeg (preserves WebM metadata).
+    Uses -ss and -to flags to trim without re-encoding (stream copy).
+    
+    Args:
+        audio_bytes: Raw audio data in WebM format (Opus codec)
+        trim_seconds: Duration to trim from the end (default: 2.0 seconds - SILENCE_AFTER_SPEECH timeout)
+        audio_duration_seconds: Total audio duration (required to calculate end time)
+        mime_type: MIME type of audio (default: 'audio/webm')
+    
+    Returns:
+        Trimmed audio bytes or original audio if trimming fails
+    """
+    try:
+        print(f"\n🔪 TRIMMING AUDIO WITH FFMPEG:")
+        print(f"   Original size: {len(audio_bytes) / 1024:.1f} KB")
+        print(f"   Trim duration: {trim_seconds} seconds")
+        
+        if not audio_duration_seconds or audio_duration_seconds <= 0:
+            print(f"   ⚠️ Unknown duration, returning original audio")
+            return audio_bytes
+        
+        # Calculate the end time (duration - trim_seconds)
+        end_time = max(0, audio_duration_seconds - trim_seconds)
+        print(f"   Duration: {audio_duration_seconds:.3f}s → keeping until {end_time:.3f}s")
+        
+        # Create temporary files
+        import tempfile
+        import os
+        with tempfile.NamedTemporaryFile(suffix='.webm', delete=False) as tmp_input:
+            tmp_input.write(audio_bytes)
+            tmp_input_path = tmp_input.name
+        
+        with tempfile.NamedTemporaryFile(suffix='.webm', delete=False) as tmp_output:
+            tmp_output_path = tmp_output.name
+        
+        try:
+            # Use ffmpeg to trim without re-encoding
+            # -c copy: stream copy (no re-encoding, instant)
+            # -to: cut to specified duration
+            cmd = [
+                'ffmpeg',
+                '-i', tmp_input_path,
+                '-to', f'{end_time:.3f}',
+                '-c', 'copy',  # Stream copy - no re-encoding
+                '-y',  # Overwrite output
+                tmp_output_path
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, timeout=10)
+            
+            if result.returncode != 0:
+                print(f"   ⚠️ ffmpeg failed: {result.stderr.decode()}")
+                return audio_bytes
+            
+            # Read the trimmed audio
+            with open(tmp_output_path, 'rb') as f:
+                trimmed_bytes = f.read()
+            
+            print(f"   Trimmed size: {len(trimmed_bytes) / 1024:.1f} KB")
+            print(f"   Size reduction: {(1 - len(trimmed_bytes) / len(audio_bytes)) * 100:.1f}%")
+            
+            return trimmed_bytes
+        
+        finally:
+            # Clean up temp files
+            for path in [tmp_input_path, tmp_output_path]:
+                if os.path.exists(path):
+                    try:
+                        os.unlink(path)
+                    except:
+                        pass
+    
+    except Exception as e:
+        print(f"   ⚠️ Trimming failed: {e}")
+        print(f"   Returning original audio")
+        return audio_bytes
+
+def save_audio_for_debug(audio_bytes: bytes, filename_prefix: str = "debug_audio", stop_type: str = None):
+    """
+    Saves audio to debug_audio folder in backend root for debugging purposes.
+    
+    Args:
+        audio_bytes: Raw audio data
+        filename_prefix: Prefix for the file name
+        stop_type: 'auto' or 'manual' - affects filename prefix
+    """
+    try:
+        from datetime import datetime
+        
+        # Construct debug folder path (backend root / debug_audio)
+        backend_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # app -> backend
+        debug_folder = os.path.join(backend_root, "debug_audio")
+        
+        # Create folder if it doesn't exist
+        os.makedirs(debug_folder, exist_ok=True)
+        
+        # Create filename with timestamp and stop_type
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Add stop_type to prefix if provided
+        if stop_type:
+            final_prefix = f"{filename_prefix}_{stop_type}"
+        else:
+            final_prefix = filename_prefix
+        
+        filename = f"{final_prefix}_{timestamp}.webm"
+        filepath = os.path.join(debug_folder, filename)
+        
+        # Write audio file
+        with open(filepath, 'wb') as f:
+            f.write(audio_bytes)
+        
+        print(f"\n💾 DEBUG: Audio saved to: {filepath}")
+        print(f"   File size: {len(audio_bytes) / 1024:.1f} KB")
+        
+    except Exception as e:
+        print(f"   ⚠️ Failed to save debug audio: {e}")
 
 def clean_json_response(text):
     """
@@ -295,7 +473,7 @@ async def get_tts_audio(text, lang='de', db: AsyncSession = None, job_name='gene
         print(f"ERROR in get_tts_audio: {str(e)} for text='{text}', lang={lang}")
         return None
 
-async def evaluate_audio_with_gemini(original_text, audio_bytes, interface_lang, db: AsyncSession = None, mime_type='audio/webm'):
+async def evaluate_audio_with_gemini(original_text, audio_bytes, interface_lang, db: AsyncSession = None, mime_type='audio/webm', stop_type=None):
     """Оцінює аудіо-файл через Gemini. Завантажує модель і prompt з БД."""
     feedback_lang = "Ukrainian" if interface_lang == 'uk' else "English"
     
@@ -312,6 +490,48 @@ async def evaluate_audio_with_gemini(original_text, audio_bytes, interface_lang,
     prompt_template = result.scalar_one_or_none() or ""
     # Замінюємо {original_text} без format() щоб не конфліктувати з JSON дужками
     prompt = prompt_template.replace("{original_text}", original_text)
+    
+    # 🔪 TRIM TRAILING SILENCE if auto-stopped (silence timeout triggered)
+    if stop_type == 'auto':
+        print(f"\n   🔪 Auto-stop detected - trimming trailing silence (2.0 seconds)")
+        
+        # Get exact duration BEFORE trimming
+        duration_before = get_audio_duration_exact(audio_bytes, mime_type)
+        if duration_before == 0:
+            duration_before = len(audio_bytes) / 16000  # Fallback estimate
+        print(f"   📊 Original duration: {duration_before:.3f}s")
+        
+        # Trim 2.0 seconds (silence detection SILENCE_AFTER_SPEECH timeout)
+        trim_seconds_value = 2.0
+        audio_bytes = trim_audio_silence(audio_bytes, trim_seconds=trim_seconds_value, audio_duration_seconds=duration_before, mime_type=mime_type)
+        
+        # After trimming, calculate the new duration
+        audio_duration_seconds = max(0, duration_before - trim_seconds_value)
+        print(f"   ✂️  Duration after trimming: {audio_duration_seconds:.3f}s (calculated: {duration_before:.3f}s - {trim_seconds_value}s)")
+    else:
+        print(f"\n   ℹ️  Stop type: {stop_type or 'unknown'} - no trimming applied")
+        # Get exact duration for manual stop
+        audio_duration_seconds = get_audio_duration_exact(audio_bytes, mime_type)
+        if audio_duration_seconds == 0:
+            audio_duration_seconds = len(audio_bytes) / 16000  # Fallback estimate
+        print(f"   📊 Audio duration: {audio_duration_seconds:.3f}s")
+    
+    # 💾 DEBUG: Save audio file for debugging
+    save_audio_for_debug(audio_bytes, filename_prefix="debug_audio", stop_type=stop_type)
+    
+    print(f"\n{'='*80}")
+    print(f"📤 LLM INPUT TO evaluate_audio_with_gemini:")
+    print(f"{'='*80}")
+    print(f"   model: {llm_model_name}")
+    print(f"   interface_lang: {interface_lang}")
+    print(f"   mime_type: {mime_type}")
+    print(f"   stop_type: {stop_type or 'unknown'}")
+    print(f"\n   📝 TEXT PROMPT:")
+    print(f"      chars: {len(prompt)}")
+    print(f"      content:\n{prompt}\n")
+    print(f"   🔊 AUDIO INPUT:")
+    print(f"      bytes: {len(audio_bytes)}")
+    print(f"      duration: {audio_duration_seconds:.3f} seconds")
     
     try:
         response = client.models.generate_content(
@@ -330,10 +550,28 @@ async def evaluate_audio_with_gemini(original_text, audio_bytes, interface_lang,
                 temperature=0.0 
             )
         )
+        
+        # DEBUG: Log output
+        print(f"\n{'='*80}")
+        print(f"📥 LLM OUTPUT FROM evaluate_audio_with_gemini:")
+        print(f"{'='*80}")
+        print(f"   raw response chars: {len(response.text)}")
+        print(f"   raw response:\n{response.text}\n")
+        
         data = json.loads(clean_json_response(response.text))
         # Handle edge case where LLM returns a list
         if isinstance(data, list):
             data = data[0] if data else {}
+        
+        # DEBUG: Log parsed output
+        print(f"   parsed JSON:\n{json.dumps(data, ensure_ascii=False, indent=2)}\n")
+        
+        # Store full prompt and response for cost calculation
+        data["_full_prompt"] = prompt
+        data["_full_response"] = response.text
+        data["_audio_bytes"] = len(audio_bytes)
+        data["_audio_duration_seconds"] = audio_duration_seconds
+        
         return data
     except Exception as e:
         print(f"Audio Eval Error: {e}")

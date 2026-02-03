@@ -709,3 +709,230 @@ async def record_quick_translate_cost(
         traceback.print_exc()
         return {"llm_cost": 0.0, "tts_cost": 0.0, "total_cost": 0.0, "error": str(e)}
 
+
+async def record_feedback_cost(
+    user_id: str,
+    feedback_data: dict,
+    db=None
+) -> dict:
+    """
+    Record cost for speaking feedback operation (audio evaluation).
+    
+    Calculates:
+    1. Audio input tokens: duration_seconds × AUDIO_TOKENS_PER_SECOND
+    2. Text input tokens: full prompt (counted as English)
+    3. JSON output tokens: split by language (German transcribed_text + correction, rest is English)
+    
+    Writes to user: llm_cost, total_cost
+    
+    Args:
+        user_id: User ID to charge
+        feedback_data: Dict from evaluate_audio_with_gemini() containing:
+                      - _full_prompt (entire text prompt)
+                      - _full_response (raw JSON response)
+                      - _audio_bytes (length of audio bytes)
+                      - _audio_duration_seconds (estimated duration)
+                      - transcribed_text (German transcription)
+                      - correction (German correction, if any)
+                      - pronunciation_score, context_score, grammar_score (scoring results)
+        db: AsyncSession for database operations
+        
+    Returns:
+        Dict with: {llm_cost, total_cost, error (if any)}
+    """
+    if not db:
+        return {"llm_cost": 0.0, "total_cost": 0.0, "error": "No database"}
+    
+    try:
+        from sqlalchemy import select
+        from .models import LLMModel, LLMPrice, User, AIPreference
+        
+        # Extract data
+        full_prompt = feedback_data.get("_full_prompt", "")
+        full_response = feedback_data.get("_full_response", "")
+        audio_bytes_len = feedback_data.get("_audio_bytes", 0)
+        audio_duration_seconds = feedback_data.get("_audio_duration_seconds", 0.0)
+        transcribed_text = feedback_data.get("transcribed_text", "")
+        correction = feedback_data.get("correction") or ""  # Handle null/None by converting to empty string
+        
+        print(f"\n{'='*80}")
+        print(f"🔍 DEBUG record_feedback_cost")
+        print(f"{'='*80}")
+        print(f"   user_id: {user_id}")
+        
+        print(f"\n   📝 FULL LLM EXCHANGE:")
+        print(f"      INPUT prompt: {len(full_prompt)} chars")
+        print(f"      INPUT audio: {audio_bytes_len} bytes (~{audio_duration_seconds:.2f} seconds)")
+        print(f"      OUTPUT response: {len(full_response)} chars")
+        
+        print(f"\n   📝 RESPONSE CONTENT:")
+        print(f"      transcribed_text (DE): '{transcribed_text}' ({len(transcribed_text)} chars)")
+        print(f"      correction (DE): '{correction}' ({len(correction)} chars)")
+        
+        # ============================================
+        # PART 1: INPUT TOKENS CALCULATION
+        # ============================================
+        print(f"\n📊 PART 1: INPUT TOKENS CALCULATION")
+        print(f"{'-'*80}")
+        
+        # Step 1.1: Get LLM model
+        llm_model_result = await db.execute(
+            select(LLMModel).join(
+                AIPreference, AIPreference.llm_model_id == LLMModel.id
+            ).where(
+                AIPreference.job == "speaking_feedback",
+                LLMModel.is_active == True
+            )
+        )
+        llm_model = llm_model_result.scalar_one_or_none()
+        
+        if not llm_model:
+            print(f"⚠️ LLM model not found for job='speaking_feedback'")
+            return {"llm_cost": 0.0, "total_cost": 0.0, "error": "LLM model not found"}
+        
+        print(f"   LLM Model: {llm_model.human_name} (id={llm_model.model_id})")
+        
+        # Step 1.2: Get LLM prices (input + output)
+        # For feedback: we need combined input (text + audio), but pricing is usually unified
+        # Get text input price first, then audio input price separately
+        input_price_result = await db.execute(
+            select(LLMPrice).where(
+                LLMPrice.llm_model_id == llm_model.id,
+                LLMPrice.direction == "input",
+                LLMPrice.data_type == "text",  # Text input pricing
+                LLMPrice.is_active == True
+            )
+        )
+        input_price = input_price_result.scalar_one_or_none()
+        
+        # Get audio input price if available
+        audio_input_price_result = await db.execute(
+            select(LLMPrice).where(
+                LLMPrice.llm_model_id == llm_model.id,
+                LLMPrice.direction == "input",
+                LLMPrice.data_type == "audio",  # Audio input pricing
+                LLMPrice.is_active == True
+            )
+        )
+        audio_input_price = audio_input_price_result.scalar_one_or_none()
+        
+        output_price_result = await db.execute(
+            select(LLMPrice).where(
+                LLMPrice.llm_model_id == llm_model.id,
+                LLMPrice.direction == "output",
+                LLMPrice.data_type == "text",  # Text output pricing
+                LLMPrice.is_active == True
+            )
+        )
+        output_price = output_price_result.scalar_one_or_none()
+        
+        if not input_price or not output_price:
+            print(f"⚠️ LLM prices not found for model {llm_model.model_id}")
+            return {"llm_cost": 0.0, "total_cost": 0.0, "error": "LLM prices not found"}
+        
+        # Use audio price if available, otherwise use text price for audio tokens
+        effective_audio_input_price = audio_input_price if audio_input_price else input_price
+        
+        print(f"   Text input price: ${input_price.price_per_unit}/млн tokens")
+        print(f"   Audio input price: ${effective_audio_input_price.price_per_unit}/млн tokens")
+        print(f"   Output price: ${output_price.price_per_unit}/млн tokens")
+        
+        # Step 1.3: Calculate input tokens (text prompt as English + audio)
+        text_input_tokens = calculate_text_output_tokens(full_prompt, "en")
+        
+        # Audio tokens: duration × 25 tokens/second (with decimal precision)
+        audio_input_tokens = audio_duration_seconds * AUDIO_TOKENS_PER_SECOND
+        
+        total_input_tokens = text_input_tokens + audio_input_tokens
+        
+        print(f"\n   📝 INPUT TOKENS:")
+        print(f"      text prompt: {len(full_prompt)} chars → {text_input_tokens:.2f} tokens (en 4.0 ratio)")
+        print(f"      audio duration: {audio_duration_seconds:.2f} seconds → {audio_input_tokens:.2f} tokens (25 tokens/sec)")
+        print(f"      TOTAL INPUT: {total_input_tokens:.2f} tokens")
+        
+        # ============================================
+        # PART 2: OUTPUT TOKENS CALCULATION
+        # ============================================
+        print(f"\n📊 PART 2: OUTPUT TOKENS CALCULATION")
+        print(f"{'-'*80}")
+        
+        # Step 2.1: Calculate German content (transcribed_text + correction)
+        german_content = transcribed_text + correction
+        german_chars = len(german_content)
+        german_tokens = calculate_text_output_tokens(german_content, "de")
+        
+        # Step 2.2: Calculate English content (remainder of JSON)
+        total_json_chars = len(full_response)
+        english_chars = total_json_chars - german_chars
+        english_tokens = calculate_text_output_tokens("x" * english_chars, "en") if english_chars > 0 else 0
+        
+        total_output_tokens = german_tokens + english_tokens
+        
+        print(f"\n   📝 OUTPUT TOKENS (split by language):")
+        print(f"      german (transcribed + correction): {german_chars} chars → {german_tokens:.2f} tokens (4.0 ratio)")
+        print(f"         transcribed_text: '{transcribed_text}' ({len(transcribed_text)} chars)")
+        print(f"         correction: '{correction}' ({len(correction)} chars)")
+        print(f"      english (JSON markup + rest): {english_chars} chars → {english_tokens:.2f} tokens (4.0 ratio)")
+        print(f"      TOTAL OUTPUT: {total_output_tokens:.2f} tokens")
+        
+        # ============================================
+        # PART 3: COST CALCULATION
+        # ============================================
+        print(f"\n📊 PART 3: COST CALCULATION")
+        print(f"{'-'*80}")
+        
+        # Calculate input cost (text + audio with separate pricing)
+        text_input_cost = (text_input_tokens / 1_000_000) * input_price.price_per_unit
+        audio_input_cost = (audio_input_tokens / 1_000_000) * effective_audio_input_price.price_per_unit
+        total_input_cost = text_input_cost + audio_input_cost
+        
+        # Calculate output cost
+        output_cost = (total_output_tokens / 1_000_000) * output_price.price_per_unit
+        
+        # Total cost
+        total_cost = total_input_cost + output_cost
+        
+        print(f"   💰 LLM COSTS:")
+        print(f"      text_input_cost: ({text_input_tokens:.2f} / 1M) × ${input_price.price_per_unit} = ${text_input_cost:.6f}")
+        print(f"      audio_input_cost: ({audio_input_tokens:.2f} / 1M) × ${effective_audio_input_price.price_per_unit} = ${audio_input_cost:.6f}")
+        print(f"      total_input_cost: ${total_input_cost:.6f}")
+        print(f"      output_cost: ({total_output_tokens:.2f} / 1M) × ${output_price.price_per_unit} = ${output_cost:.6f}")
+        print(f"      total_llm_cost: ${total_cost:.6f}")
+        
+        # ============================================
+        # PART 4: UPDATE USER IN DATABASE
+        # ============================================
+        print(f"\n📊 PART 4: UPDATE USER DATABASE")
+        print(f"{'-'*80}")
+        
+        user_result = await db.execute(select(User).where(User.id == user_id))
+        user = user_result.scalar_one_or_none()
+        
+        if not user:
+            print(f"⚠️ User not found: {user_id}")
+            return {"llm_cost": 0.0, "total_cost": 0.0, "error": f"User not found"}
+        
+        # Update user costs
+        user.llm_cost = (user.llm_cost or 0.0) + total_cost
+        user.total_cost = (user.total_cost or 0.0) + total_cost
+        await db.commit()
+        
+        print(f"   ✅ llm_cost added: ${total_cost:.6f}")
+        print(f"   ✅ total_cost added: ${total_cost:.6f}")
+        print(f"   User {user_id} updated successfully")
+        
+        print(f"\n{'='*80}")
+        print(f"✅ SPEAKING FEEDBACK COST RECORDED: ${total_cost:.6f}")
+        print(f"{'='*80}\n")
+        
+        return {
+            "llm_cost": round(total_cost, 6),
+            "total_cost": round(total_cost, 6),
+            "error": None
+        }
+        
+    except Exception as e:
+        print(f"❌ Error recording feedback cost: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"llm_cost": 0.0, "total_cost": 0.0, "error": str(e)}

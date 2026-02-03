@@ -57,6 +57,7 @@ async def speaking_next(
 async def evaluate_audio(
     audio: UploadFile = File(...),
     original_text: str = Form(...),
+    stop_type: str = Form(None),  # 'auto' or 'manual' - whether silence timeout or user button stopped recording
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -64,7 +65,26 @@ async def evaluate_audio(
     lang_code = 'uk' if current_user.interface_language == 'ukr' else 'en'
     
     # Використовуємо динамічну модель з ai_preferences 'speaking_feedback' job
-    result = await services.evaluate_audio_with_gemini(original_text, audio_bytes, lang_code, db=db, mime_type=audio.content_type)
+    result = await services.evaluate_audio_with_gemini(
+        original_text, 
+        audio_bytes, 
+        lang_code, 
+        db=db, 
+        mime_type=audio.content_type,
+        stop_type=stop_type  # Pass stop type for audio trimming decision
+    )
+    
+    # Record cost (LLM input: text + audio, output: JSON with German transcription/correction)
+    from ..cost_calculation import record_feedback_cost
+    cost_result = await record_feedback_cost(
+        user_id=current_user.id,
+        feedback_data=result,
+        db=db
+    )
+    
+    if cost_result.get("error"):
+        print(f"⚠️ Cost calculation error: {cost_result['error']}")
+        # Continue anyway - don't fail evaluation if cost calc fails
     
     # Calculate average
     avg = int((result.get('pronunciation_score', 0) + result.get('context_score', 0) + result.get('grammar_score', 0)) / 3)
