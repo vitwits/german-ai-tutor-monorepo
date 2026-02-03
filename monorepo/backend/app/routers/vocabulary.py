@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, update, delete
 
 from ..database import get_db
-from ..models import User, Vocabulary, UserFavoriteSentence, Sentence
+from ..models import User, Vocabulary, UserFavoriteSentence, Sentence, ReportedLesson
 from ..schemas import VocabUpdateRequest, VocabRemoveRequest, ToggleFavRequest, VocabProgressRequest, QuickTranslateRequest, VocabWordSchema
 from ..dependencies import get_current_user
 from .. import services, billing
@@ -495,4 +495,43 @@ async def remove_word(
             )
         
     await db.commit()
+    return {"ok": True}
+
+@router.post("/report_text")
+async def report_text(
+    request_data: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Report a text/lesson as problematic.
+    The text goes into quarantine and won't appear for this user anymore.
+    Admins can review and take action (ignore or delete).
+    """
+    lesson_id = request_data.get('id')
+    
+    if not lesson_id:
+        raise HTTPException(400, "lesson_id required")
+    
+    # Check if already reported by this user
+    existing = await db.execute(
+        select(ReportedLesson).where(
+            ReportedLesson.lesson_id == lesson_id,
+            ReportedLesson.user_id == current_user.id,
+            ReportedLesson.status == 'reported'
+        )
+    )
+    
+    if existing.scalar_one_or_none():
+        return {"ok": False, "error": "already_reported"}
+    
+    # Create report
+    report = ReportedLesson(
+        lesson_id=lesson_id,
+        user_id=current_user.id,
+        status='reported'
+    )
+    db.add(report)
+    await db.commit()
+    
     return {"ok": True}

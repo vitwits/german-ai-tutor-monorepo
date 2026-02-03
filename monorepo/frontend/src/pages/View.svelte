@@ -358,6 +358,28 @@
     }, 2000);
   }
 
+  async function reportText() {
+    if (!text) return;
+    
+    const isUkr = $user?.interface_language === 'ukr';
+    const title = isUkr ? "Повідомити про проблему?" : "Report issue?";
+    const message = isUkr 
+        ? "Цей текст буде позначений як проблемний для адміністраторів, і ви більше його не будете бачити."
+        : "This text will be reported to administrators and won't appear for you again.";
+    const okText = isUkr ? "Повідомити" : "Report";
+    const cancelText = isUkr ? "Скасувати" : "Cancel";
+    
+    const confirmed = await confirmModal.ask(title, message, okText, cancelText, true);
+    
+    if (!confirmed) return;
+    
+    try {
+        await api.post('/report_text', { id });
+        addToast(ui.text_reported || "Reported", "success");
+        router.goto('/library');
+    } catch(e) { console.error(e); }
+  }
+
   async function quickTranslate() {
     // Блокируем двойное нажатие
     if (isTranslating) return;
@@ -728,6 +750,10 @@
                     <span class="material-symbols-outlined {text.is_favorite ? 'filled' : ''}">favorite</span>
                 </button>
 
+                <button class="report-btn" title={ui.report_sentence} onclick={reportText}>
+                    <span class="material-symbols-outlined">flag</span>
+                </button>
+
                 <button class="btn-contained" onclick={playAll} style="margin-left: auto;">
                     <span class="material-symbols-outlined">{isPlayingAll ? 'pause' : 'play_arrow'}</span> 
                     {isPlayingAll ? ui.stop : ui.play_all}
@@ -938,6 +964,13 @@
         cursor: pointer; transition: all 0.2s;
     }
     .badge-btn:hover { opacity: 0.7; }
+
+    .report-btn {
+        padding: 4px 12px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center;
+        min-width: 28px; height: 30px; border: none; background: transparent; color: #d32f2f;
+        cursor: pointer; transition: opacity 0.2s; opacity: 0.5;
+    }
+    .report-btn:hover { opacity: 1; }
 
     /* Tabs */
     .tabs-container { display: flex; width: 100%; margin-top: 30px; }

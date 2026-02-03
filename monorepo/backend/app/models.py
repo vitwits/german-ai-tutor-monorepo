@@ -269,3 +269,15 @@ class ModelPrompt(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
 
+
+class ReportedLesson(Base):
+    __tablename__ = "reported_lessons"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    lesson_id: Mapped[str] = mapped_column(ForeignKey("lessons.id"), nullable=False)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    status: Mapped[str] = mapped_column(String, default='reported')  # reported, ignored, deleted
+    admin_notes: Mapped[Optional[str]] = mapped_column(DBText)
+    reported_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+

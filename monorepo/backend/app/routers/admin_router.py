@@ -13,7 +13,7 @@ from datetime import timedelta
 from pydantic import BaseModel
 
 from ..database import get_db
-from ..models import User, Sentence, SentenceBatch, TempSentence, TTSLog, LLMModel, TTSModel, LLMPrice, TTSVoice, AIPreference, ModelPrompt
+from ..models import User, Sentence, SentenceBatch, TempSentence, TTSLog, LLMModel, TTSModel, LLMPrice, TTSVoice, AIPreference, ModelPrompt, Lesson, ReportedLesson, LessonAudio, Vocabulary
 from ..dependencies import get_current_user
 from ..security import verify_password, create_access_token
 from sqlalchemy import delete
@@ -866,11 +866,21 @@ async def sentence_list(
 @router.get("/reported", response_class=HTMLResponse)
 async def reported_sentences(
     current_user: User = Depends(check_admin_access),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    tab: str = "sentences"
 ):
-    """List reported sentences"""
+    """List reported sentences and texts"""
+    # Get reported sentences
     result = await db.execute(select(Sentence).where(Sentence.reported == 1))
     sentences = result.scalars().all()
+    
+    # Get reported texts
+    result_texts = await db.execute(
+        select(ReportedLesson, Lesson).join(
+            Lesson, ReportedLesson.lesson_id == Lesson.id
+        ).where(ReportedLesson.status == 'reported').order_by(ReportedLesson.reported_at.desc())
+    )
+    reported_items = result_texts.all()
     
     rows_html = ""
     for s in sentences:
@@ -904,11 +914,35 @@ async def reported_sentences(
         </tr>
         """
     
+    texts_html = ""
+    for report, lesson in reported_items:
+        import json
+        try:
+            title_data = json.loads(lesson.title) if lesson.title else {}
+            title_de = title_data.get('de', 'N/A')
+        except:
+            title_de = lesson.title or 'N/A'
+        
+        texts_html += f"""
+        <tr>
+            <td>{title_de}</td>
+            <td>{lesson.level or ''}</td>
+            <td>{report.reported_at.strftime('%Y-%m-%d %H:%M') if report.reported_at else ''}</td>
+            <td>{report.status}</td>
+            <td>
+                <div style="display: flex; gap: 8px;">
+                    <button type="button" class="btn btn-warning action-btn" title="Ignore" onclick="ignoreLesson('{report.id}', this)">✓</button>
+                    <button type="button" class="btn btn-danger action-btn" title="Delete" onclick="deleteLesson('{report.id}', this)">✕</button>
+                </div>
+            </td>
+        </tr>
+        """
+    
     html = f"""
     <!DOCTYPE html>
     <html>
     <head>
-        <title>Reported Sentences</title>
+        <title>Reported Content</title>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -929,6 +963,12 @@ async def reported_sentences(
             .nav-right a.nav-link {{ padding: 8px 12px; height: auto; border-bottom: none; }}
             .container-main {{ max-width: 1400px; margin: 0 auto; padding: 0 30px; }}
             h1 {{ font-size: 2em; color: #2c3e50; margin-bottom: 30px; font-weight: 700; }}
+            .tabs {{ display: flex; gap: 20px; margin-bottom: 30px; border-bottom: 2px solid #e9ecef; }}
+            .tab-link {{ padding: 15px 20px; color: #666; text-decoration: none; border-bottom: 3px solid transparent; cursor: pointer; transition: all 0.3s; }}
+            .tab-link:hover {{ color: #667eea; }}
+            .tab-link.active {{ color: #667eea; border-bottom-color: #667eea; font-weight: 600; }}
+            .tab-content {{ display: none; }}
+            .tab-content.active {{ display: block; }}
             .table-responsive {{ background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: hidden; }}
             table {{ margin: 0; width: 100%; }}
             table thead {{ background-color: #f8f9fa; border-bottom: 2px solid #e9ecef; }}
@@ -972,23 +1012,52 @@ async def reported_sentences(
         </nav>
         
         <div class="container-main">
-            <h1>Reported Sentences ({len(sentences)})</h1>
-            <div class="table-responsive">
-                <table class="table table-striped table-bordered table-hover">
-                    <thead>
-                        <tr>
-                            <th>Play</th>
-                            <th>German</th>
-                            <th>English</th>
-                            <th>Ukrainian</th>
-                            <th>Topic</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {rows_html}
-                    </tbody>
-                </table>
+            <h1>Reported Content</h1>
+            
+            <div class="tabs">
+                <a class="tab-link {'active' if tab == 'sentences' else ''}" href="?tab=sentences">Sentences ({len(sentences)})</a>
+                <a class="tab-link {'active' if tab == 'texts' else ''}" href="?tab=texts">Texts ({len(reported_items)})</a>
+            </div>
+            
+            <!-- Sentences Tab -->
+            <div id="sentences-tab" class="tab-content {'active' if tab == 'sentences' else ''}">
+                <div class="table-responsive">
+                    <table class="table table-striped table-bordered table-hover">
+                        <thead>
+                            <tr>
+                                <th>Play</th>
+                                <th>German</th>
+                                <th>English</th>
+                                <th>Ukrainian</th>
+                                <th>Topic</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {rows_html or '<tr><td colspan="6" style="text-align: center; padding: 30px;">No reported sentences</td></tr>'}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- Texts Tab -->
+            <div id="texts-tab" class="tab-content {'active' if tab == 'texts' else ''}">
+                <div class="table-responsive">
+                    <table class="table table-striped table-bordered table-hover">
+                        <thead>
+                            <tr>
+                                <th>Title</th>
+                                <th>Level</th>
+                                <th>Reported At</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {texts_html or '<tr><td colspan="5" style="text-align: center; padding: 30px;">No reported texts</td></tr>'}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
         
@@ -1048,25 +1117,19 @@ async def reported_sentences(
                         await new Promise((resolve) => {{
                             currentAudio = new Audio(url);
                             currentAudio.onended = resolve;
-                            currentAudio.onerror = resolve;
                             currentAudio.play();
                         }});
-                        
-                        if (stopPlayback) break;
-                        await new Promise(r => setTimeout(r, 500));
                     }}
                     
-                    if (stopPlayback) break;
-                    
-                    activeRow.classList.remove('playing-row');
-                    btn_elem.innerHTML = '▶';
-                    
-                    do {{
-                        activeRow = activeRow.nextElementSibling;
-                    }} while (activeRow && activeRow.tagName !== 'TR');
+                    activeRow = activeRow.nextElementSibling;
                 }}
                 
-                currentRow = null;
+                if (currentRow) {{
+                    currentRow.classList.remove('playing-row');
+                    const btn = currentRow.querySelector('.play-btn');
+                    if (btn) btn.innerHTML = '▶';
+                }}
+                
                 currentAudio = null;
                 stopPlayback = false;
             }}
@@ -1083,6 +1146,44 @@ async def reported_sentences(
                         row.remove();
                     }} else {{
                         alert('Error un-reporting sentence');
+                    }}
+                }} catch (error) {{
+                    alert('Error: ' + error.message);
+                }}
+            }}
+            
+            async function ignoreLesson(reportId, btn) {{
+                try {{
+                    const response = await fetch(`/admin/lesson-report/${{reportId}}/ignore`, {{
+                        method: 'POST',
+                        headers: {{'Content-Type': 'application/json'}}
+                    }});
+                    
+                    if (response.ok) {{
+                        const row = btn.closest('tr');
+                        row.remove();
+                    }} else {{
+                        alert('Error ignoring report');
+                    }}
+                }} catch (error) {{
+                    alert('Error: ' + error.message);
+                }}
+            }}
+            
+            async function deleteLesson(reportId, btn) {{
+                if (!confirm('Are you sure you want to permanently delete this text and all its resources?')) return;
+                
+                try {{
+                    const response = await fetch(`/admin/lesson-report/${{reportId}}/delete`, {{
+                        method: 'POST',
+                        headers: {{'Content-Type': 'application/json'}}
+                    }});
+                    
+                    if (response.ok) {{
+                        const row = btn.closest('tr');
+                        row.remove();
+                    }} else {{
+                        alert('Error deleting text');
                     }}
                 }} catch (error) {{
                     alert('Error: ' + error.message);
@@ -4716,4 +4817,96 @@ async def delete_model_prompt(
     except Exception as e:
         await db.rollback()
         return {"ok": False, "error": str(e)}
+
+
+@router.post("/lesson-report/{report_id}/ignore")
+async def ignore_lesson_report(
+    report_id: int,
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Mark a lesson report as ignored (user won't see it, but lesson remains)"""
+    try:
+        result = await db.execute(select(ReportedLesson).where(ReportedLesson.id == report_id))
+        report = result.scalar_one_or_none()
+        
+        if not report:
+            raise HTTPException(404, "Report not found")
+        
+        from datetime import datetime
+        report.status = 'ignored'
+        report.reviewed_at = datetime.utcnow()
+        await db.commit()
+        
+        return {"ok": True}
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(500, str(e))
+
+
+@router.post("/lesson-report/{report_id}/delete")
+async def delete_lesson_report(
+    report_id: int,
+    current_user: User = Depends(check_admin_access),
+    db: AsyncSession = Depends(get_db)
+):
+    """Permanently delete a reported lesson and all its resources"""
+    try:
+        import os as os_module
+        from datetime import datetime
+        
+        result = await db.execute(select(ReportedLesson).where(ReportedLesson.id == report_id))
+        report = result.scalar_one_or_none()
+        
+        if not report:
+            raise HTTPException(404, "Report not found")
+        
+        # Get the lesson
+        lesson_result = await db.execute(select(Lesson).where(Lesson.id == report.lesson_id))
+        lesson = lesson_result.scalar_one_or_none()
+        
+        if lesson:
+            # Delete audio files
+            audio_result = await db.execute(
+                select(LessonAudio).where(LessonAudio.lesson_id == lesson.id)
+            )
+            audio_records = audio_result.scalars().all()
+            
+            # Get static directory path
+            static_dir = os_module.path.join(os_module.path.dirname(__file__), '../../static')
+            
+            for audio in audio_records:
+                if audio.audio_path:
+                    audio_file = os_module.path.join(static_dir, audio.audio_path)
+                    if os_module.path.exists(audio_file):
+                        try:
+                            os_module.remove(audio_file)
+                        except Exception:
+                            pass  # Silently ignore file deletion errors
+            
+            # Delete lesson audio records first
+            await db.execute(
+                delete(LessonAudio).where(LessonAudio.lesson_id == lesson.id)
+            )
+            
+            # Delete vocabulary records for this lesson
+            await db.execute(
+                delete(Vocabulary).where(Vocabulary.text_id == lesson.id)
+            )
+            
+            # Delete lesson itself
+            await db.delete(lesson)
+        
+        # Update report status
+        report.status = 'deleted'
+        report.reviewed_at = datetime.utcnow()
+        
+        await db.commit()
+        return {"ok": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(500, str(e))
+
 
