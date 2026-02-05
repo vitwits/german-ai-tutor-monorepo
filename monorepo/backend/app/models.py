@@ -29,17 +29,6 @@ class User(Base):
     vocab_session_size: Mapped[Optional[int]] = mapped_column(Integer, default=20)
     study_batch_size: Mapped[Optional[int]] = mapped_column(Integer, default=20)
 
-class Text(Base):
-    __tablename__ = "texts"
-    
-    id: Mapped[str] = mapped_column(String, primary_key=True)
-    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
-    title: Mapped[Optional[str]] = mapped_column(String)
-    level: Mapped[Optional[str]] = mapped_column(String)
-    content_json: Mapped[Optional[str]] = mapped_column(DBText)
-    is_favorite: Mapped[int] = mapped_column(Integer, default=0)
-    quiz_json: Mapped[Optional[str]] = mapped_column(DBText)
-
 class Lesson(Base):
     __tablename__ = "lessons"
     
@@ -49,6 +38,7 @@ class Lesson(Base):
     content_json: Mapped[Optional[str]] = mapped_column(DBText)  # Sentences array
     quiz_json: Mapped[Optional[str]] = mapped_column(DBText)  # Quiz questions
     audio_status: Mapped[str] = mapped_column(String, default='pending')  # pending, generating, completed, partial_failed
+    generation_cost_usd: Mapped[float] = mapped_column(Float, default=0.0)  # Total cost to generate this lesson
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
 

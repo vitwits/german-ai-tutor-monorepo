@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
 
 from ..database import get_db
-from ..models import User, Text, Lesson, UserLesson, LessonAudio, Vocabulary, QuizResult
+from ..models import User, Lesson, UserLesson, LessonAudio, Vocabulary, QuizResult
 from ..schemas import TextGenerateRequest, TextReadSchema, ToggleFavRequest, QuizResultRequest, VocabWordSchema
 from ..dependencies import get_current_user
 from .. import services, cost_calculation
@@ -39,6 +39,7 @@ async def generate_text_endpoint(
     # Record cost for text generation
     # Start with a reasonable default
     energy_left = 100
+    total_generation_cost_usd = 0.0
     
     if data.get('sentences') and raw_response_text:
         cost_result = await cost_calculation.record_text_generation_cost(
@@ -50,6 +51,7 @@ async def generate_text_endpoint(
         )
         
         spending_usd = cost_result.get("total_cost", 0)
+        total_generation_cost_usd += spending_usd
         
         # Deduct energy based on actual spending
         if spending_usd > 0:
@@ -71,7 +73,8 @@ async def generate_text_endpoint(
         level=req.level,
         content_json=json.dumps(data.get('sentences', []), ensure_ascii=False),
         quiz_json=json.dumps(data.get('quiz', []), ensure_ascii=False),
-        audio_status='pending'
+        audio_status='pending',
+        generation_cost_usd=total_generation_cost_usd
     )
     db.add(new_lesson)
     
@@ -92,6 +95,7 @@ async def generate_text_endpoint(
         # Запускаємо як background task
         asyncio.create_task(
             _generate_audio_batch_background(
+                lesson_id=tid,
                 user_id=current_user.id,
                 sentences=sentence_texts,
                 lang='de',
@@ -101,7 +105,7 @@ async def generate_text_endpoint(
     
     return {"id": tid, "energy_left": energy_left}
 
-async def _generate_audio_batch_background(user_id: str, sentences: list, lang: str, db: AsyncSession):
+async def _generate_audio_batch_background(lesson_id: str, user_id: str, sentences: list, lang: str, db: AsyncSession):
     """Фонова функція для генерації аудіо після створення тексту"""
     try:
         from .tts import generate_audio_batch_endpoint
@@ -114,19 +118,16 @@ async def _generate_audio_batch_background(user_id: str, sentences: list, lang: 
         # Просто викликаємо логіку батч генерації
         completed = 0
         failed = 0
+        total_tts_cost_usd = 0.0
         
-        # Отримуємо ID уроку з останнього створеного уроку користувача
-        # (Це не ідеально, але працює для фонової генерації)
+        # Отримуємо урок за його ID
         lesson_result = await db.execute(
-            select(Lesson).join(
-                UserLesson,
-                UserLesson.lesson_id == Lesson.id
-            ).where(UserLesson.user_id == user_id).order_by(Lesson.created_at.desc()).limit(1)
+            select(Lesson).where(Lesson.id == lesson_id)
         )
         lesson = lesson_result.scalar_one_or_none()
         
         if not lesson:
-            print(f"❌ Could not find lesson for user {user_id}")
+            print(f"❌ Could not find lesson {lesson_id}")
             return
         
         for idx, sentence_text in enumerate(sentences):
@@ -134,20 +135,25 @@ async def _generate_audio_batch_background(user_id: str, sentences: list, lang: 
                 continue
             
             audio_url = None
+            tts_cost = 0.0
             retry_count = 0
             max_retries = 2
             
             while retry_count <= max_retries and not audio_url:
                 try:
                     from ..utils_tts import get_cached_or_generate_tts
-                    audio_url = await get_cached_or_generate_tts(
+                    result = await get_cached_or_generate_tts(
                         sentence_text,
                         lang,
                         user_id,
                         db,
                         source='texts',  # Аудіо для речень у текстах
-                        deduct_credits=False  # Кредити вже списані при створенні тексту
+                        deduct_credits=False,  # Кредити вже списані при створенні тексту
+                        return_cost=True  # Get both URL and cost
                     )
+                    if result:
+                        audio_url, tts_cost = result
+                        total_tts_cost_usd += tts_cost
                 except Exception as e:
                     print(f"⚠️ Error generating audio for sentence {idx} (attempt {retry_count + 1}): {e}")
                     retry_count += 1
@@ -219,8 +225,12 @@ async def _generate_audio_batch_background(user_id: str, sentences: list, lang: 
         else:
             lesson.audio_status = 'partial_failed'
         
+        # Update lesson with total generation cost (LLM + TTS)
+        lesson.generation_cost_usd = (lesson.generation_cost_usd or 0.0) + total_tts_cost_usd
+        
         await db.commit()
         print(f"✅ Background audio generation completed: {completed}/{len(sentences)} sentences (failed: {failed})")
+        print(f"💰 TTS cost for lesson {lesson_id}: ${total_tts_cost_usd:.6f} (total with LLM: ${lesson.generation_cost_usd:.6f})")
     except Exception as e:
         print(f"❌ Error in background audio generation: {e}")
         import traceback
@@ -363,52 +373,7 @@ async def delete_text(
         await db.commit()
         return {"ok": True}
     
-    # Fallback: delete as old Text (user-specific)
-    text_result = await db.execute(select(Text).where(Text.id == text_id))
-    text = text_result.scalar_one_or_none()
-    
-    if not text or text.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Text not found")
-    
-    # 1. Видаляємо кеш аудіо для всіх речень цього тексту
-    try:
-        sentences = json.loads(text.content_json) if text.content_json else []
-        for sentence in sentences:
-            sentence_text = sentence.get('de', '')
-            if sentence_text:
-                delete_sentence_audio_cache(sentence_text, lang='de')
-    except Exception as e:
-        print(f"Error deleting sentence audio cache: {e}")
-    
-    # 2. Видаляємо результати квізу для цього тексту
-    quiz_results = (await db.execute(
-        select(QuizResult).where(
-            QuizResult.text_id == text_id,
-            QuizResult.user_id == current_user.id
-        )
-    )).scalars().all()
-    
-    for result in quiz_results:
-        await db.delete(result)
-    
-    # 3. Видаляємо слова що привязані ТІЛЬКИ до цього тексту (is_favorite=0)
-    vocab_items = (await db.execute(
-        select(Vocabulary).where(
-            Vocabulary.text_id == text_id,
-            Vocabulary.user_id == current_user.id
-        )
-    )).scalars().all()
-    
-    for vocab in vocab_items:
-        if vocab.is_favorite == 0:
-            await db.delete(vocab)
-        else:
-            vocab.text_id = None
-    
-    # 4. Видаляємо сам текст
-    await db.delete(text)
-    await db.commit()
-    return {"ok": True}
+    raise HTTPException(status_code=404, detail="Lesson not found")
 
 @router.post("/toggle_text_fav")
 async def toggle_text_fav(
@@ -462,16 +427,7 @@ async def get_text(text_id: str, db: AsyncSession = Depends(get_db), current_use
             is_favorite=0
         )
     else:
-        # Fallback to old Text table for backward compatibility
-        text_result = await db.execute(select(Text).where(Text.id == text_id))
-        text = text_result.scalar_one_or_none()
-        
-        if not text or text.user_id != current_user.id:
-            raise HTTPException(404, "Text not found")
-        
-        text_model = TextReadSchema.model_validate(text)
-        # Use text.id for vocab queries
-        text_id_for_vocab = text.id
+        raise HTTPException(404, "Lesson not found")
     
     # Fetch vocab for this text to highlight
     vocab_res = await db.execute(select(Vocabulary).where(Vocabulary.text_id == text_id, Vocabulary.user_id == current_user.id))
@@ -510,9 +466,7 @@ async def save_quiz_result(
         lesson = lesson_result.scalar_one_or_none()
         
         if not lesson:
-            # Try as text
-            text_result = await db.execute(select(Text).where(Text.id == req.text_id))
-            text = text_result.scalar_one_or_none()
+            raise HTTPException(404, "Lesson not found")
     
     # Check if result exists
     q_res = await db.execute(select(QuizResult).where(

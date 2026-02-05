@@ -57,8 +57,9 @@ async def get_cached_or_generate_tts(
     source: str = 'texts',  # 'texts' для речень у текстах, 'vocabulary' для словника
     deduct_credits: bool = True,  # False для фонової генерації (кредити вже списані)
     log_stats: bool = False, 
-    generate: bool = True
-) -> str | None:
+    generate: bool = True,
+    return_cost: bool = False  # Повертати кортеж (url, cost) замість просто url
+) -> str | None | tuple:
     """
     Повертає URL аудіофайлу. Якщо файлу немає - генерує його, зберігає і списує кредити.
     Використовує логіку хешування та шардінгу (перші 2 символи хешу) як у старому проекті.
@@ -74,6 +75,11 @@ async def get_cached_or_generate_tts(
         deduct_credits: Списувати кредити (False для фонової генерації)
         log_stats: Логувати статистику
         generate: Генерувати якщо немає в кешу
+        return_cost: Повертати кортеж (url, cost) замість просто url
+        
+    Returns:
+        - Якщо return_cost=False: URL аудіо (str) або None
+        - Якщо return_cost=True: (url, cost) кортеж або (None, 0.0)
     """
     if not text: return None
     
@@ -103,9 +109,13 @@ async def get_cached_or_generate_tts(
             # Логуємо використання кешу (без списання кредитів)
             db.add(TTSLog(language=lang, chars=char_count, source='cache'))
             await db.commit()
+        if return_cost:
+            return (web_path, 0.0)  # Кеш - без вартості
         return web_path
 
     if not generate:
+        if return_cost:
+            return (None, 0.0)
         return None
 
     # 3. Генерація (якщо файлу немає)
@@ -121,6 +131,8 @@ async def get_cached_or_generate_tts(
             if log_stats:
                 db.add(TTSLog(language=lang, chars=char_count, source='cache'))
                 await db.commit()
+            if return_cost:
+                return (web_path, 0.0)  # Кеш - без вартості
             return web_path
         
         # Тепер генеруємо (тільки один запит одночасно)
@@ -135,6 +147,8 @@ async def get_cached_or_generate_tts(
         
         audio_content = await services.get_tts_audio(text, lang, db=db, job_name=job_name)
         
+        tts_cost = 0.0  # Initialize cost variable
+        
         if audio_content:
             # Billing: Списуємо кредити тільки за генерацію (якщо не в фоновому режимі)
             if deduct_credits:
@@ -144,7 +158,7 @@ async def get_cached_or_generate_tts(
             
             # Cost Calculation: Record TTS generation cost (тільки при генерації, не з кешу!)
             from . import cost_calculation
-            await cost_calculation.record_tts_text_generation_cost(
+            tts_cost = await cost_calculation.record_tts_text_generation_cost(
                 user_id=user_id,
                 text=text,
                 lang=lang,
@@ -161,7 +175,11 @@ async def get_cached_or_generate_tts(
                 db.add(TTSLog(language=lang, chars=char_count, source='api'))
                 await db.commit()
                 
+            if return_cost:
+                return (web_path, tts_cost)
             return web_path
         
         print(f"ERROR: Failed to generate TTS audio for '{text}' in {lang}")
+        if return_cost:
+            return (None, 0.0)
         return None
