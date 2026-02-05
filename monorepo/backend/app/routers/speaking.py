@@ -4,11 +4,11 @@ from sqlalchemy import select, func, update, delete
 import random
 
 from ..database import get_db
-from ..models import User, Sentence, UserBlockedSentence, UserFavoriteSentence, Vocabulary, Feedback
+from ..models import User, Sentence, UserBlockedSentence, UserFavoriteSentence, Vocabulary, Feedback, UserBilling
 from ..schemas import ReportSentenceRequest, ToggleSentenceFavRequest, RemoveFavSentenceRequest
 from ..dependencies import get_current_user
 from .. import services
-from ..services import deduct_user_energy
+from ..services import deduct_user_energy, get_user_energy_status
 
 router = APIRouter(prefix="/api", tags=["speaking"])
 
@@ -115,14 +115,11 @@ async def evaluate_audio(
         result['feedback_audio_url'] = f"/static/audio/{fb_row.file_path}"
 
     # Return energy status
-    from ..services import get_user_energy_status
     energy_status = await get_user_energy_status(db, current_user.id)
     
     # Add energy info to result for frontend
     if energy_status.get('ok'):
         # Get the actual UserBilling data for energy_left and daily_spending
-        from sqlalchemy import select
-        from ..models import UserBilling
         billing_result = await db.execute(select(UserBilling).where(UserBilling.user_id == current_user.id))
         user_billing = billing_result.scalar_one_or_none()
         if user_billing:

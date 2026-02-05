@@ -5,7 +5,6 @@
   import { fade } from "svelte/transition";
   import api from "../lib/api";
   import { addToast } from "../stores/toast";
-  import { confirmModal } from "../stores/confirm";
   import { user } from "../stores/auth";
   import { getUI } from "../lib/ui";
 
@@ -32,6 +31,7 @@
   let visualizerScale = 1;
   let animationFrameId = null;
   let currentAudioObj = null;
+  let lastStopType = 'unknown'; // Track how recording was stopped
 
   // Silence Detection & Config
   const NOISE_LEVEL = 15;
@@ -41,7 +41,6 @@
   let hasSpoken = false;
   let startTime = 0;
   let noSpeechTimeoutId = null;
-  let userManualStop = false; // 🔍 Track if user manually stopped recording
 
   // Result Splash State
   let showSplash = false;
@@ -124,48 +123,24 @@
         if (currentAudioObj) currentAudioObj.pause();
         startRecording();
     } else if (phase === 'recording') {
-        // 3. Stop Recording
-      stopAndSubmit();
+        // 3. Stop Recording (Manual - user pressed button)
+        lastStopType = 'manual';
+        stopRecording();
+        hasSpoken = true;
     } else if (phase === 'feedback') {
         await loadNext();
         if (sentence) handleMainClick();
     }
   }
 
-  // 🔍 Trim silence from the end of audio blob
-  // Removes trailing silence (last ~1.8 seconds) that occurs after silence detection timeout
-
-
   async function startRecording() {
     try {
       if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
       if (audioContext.state === 'suspended') await audioContext.resume();
 
-      micStream = await navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          echoCancellation: true,    // Remove echo/feedback
-          noiseSuppression: true,    // Reduce background noise
-          autoGainControl: true,     // Normalize volume levels
-          sampleRate: 48000          // Use 48kHz for better quality (WebM/Opus standard)
-        } 
-      });
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       
-      // Create MediaRecorder with high-quality WebM/Opus settings
-      // Opus codec supports bitrates from 6 kbps to 510 kbps, default ~128 kbps
-      const options = {
-        mimeType: 'audio/webm;codecs=opus',
-        audioBitsPerSecond: 192000  // 192 kbps for high quality (vs default ~128 kbps)
-      };
-      
-      // Fallback if codec not supported
-      if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-        console.warn(`${options.mimeType} not supported, using default`);
-        mediaRecorder = new MediaRecorder(micStream);
-      } else {
-        mediaRecorder = new MediaRecorder(micStream, options);
-        console.log(`🎙️ Recording with ${options.mimeType} at ${options.audioBitsPerSecond / 1000} kbps`);
-      }
-      
+      mediaRecorder = new MediaRecorder(micStream);
       audioChunks = [];
 
       mediaRecorder.ondataavailable = (e) => {
@@ -176,17 +151,7 @@
         stopStream();
         if (audioChunks.length > 0 && hasSpoken) {
           const blob = new Blob(audioChunks, { type: 'audio/webm' });
-          console.log(`📝 Audio blob: ${(blob.size / 1024).toFixed(1)} KB`);
-          
-          // Determine stop type: auto-stop (silence timeout) or manual (user button)
-          const stopType = userManualStop ? 'manual' : 'auto';
-          console.log(`🎙️  Stop type: ${stopType}`);
-          
-          // Reset flag for next recording
-          userManualStop = false;
-          
-          // Server will handle trimming if stop_type is 'auto'
-          await processAudio(blob, stopType);
+          await processAudio(blob, lastStopType);
         } else {
           phase = 'idle'; // Reset if failed
           if (!hasSpoken && phase !== 'idle') addToast(ui.speaking_silence || "Silence detected", "info");
@@ -196,7 +161,7 @@
       mediaRecorder.start();
       phase = 'recording';
       hasSpoken = false;
-      startTime = Date.now();  // 🔍 Capture exact start time for duration calculation
+      startTime = Date.now();
       lastVoiceTime = Date.now();
 
       setupVisualizer(micStream);
@@ -230,7 +195,7 @@
   }
   
   function stopAndSubmit() {
-      userManualStop = true; // 🔍 Mark as manual stop (don't trim silence)
+      lastStopType = 'auto'; // Auto-stopped by silence detection
       stopRecording();
       hasSpoken = true; 
   }
@@ -287,8 +252,7 @@
       } else {
         const now = Date.now();
         if (hasSpoken && (now - lastVoiceTime > SILENCE_AFTER_SPEECH)) {
-          // Auto-stop triggered by silence timeout - NOT a manual stop
-          stopRecording();
+          stopAndSubmit();
         }
       }
     }, 100);
@@ -300,16 +264,12 @@
     formData.append('audio', blob);
     formData.append('original_text', sentence.text_de);
     formData.append('stop_type', stopType);
-    
-    console.log(`📊 Audio blob size: ${(blob.size / 1024).toFixed(1)} KB`);
-    console.log(`📤 Sending stop_type: ${stopType}`);
-    
 
     try {
       const res = await api.post('/evaluate_audio', formData);
       result = res.data;
       transcript = result.transcribed_text;
-      correction = result.correction || sentence.text_de; // Use LLM correction if available, else original sentence
+      correction = sentence.text_de; // Correct German text
       phase = 'splash';
       
       // Update energy if returned
@@ -365,21 +325,9 @@
   
   async function reportSentence() {
       if (!sentence) return;
-      
-      const isUkr = $user?.interface_language === 'ukr';
-      const title = isUkr ? "Повідомити про проблему?" : "Report issue?";
-      const message = isUkr 
-          ? "Ця вправа буде позначена як проблемна для адміністраторів, і ви більше не будете її бачити."
-          : "This exercise will be reported to administrators and won't appear for you again.";
-      const okText = isUkr ? "Повідомити" : "Report";
-      const cancelText = isUkr ? "Скасувати" : "Cancel";
-      
-      const confirmed = await confirmModal.ask(title, message, okText, cancelText, true);
-      
-      if (!confirmed) return;
-      
+      if (!confirm(ui.report_sentence + "?")) return;
       try {
-          await api.post('/report_sentence', { id: sentence.id });
+          await api.post('/api/report_sentence', { id: sentence.id });
           addToast(ui.sentence_reported || "Reported", "success");
           loadNext();
       } catch(e) { console.error(e); }
@@ -425,11 +373,6 @@
     if (splashTimer) clearTimeout(splashTimer);
     if (audioContext) audioContext.close();
   });
-
-  // Reload sentence when user level changes
-  $: if ($user?.level) {
-    loadNext();
-  }
 </script>
 
 <!-- SPLASH SCREEN OVERLAY -->
@@ -466,7 +409,7 @@
 
 <div class="speak-container">
   <!-- Report Button -->
-  <button class="report-btn" title={ui.report_sentence} onclick={reportSentence}>
+  <button class="report-btn" title={ui.report_sentence} on:click={reportSentence}>
       <span class="material-symbols-outlined">flag</span>
   </button>
 
@@ -475,30 +418,29 @@
       <button class="mode-btn" style="cursor: not-allowed; opacity: 0.3;">{ui.speaking_small_talk} 🔒</button>
   </div>
 
-  <div class="game-content">
-    <!-- Task Text Container -->
-    <div id="speaking-card-container">
-    {#if loading}
-      <div class="loading">{ui.speaking_loading}</div>
-    {:else if sentence}
-      <div class="task-text">
-        {sourceText}
-      </div>
-    {/if}
+  <!-- Task Text Container -->
+  <div id="speaking-card-container">
+  {#if loading}
+    <div class="loading">{ui.speaking_loading}</div>
+  {:else if sentence}
+    <div class="task-text">
+      {sourceText}
     </div>
+  {/if}
+  </div>
 
-    <div class="controls-container">
-      <!-- Repeat Button -->
-      <button class="side-btn {phase === 'feedback' ? 'visible' : ''}" onclick={repeatRound}>
-        <span class="material-symbols-outlined">replay</span>
-      </button>
+  <div class="controls-container">
+    <!-- Repeat Button -->
+    <button class="side-btn {phase === 'feedback' ? 'visible' : ''}" on:click={repeatRound}>
+      <span class="material-symbols-outlined">replay</span>
+    </button>
 
-      <!-- Main Mic -->
-      <div class="mic-wrapper">
-        <div class="mic-ring" style="transform: translate(-50%, -50%) scale({visualizerScale}); display: {phase === 'recording' ? 'block' : 'none'}"></div>
-        
-        <button class="mic-btn {phase === 'recording' ? 'recording' : ''} {phase === 'processing' ? 'processing' : ''}" 
-                onclick={handleMainClick} disabled={phase === 'processing' || loading}>
+    <!-- Main Mic -->
+    <div class="mic-wrapper">
+      <div class="mic-ring" style="transform: translate(-50%, -50%) scale({visualizerScale}); display: {phase === 'recording' ? 'block' : 'none'}"></div>
+      
+      <button class="mic-btn {phase === 'recording' ? 'recording' : ''} {phase === 'processing' ? 'processing' : ''}" 
+              on:click={handleMainClick} disabled={phase === 'processing' || loading}>
         {#if phase === 'processing'}
           <span class="material-symbols-outlined rotating">sync</span>
         {:else if phase === 'recording'}
@@ -508,37 +450,31 @@
         {:else}
           <span class="material-symbols-outlined icon-play">play_arrow</span>
         {/if}
-        </button>
-      </div>
-
-      <!-- Fav Button -->
-      <button class="side-btn {phase === 'feedback' ? 'visible' : ''}" onclick={toggleFav} style="color: {isFav ? '#FFC107' : 'inherit'}">
-        <span class="material-symbols-outlined {isFav ? 'filled' : ''}">star</span>
       </button>
     </div>
 
-    <div class="feedback-area">
-        {#if phase === 'feedback'}
-          <div class="user-transcript" transition:fade>{transcript}</div>
-          <div class="correction-box" transition:fade>{correction}</div>
-        {/if}
-    </div>
+    <!-- Fav Button -->
+    <button class="side-btn {phase === 'feedback' ? 'visible' : ''}" on:click={toggleFav} style="color: {isFav ? '#FFC107' : 'inherit'}">
+      <span class="material-symbols-outlined {isFav ? 'filled' : ''}">star</span>
+    </button>
+  </div>
+
+  <div class="feedback-area">
+      {#if phase === 'feedback'}
+        <div class="user-transcript" transition:fade>{transcript}</div>
+        <div class="correction-box" transition:fade>{correction}</div>
+      {/if}
   </div>
 </div>
 
 <style>
   .speak-container {
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    justify-content: flex-start; /* Align top */
     min-height: 70vh; text-align: center; position: relative;
-  }
-  .game-content {
-    flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; width: 100%;
   }
   .mode-switch {
     display: flex; background: var(--surface); border: 1px solid var(--border);
-    border-radius: 20px; padding: 4px; 
-    margin: 0 auto 20px auto; /* Consistent with Vocab page */
+    border-radius: 20px; padding: 4px; margin-bottom: 40px;
   }
   .mode-btn {
     padding: 8px 24px; border-radius: 16px; border: none; background: transparent;

@@ -48,8 +48,7 @@
     {#if $isAuthenticated}
       <div class="energy-pill" title="Energy Points">
         <span>⚡</span> 
-        <span id="user-energy">{$user && $user.billing ? Math.floor($user.billing.energy_left) : '...'}</span> 
-        <span style="opacity:0.5; font-size:0.75rem;">/ 100</span>
+        <span id="user-energy">{$user && $user.billing ? Math.floor($user.billing.energy_left) : '...'}</span>
       </div>
 
       <div class="level-tiles">
