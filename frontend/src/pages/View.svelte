@@ -9,7 +9,6 @@
   import { addToast } from "../stores/toast";
   import { getUI } from "../lib/ui";
   import { confirmModal } from "../stores/confirm";
-  import { getAudioCachePath, checkAudioExists } from "../lib/hashUtils";
 
   export let id; 
 
@@ -158,17 +157,9 @@
       }
 
       try {
-          let audioUrl = null;
-          
-          // Step 1: Try to get audio from cache
-          const cacheUrl = getAudioCachePath(txt, 'de');
-          if (cacheUrl && await checkAudioExists(cacheUrl)) {
-              audioUrl = cacheUrl;
-          } else {
-              // Step 2: Generate via TTS if cache miss
-              const res = await api.post('/tts', { text: txt, source: 'texts' });
-              audioUrl = res.data.url;
-          }
+          // Request TTS from backend (backend handles caching)
+          const res = await api.post('/tts', { text: txt, source: 'texts' });
+          const audioUrl = res.data.url;
           
           if (!audioUrl) {
               console.error('Failed to get audio URL');
