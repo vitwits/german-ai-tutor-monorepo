@@ -2,7 +2,7 @@ import json
 import uuid
 import math
 import asyncio
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
 
@@ -73,7 +73,7 @@ async def generate_text_endpoint(
         level=req.level,
         content_json=json.dumps(data.get('sentences', []), ensure_ascii=False),
         quiz_json=json.dumps(data.get('quiz', []), ensure_ascii=False),
-        audio_status='pending',
+        audio_status='not_generated',  # Audio will be generated on-demand
         generation_cost_usd=total_generation_cost_usd
     )
     db.add(new_lesson)
@@ -87,21 +87,10 @@ async def generate_text_endpoint(
     db.add(user_lesson)
     await db.commit()
     
-    # Запускаємо batch генерацію аудіо в фоні (не чекаємо завершення)
-    # Отримуємо sentences з даних
-    sentences_list = data.get('sentences', [])
-    if sentences_list:
-        sentence_texts = [s.get('de', '') for s in sentences_list if s.get('de')]
-        # Запускаємо як background task
-        asyncio.create_task(
-            _generate_audio_batch_background(
-                lesson_id=tid,
-                user_id=current_user.id,
-                sentences=sentence_texts,
-                lang='de',
-                db=db
-            )
-        )
+    # REMOVED: Background audio generation
+    # Audio is now generated on-demand when user clicks Play or Play All
+    # This saves ~86% of costs for users who don't listen to the text
+    # and allows caching benefits for other users
     
     return {"id": tid, "energy_left": energy_left}
 
@@ -407,6 +396,144 @@ async def toggle_text_fav(
     
     await db.commit()
     return {"ok": True}
+
+@router.post("/texts/{lesson_id}/generate_sentence_audio")
+async def generate_sentence_audio(
+    lesson_id: str,
+    sentence_index: int = Body(..., embed=True),
+    text: str = Body(..., embed=True),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Generate audio for a specific sentence in a lesson on-demand.
+    
+    Request body: {
+        "sentence_index": 0,  # Index of sentence (0-based)
+        "text": "German text here"
+    }
+    
+    Returns: {
+        "url": "/static/audio/texts/de/ab/hash.ogg",
+        "cost": 0.000123
+    }
+    """
+    from ..utils_tts import get_cached_or_generate_tts
+    
+    if sentence_index < 0 or not text.strip():
+        raise HTTPException(status_code=400, detail="sentence_index and text required")
+    
+    # Verify user has access to this lesson
+    lesson_result = await db.execute(select(Lesson).where(Lesson.id == lesson_id))
+    lesson = lesson_result.scalar_one_or_none()
+    
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+    
+    user_lesson_result = await db.execute(
+        select(UserLesson).where(
+            and_(UserLesson.user_id == current_user.id, UserLesson.lesson_id == lesson_id)
+        )
+    )
+    if not user_lesson_result.scalar_one_or_none():
+        raise HTTPException(status_code=403, detail="No access to this lesson")
+    
+    try:
+        # Generate audio for German text (with cost tracking and caching)
+        audio_url, tts_cost = await get_cached_or_generate_tts(
+            text,
+            'de',
+            current_user.id,
+            db,
+            source='texts',
+            log_stats=True,
+            return_cost=True
+        )
+        
+        if not audio_url:
+            raise HTTPException(status_code=500, detail="Failed to generate audio")
+        
+        # Record in lesson_audio table for this specific sentence
+        audio_path = audio_url.replace('/static/audio/', '') if audio_url.startswith('/static/audio/') else audio_url
+        
+        # Check if record already exists
+        existing = await db.execute(
+            select(LessonAudio).where(
+                and_(
+                    LessonAudio.lesson_id == lesson_id,
+                    LessonAudio.sentence_index == sentence_index,
+                    LessonAudio.lang == 'de'
+                )
+            )
+        )
+        lesson_audio = existing.scalar_one_or_none()
+        
+        if lesson_audio:
+            # Update existing record
+            lesson_audio.audio_path = audio_path
+            lesson_audio.status = 'generated'
+            lesson_audio.generated_at = func.now()
+        else:
+            # Create new record
+            lesson_audio = LessonAudio(
+                lesson_id=lesson_id,
+                sentence_index=sentence_index,
+                lang='de',
+                audio_path=audio_path,
+                status='generated',
+                generated_at=func.now()
+            )
+            db.add(lesson_audio)
+        
+        # Update lesson's audio_status if needed
+        if lesson.audio_status == 'not_generated':
+            lesson.audio_status = 'partial'  # Some sentences now have audio
+        
+        # Add TTS cost to lesson's generation cost
+        lesson.generation_cost_usd = (lesson.generation_cost_usd or 0.0) + tts_cost
+        
+        await db.commit()
+        
+        # Check if all sentences now have audio (after commit)
+        from sqlalchemy import func as sql_func
+        total_sentences = len(json.loads(lesson.content_json))
+        generated_count_result = await db.execute(
+            select(sql_func.count(LessonAudio.id)).where(
+                and_(
+                    LessonAudio.lesson_id == lesson_id,
+                    LessonAudio.lang == 'de',
+                    LessonAudio.status == 'generated'
+                )
+            )
+        )
+        generated_count = generated_count_result.scalar() or 0
+        
+        # If all sentences have audio, mark as completed
+        if generated_count >= total_sentences and lesson.audio_status != 'completed':
+            lesson.audio_status = 'completed'
+            await db.commit()
+        
+        # Deduct energy from user if cost > 0
+        if tts_cost > 0:
+            energy_result = await deduct_user_energy(db, current_user.id, tts_cost)
+            if not energy_result.get("ok"):
+                raise HTTPException(
+                    status_code=402,
+                    detail=f"Insufficient energy: {energy_result.get('error')}"
+                )
+        
+        return {
+            "url": audio_url,
+            "cost": tts_cost
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error generating sentence audio: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error generating audio: {str(e)}")
 
 @router.get("/texts/{text_id}")
 async def get_text(text_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):

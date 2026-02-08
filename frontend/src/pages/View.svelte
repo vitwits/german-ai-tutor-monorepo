@@ -25,6 +25,7 @@
   let isPlayingAll = false;
   let playingIndex = -1; // Index of sentence currently playing in Play All
   let currentAudio = null;
+  let userInitiatedPlay = false; // true if user clicked Play (vs Play All calling playAudio)
   
   // Edit State
   let editingId = null;
@@ -145,41 +146,82 @@
 
   // --- AUDIO LOGIC ---
 
+  // Track which audio is currently being played to detect duplicate calls
+  let lastPlayedIdx = -1;
+
   async function playAudio(txt, idx = -1) {
+      // If user clicks the same sentence while it's playing, pause it
+      if (userInitiatedPlay && idx === lastPlayedIdx && currentAudio && !currentAudio.paused) {
+          currentAudio.pause();
+          currentAudio = null;
+          playingIndex = -1;
+          userInitiatedPlay = false;
+          lastPlayedIdx = -1;
+          return;
+      }
+      
+      // Stop any currently playing audio (from previous playback)
       if (currentAudio) {
           currentAudio.pause();
           currentAudio = null;
       }
       
-      // If triggered manually (not Play All), reset Play All state
-      if (idx !== -1 && !isPlayingAll) {
-          playingIndex = -1;
+      // If user clicked Play and Play All is running, stop Play All
+      if (userInitiatedPlay && isPlayingAll) {
+          isPlayingAll = false;
+      }
+      
+      // Set highlighting and track this as the new playback
+      if (idx !== -1) {
+          playingIndex = idx;
+          lastPlayedIdx = idx;
       }
 
       try {
-          // Request TTS from backend (backend handles caching)
-          const res = await api.post('/tts', { text: txt, source: 'texts' });
+          // Request audio for specific lesson sentence (generates on-demand)
+          const res = await api.post(`/texts/${id}/generate_sentence_audio`, { 
+              sentence_index: idx,
+              text: txt 
+          });
           const audioUrl = res.data.url;
           
           if (!audioUrl) {
               console.error('Failed to get audio URL');
-              return;
+              if (!isPlayingAll) playingIndex = -1;
+              userInitiatedPlay = false;
+              lastPlayedIdx = -1;
+              return Promise.resolve();
           }
           
           return new Promise((resolve) => {
               currentAudio = new Audio(audioUrl);
               currentAudio.onended = () => {
                   currentAudio = null;
+                  if (!isPlayingAll) playingIndex = -1;
+                  userInitiatedPlay = false;
+                  lastPlayedIdx = -1;
                   resolve();
               };
               currentAudio.onerror = () => {
                   currentAudio = null;
+                  if (!isPlayingAll) playingIndex = -1;
+                  userInitiatedPlay = false;
+                  lastPlayedIdx = -1;
                   resolve();
               };
-              currentAudio.play().catch(e => resolve());
+              currentAudio.play().catch(e => {
+                  if (!isPlayingAll) playingIndex = -1;
+                  userInitiatedPlay = false;
+                  lastPlayedIdx = -1;
+                  resolve();
+              });
           });
       } catch (e) {
           console.error(e);
+          if (!isPlayingAll) playingIndex = -1;
+          userInitiatedPlay = false;
+          lastPlayedIdx = -1;
+          return Promise.resolve();
       }
   }
 
@@ -187,28 +229,45 @@
       if (isPlayingAll) {
           isPlayingAll = false;
           if (currentAudio) currentAudio.pause();
+          currentAudio = null;
           playingIndex = -1;
+          userInitiatedPlay = false;
+          lastPlayedIdx = -1;
           return;
       }
 
+      // Clean up any existing playback state
+      if (currentAudio) {
+          currentAudio.pause();
+          currentAudio = null;
+      }
+      playingIndex = -1;
+      userInitiatedPlay = false;
+      lastPlayedIdx = -1;
+      
       isPlayingAll = true;
       
       for (let i = 0; i < sentences.length; i++) {
+          // Check if someone interrupted Play All by clicking on a specific sentence
           if (!isPlayingAll) break;
+          
           playingIndex = i;
           
           // Scroll to sentence
           const el = document.getElementById(`sent-${i}`);
           if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-          await playAudio(sentences[i].de);
+          await playAudio(sentences[i].de, i);
           
+          // Check again after playAudio completes
           if (!isPlayingAll) break;
           await new Promise(r => setTimeout(r, 600));
       }
       
       isPlayingAll = false;
       playingIndex = -1;
+      userInitiatedPlay = false;
+      lastPlayedIdx = -1;
   }
 
   async function playVocabPair(de, trans) {
@@ -784,8 +843,10 @@
                 <div class="de-line {playingIndex === i ? 'highlight-sentence' : ''}" id="sent-{i}" data-index={i} data-text={s.de}>
                     <div style="display:flex; justify-content: space-between; align-items: center;">
                         <div style="display:flex; align-items:center; gap:12px; flex: 1;">
-                <button class="btn-text" onclick={() => playAudio(s.de, i)} style="height:32px; width:32px; padding:0; min-width:32px;">
-                                <span class="material-symbols-outlined" style="font-size:20px; color:var(--primary)">volume_up</span>
+                <button class="btn-text" onclick={() => { userInitiatedPlay = true; playAudio(s.de, i); }} style="height:32px; width:32px; padding:0; min-width:32px;">
+                                <span class="material-symbols-outlined" style="font-size:20px; color:var(--primary)">
+                                    {playingIndex === i && currentAudio && !currentAudio.paused ? 'pause' : 'volume_up'}
+                                </span>
                             </button>
                             <span class="de-text">{@html s.de_html}</span>
                         </div>
