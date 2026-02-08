@@ -28,7 +28,118 @@ body {
 }
 
 /* Global Layout Classes */
-.container { max-width: 1160px; margin: 0 auto; padding: 20px; padding-bottom: 80px; }
+#app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.content-wrapper {
+  display: flex;
+  flex: 1;
+  width: 100%;
+  padding-top: 57px; /* Height of fixed header */
+}
+
+.container { 
+  max-width: 1160px; 
+  margin: 0 auto; 
+  padding: 20px; 
+  padding-bottom: 80px; /* Space for bottom nav on mobile */
+  width: 100%;
+}
+
+/* Desktop: nav on left, main on right */
+@media (min-width: 1024px) {
+  .content-wrapper {
+    flex-direction: row;
+  }
+
+  .nav-mobile {
+    position: fixed !important;
+    top: 57px;
+    left: 0;
+    width: 220px;
+    height: calc(100vh - 57px);
+    bottom: auto !important;
+    right: auto !important;
+    flex-shrink: 0;
+    padding: 0 !important;
+    border-top: none !important;
+    border-right: 1px solid var(--border);
+    box-shadow: 2px 0 10px rgba(0,0,0,0.05);
+    flex-direction: column;
+    justify-content: flex-start;
+    z-index: 100;
+    background: var(--surface);
+  }
+
+  .nav-mobile .nav-item { 
+    width: 100%;
+    padding: 32px 16px;
+    font-size: 18px;
+    background: none;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    border-left: 4px solid transparent;
+    text-decoration: none;
+    color: var(--on-surface);
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 10px;
+    cursor: pointer;
+    outline: none;
+    -webkit-tap-highlight-color: transparent;
+    border-radius: 0;
+  }
+
+  .nav-mobile .nav-item:hover {
+    background: rgba(var(--primary-rgb), 0.05);
+  }
+
+  .nav-mobile .nav-item.active {
+    background: rgba(var(--primary-rgb), 0.08);
+    font-weight: 500;
+    border-left: 4px solid var(--primary);
+  }
+
+  .nav-logo {
+    padding: 16px 20px;
+    display: none;
+  }
+
+  .nav-logo .brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: none;
+    border: none;
+    padding: 0;
+    height: auto;
+    font-size: 1.5rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    color: var(--on-surface);
+    cursor: pointer;
+  }
+
+  .nav-logo .brand-de {
+    color: var(--primary);
+    font-weight: 700;
+  }
+
+  main {
+    flex: 1;
+    padding-bottom: 0;
+  }
+
+  .container {
+    margin-left: 220px;
+    padding-bottom: 20px;
+  }
+}
+
 .card { background: var(--surface); padding: 20px; border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 20px; }
 
 /* Buttons & Links */

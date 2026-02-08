@@ -95,7 +95,7 @@
 </div>
 
 <style>
-  .header { display: flex; justify-content: space-between; align-items: center; background: var(--surface); padding: 16px 24px; box-shadow: var(--shadow); margin-bottom: 24px; }
+  .header { position: fixed; top: 0; left: 0; right: 0; z-index: 999; display: flex; justify-content: space-between; align-items: center; background: var(--surface); padding: 8px 24px; border-bottom: 1px solid var(--border); height: 57px; box-sizing: border-box; }
   .brand { 
     background: none; border: none; padding: 0; height: auto;
     font-size: 1.5rem; font-weight: 500; display: flex; align-items: center; gap: 8px; 
