@@ -124,7 +124,7 @@ async def get_vocab_list(
         result = await db.execute(query.order_by(Vocabulary.id.desc()).offset(offset).limit(per_page))
         words = result.scalars().all()
         
-        # Transform to dicts and add display_trans
+        # Transform to dicts and add display_trans and audio URLs
         items_data = []
         target_lang = 'uk' if current_user.interface_language == 'ukr' else 'en'
         
@@ -133,6 +133,20 @@ async def get_vocab_list(
             item = VocabWordSchema.model_validate(w)
             # Add computed field
             item.display_trans = w.ua if target_lang == 'uk' else w.en
+            
+            # Add audio URLs (check cache, don't generate)
+            audio_de = await get_cached_or_generate_tts(w.display, 'de', current_user.id, db, source='vocabulary', generate=False)
+            item.audio_de_url = audio_de
+            
+            trans = item.display_trans
+            trans_urls = []
+            if trans:
+                parts = [p.strip() for p in re.split(r'[,;]', trans) if p.strip()]
+                for part in parts:
+                    url = await get_cached_or_generate_tts(part, target_lang, current_user.id, db, source='vocabulary', generate=False)
+                    if url: trans_urls.append(url)
+            item.audio_trans_urls = trans_urls
+            
             items_data.append(item)
 
         return {"items": items_data, "total": total, "pages": math.ceil(total / per_page)}
@@ -332,24 +346,18 @@ async def quick_translate(
     word_data['ua'] = remove_duplicate_parts(word_data.get('ua'))
     word_data['en'] = remove_duplicate_parts(word_data.get('en'))
 
-    # 3. Generate Audio (German) - озвучуємо оброблене слово від Gemini, а не оригінал!
+    # 3. Generate Audio (German) - озвучуємо оброблене слово від Gemini
     if not await get_cached_or_generate_tts(word_data['display'], 'de', current_user.id, db, source='vocabulary', log_stats=True):
         return {"ok": False, "error_key": "audio_failed"}
 
-    # 3.1 Generate Audio (Ukrainian) - розбиваємо на частини
-    uk_text = word_data.get('ua')
-    if uk_text:
-        parts = [p.strip() for p in re.split(r'[,;]', uk_text) if p.strip()]
-        for part in parts:
-            if not await get_cached_or_generate_tts(part, 'uk', current_user.id, db, source='vocabulary', log_stats=True):
-                return {"ok": False, "error_key": "audio_failed"}
+    # 3.1 Generate Audio (Translation) - тільки на мові інтерфейсу
+    target_lang = 'uk' if current_user.interface_language == 'ukr' else 'en'
+    trans_text = word_data.get('ua') if target_lang == 'uk' else word_data.get('en')
     
-    # 3.2 Generate Audio (English) - розбиваємо на частини
-    en_text = word_data.get('en')
-    if en_text:
-        parts = [p.strip() for p in re.split(r'[,;]', en_text) if p.strip()]
+    if trans_text:
+        parts = [p.strip() for p in re.split(r'[,;]', trans_text) if p.strip()]
         for part in parts:
-            if not await get_cached_or_generate_tts(part, 'en', current_user.id, db, source='vocabulary', log_stats=True):
+            if not await get_cached_or_generate_tts(part, target_lang, current_user.id, db, source='vocabulary', log_stats=True):
                 return {"ok": False, "error_key": "audio_failed"}
     
     # 4. Record costs (LLM + TTS)
@@ -357,6 +365,7 @@ async def quick_translate(
     cost_result = await record_quick_translate_cost(
         user_id=current_user.id,
         word_data=word_data,  # Pass entire word_data with _full_prompt and _full_response
+        interface_language=current_user.interface_language,  # Pass user's interface language
         db=db
     )
     
@@ -591,6 +600,10 @@ async def add_custom_word(
         if translation_data.get("success") == False:
             return {"success": False, "error": translation_data.get("error", "Invalid word or phrase")}
         
+        # Clean duplicates from translations (both UA and EN)
+        translation_data['ua'] = remove_duplicate_parts(translation_data.get('ua'))
+        translation_data['en'] = remove_duplicate_parts(translation_data.get('en'))
+        
         # Create vocabulary entry
         vocab = Vocabulary(
             id=str(uuid.uuid4()),
@@ -610,26 +623,26 @@ async def add_custom_word(
         
         # Generate audio for the word
         try:
+            # Always generate German
             audio_de_url = await get_cached_or_generate_tts(text, "de", current_user.id, db, source='vocabulary', log_stats=True)
-            audio_ua_urls = []
-            if translation_data.get("ua"):
-                ua_parts = translation_data["ua"].split(",")
-                for part in ua_parts:
-                    url = await get_cached_or_generate_tts(part.strip(), "uk", current_user.id, db, source='vocabulary', log_stats=True)
-                    audio_ua_urls.append(url)
             
-            audio_en_urls = []
-            if translation_data.get("en"):
-                en_parts = translation_data["en"].split(",")
-                for part in en_parts:
-                    url = await get_cached_or_generate_tts(part.strip(), "en", current_user.id, db, source='vocabulary', log_stats=True)
-                    audio_en_urls.append(url)
+            # Generate translation audio only for interface language
+            target_lang = 'uk' if current_user.interface_language == 'ukr' else 'en'
+            trans_text = translation_data.get('ua') if target_lang == 'uk' else translation_data.get('en')
+            
+            audio_trans_urls = []
+            if trans_text:
+                trans_parts = trans_text.split(",")
+                for part in trans_parts:
+                    url = await get_cached_or_generate_tts(part.strip(), target_lang, current_user.id, db, source='vocabulary', log_stats=True)
+                    if url:
+                        audio_trans_urls.append(url)
             
             # Update vocabulary with audio URLs
             update_stmt = update(Vocabulary).where(Vocabulary.id == vocab.id).values(
                 audio_de=audio_de_url,
-                audio_ua="|".join(audio_ua_urls) if audio_ua_urls else None,
-                audio_en="|".join(audio_en_urls) if audio_en_urls else None
+                audio_ua="|".join(audio_trans_urls) if target_lang == 'uk' and audio_trans_urls else None,
+                audio_en="|".join(audio_trans_urls) if target_lang == 'en' and audio_trans_urls else None
             )
             await db.execute(update_stmt)
             await db.commit()
@@ -642,3 +655,60 @@ async def add_custom_word(
     except Exception as e:
         print(f"Error adding custom word: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error processing word: {str(e)}")
+
+
+@router.post("/vocab/generate_audio")
+async def generate_audio(
+    request: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Generate audio for text on demand (when user plays audio)
+    Request body: {"text": "...", "lang": "de|uk|en"}
+    Returns: {"url": "...audio path..."}
+    
+    Process:
+    1. Generate audio (with caching - if exists in cache, returns path without regenerating)
+    2. If generated (not cached): Record TTS cost, deduct energy from user
+    3. Return audio URL to frontend
+    """
+    from ..utils_tts import get_cached_or_generate_tts
+    
+    text = request.get("text", "").strip()
+    lang = request.get("lang", "de")  # de, uk, en
+    
+    if not text:
+        raise HTTPException(status_code=400, detail="Text is required")
+    
+    if lang not in ['de', 'uk', 'en']:
+        raise HTTPException(status_code=400, detail="Language must be de, uk, or en")
+    
+    try:
+        # Generate audio and get cost (with caching - if exists in cache, returns path without regenerating)
+        audio_url, tts_cost = await get_cached_or_generate_tts(
+            text, 
+            lang, 
+            current_user.id, 
+            db, 
+            source='vocabulary',
+            log_stats=True,
+            return_cost=True  # Returns tuple (url, cost)
+        )
+        
+        # If audio was generated (cost > 0), deduct energy from UserBilling
+        if tts_cost > 0:
+            energy_result = await services.deduct_user_energy(db, current_user.id, tts_cost)
+            if not energy_result.get("ok"):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Could not deduct energy: {energy_result.get('error')}"
+                )
+        
+        return {"url": audio_url}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error generating audio: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error generating audio: {str(e)}")

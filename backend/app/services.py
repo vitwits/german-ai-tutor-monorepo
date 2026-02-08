@@ -671,9 +671,20 @@ async def translate_word(text, ctx, db: AsyncSession = None, user_id: str = None
                 print(f"\n📊 RECORDING COST FOR translate_word")
                 print(f"{'='*80}")
                 
+                # Get user's interface language for cost calculation
+                from .models import User
+                user_result = await db.execute(select(User).where(User.id == user_id))
+                user = user_result.scalar_one_or_none()
+                interface_language = user.interface_language if user else 'en'
+                
                 # Call record_quick_translate_cost with full word data
                 from . import cost_calculation
-                cost_result = await cost_calculation.record_quick_translate_cost(user_id, data, db)
+                cost_result = await cost_calculation.record_quick_translate_cost(
+                    user_id, 
+                    data, 
+                    interface_language=interface_language,
+                    db=db
+                )
                 
                 print(f"✅ Cost recorded: {cost_result}")
                 
@@ -813,9 +824,20 @@ Return ONLY minified JSON on a single line:
                 print(f"\n📊 RECORDING COST FOR translate_custom_word_async")
                 print(f"{'='*80}")
                 
+                # Get user's interface language for cost calculation
+                from .models import User
+                user_result = await db.execute(select(User).where(User.id == user_id))
+                user = user_result.scalar_one_or_none()
+                interface_language = user.interface_language if user else 'en'
+                
                 # Call record_quick_translate_cost with full word data
                 from . import cost_calculation
-                cost_result = await cost_calculation.record_quick_translate_cost(user_id, data, db)
+                cost_result = await cost_calculation.record_quick_translate_cost(
+                    user_id, 
+                    data, 
+                    interface_language=interface_language,
+                    db=db
+                )
                 
                 print(f"✅ Cost recorded: {cost_result}")
                 

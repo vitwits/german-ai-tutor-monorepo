@@ -413,11 +413,6 @@
       <span class="material-symbols-outlined">flag</span>
   </button>
 
-  <div class="mode-switch">
-      <button class="mode-btn active">{ui.speaking_sentences}</button>
-      <button class="mode-btn" style="cursor: not-allowed; opacity: 0.3;">{ui.speaking_small_talk} 🔒</button>
-  </div>
-
   <!-- Task Text Container -->
   <div id="speaking-card-container">
   {#if loading}
@@ -471,17 +466,6 @@
   .speak-container {
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     min-height: 70vh; text-align: center; position: relative;
-  }
-  .mode-switch {
-    display: flex; background: var(--surface); border: 1px solid var(--border);
-    border-radius: 20px; padding: 4px; margin-bottom: 40px;
-  }
-  .mode-btn {
-    padding: 8px 24px; border-radius: 16px; border: none; background: transparent;
-    color: var(--on-surface); font-weight: 500; cursor: pointer; opacity: 0.6; transition: 0.2s;
-  }
-  .mode-btn.active {
-    background: var(--primary); color: var(--on-primary); opacity: 1; box-shadow: 0 2px 8px rgba(0,0,0,0.2);
   }
   .task-text {
     font-size: 1.5rem; font-weight: 500; margin-bottom: 40px; min-height: 4rem;

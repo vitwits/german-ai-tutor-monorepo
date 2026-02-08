@@ -456,6 +456,7 @@ async def record_tts_text_generation_cost(
 async def record_quick_translate_cost(
     user_id: str,
     word_data: dict,
+    interface_language: str = "en",
     db=None
 ) -> dict:
     """
@@ -463,7 +464,7 @@ async def record_quick_translate_cost(
     
     Calculates:
     1. LLM cost: full prompt input → output (split by language: DE, UK, EN, JSON markup)
-    2. TTS cost: display + ua parts + en parts
+    2. TTS cost: display + translation parts (only for interface language)
     
     Writes to user: llm_cost, tts_cost, total_cost
     
@@ -473,6 +474,7 @@ async def record_quick_translate_cost(
                    - display, ua, en, level (translation results)
                    - _full_prompt (entire prompt sent to LLM)
                    - _full_response (raw JSON response from LLM)
+        interface_language: User's interface language ('en', 'ukr', etc.)
         db: AsyncSession for database operations
         
     Returns:
@@ -598,14 +600,24 @@ async def record_quick_translate_cost(
         print(f"\n📊 PART 2: TTS COST CALCULATION")
         print(f"{'-'*80}")
         
+        # Determine target language for TTS
+        target_lang = 'uk' if interface_language == 'ukr' else 'en'
+        trans_text = word_data.get('ua') if target_lang == 'uk' else word_data.get('en')
+        
+        # Map language codes to job names
+        # target_lang is 'uk' or 'en', but job names use 'ua' for Ukrainian
+        job_lang_map = {'uk': 'ua', 'en': 'en'}
+        job_lang = job_lang_map.get(target_lang, target_lang)
+        
+        print(f"   User's interface_language: {interface_language} → TTS target_lang: {target_lang.upper()}")
+        
         tts_total_cost = 0.0
         
-        # Get TTS voices and models for each language
+        # Get TTS voices and models for German + interface language only
         import re
         tts_items = [
             ("de", display_text, "display", "vocabulary_tts_de"),
-            ("uk", ua_text, "ua", "vocabulary_tts_ua"),
-            ("en", en_text, "en", "vocabulary_tts_en"),
+            (target_lang, trans_text, "translation", f"vocabulary_tts_{job_lang}"),
         ]
         
         for lang_code, text, text_type, job_name in tts_items:
@@ -614,11 +626,11 @@ async def record_quick_translate_cost(
                 continue
             
             # Split by commas/semicolons just like in vocabulary.py
-            # display is NOT split (single word), but ua and en are split
+            # display is NOT split (single word), but translations are split
             if text_type == "display":
                 parts = [text]  # German display word is not split
             else:
-                # Split Ukrainian and English by comma/semicolon
+                # Split translations by comma/semicolon
                 parts = [p.strip() for p in re.split(r'[,;]', text) if p.strip()]
             
             print(f"\n   🎤 {text_type.upper()} ({lang_code.upper()}):")

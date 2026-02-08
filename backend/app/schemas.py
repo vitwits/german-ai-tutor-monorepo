@@ -92,6 +92,8 @@ class VocabWordSchema(BaseModel):
     last_reviewed: Optional[datetime] = None
     study_view_count: Optional[int] = 0
     display_trans: Optional[str] = None
+    audio_de_url: Optional[str] = None
+    audio_trans_urls: Optional[list] = None
 
     class Config:
         from_attributes = True

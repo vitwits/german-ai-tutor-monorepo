@@ -15,12 +15,12 @@
   let totalPages = $state(1);
 
   // Filter State
-  let activeTab = $state('words'); // 'words' | 'sentences'
+  let activeTab = $state('words'); // 'words' only
   let viewMode = $state('list');   // 'list' | 'grid'
   let selectedLevels = $state([]);
   let searchQuery = $state('');
   const allLevels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
-  let expandedContexts = $state(new Set()); // For list view context toggle
+  let expandedContexts = $state({}); // Change from Set to object
   
   let searchTimeout;
   
@@ -49,16 +49,7 @@
   let customWordInput = $state('');
   let addingWord = $state(false);
 
-  // Player State (Sentences)
-  let showPlayer = $state(false);
-  let playerPlaylist = $state([]);
-  let playerIndex = $state(0);
-  let playerIsPlaying = $state(false);
-  let playerIsLoop = $state(false);
-  let playerIsShuffle = $state(false);
-  let playerAudio = null;
-  let playerCanvas = $state();
-  let playerAnimId;
+  // Player State (Removed - sentences no longer supported)
   
   // Editing State
   let editingId = $state(null);
@@ -97,6 +88,7 @@
       page = 1;
       searchQuery = '';
       items = [];
+      expandedContexts = {}; // Закриваємо всі контексти при переключенні вкладки
       loadData();
   }
 
@@ -265,9 +257,24 @@
       const card = sessionCards[currentCardIdx];
       isFlipped = false;
 
-      // 1. Play Front Audio
-      if (fcAudioEnabled && card.audio_de_url) await playAudioPromise(card.audio_de_url);
-      else await new Promise(r => setTimeout(r, 1000));
+      // 1. Play Front Audio (German)
+      if (fcAudioEnabled) {
+          let deUrl = card.audio_de_url;
+          // If no cached URL, generate it
+          if (!deUrl) {
+              try {
+                  const res = await api.post('/vocab/generate_audio', { text: card.display, lang: 'de' });
+                  deUrl = res.data.url;
+              } catch(e) {
+                  console.error('Failed to generate German audio:', e);
+              }
+          }
+          if (deUrl) {
+              await playAudioPromise(deUrl);
+          }
+      } else {
+          await new Promise(r => setTimeout(r, 1000));
+      }
       
       if (!fcIsPlaying) return;
 
@@ -279,10 +286,24 @@
       isFlipped = true;
 
       // 4. Play Back Audio (Translation)
-      if (fcAudioEnabled && card.audio_trans_urls && card.audio_trans_urls.length > 0) {
-          for (const url of card.audio_trans_urls) {
-              if (!fcIsPlaying) break;
-              await playAudioPromise(url);
+      if (fcAudioEnabled) {
+          let transUrls = card.audio_trans_urls;
+          // If no cached URLs, generate them
+          if (!transUrls || transUrls.length === 0) {
+              try {
+                  const res = await api.post('/vocab/generate_audio', { text: card.trans, lang: 'uk' });
+                  if (res.data.url) {
+                      transUrls = [res.data.url];
+                  }
+              } catch(e) {
+                  console.error('Failed to generate translation audio:', e);
+              }
+          }
+          if (transUrls && transUrls.length > 0) {
+              for (const url of transUrls) {
+                  if (!fcIsPlaying) break;
+                  await playAudioPromise(url);
+              }
           }
       } else {
           await new Promise(r => setTimeout(r, 1000));
@@ -479,47 +500,73 @@
       });
   }
 
-  async function playVocabPair(de, trans = "") {
+  async function playVocabPair(de, trans = "", audioDeUrl = null, audioTransUrls = []) {
       if (currentAudio) currentAudio.pause();
+      
       try {
-          const res = await api.post('/tts_pair', { de_text: de, trans_text: trans || "", source: 'vocabulary' });
-          const urls = res.data.urls;
-          for (const url of urls) {
-              await playAudioPromise(url);
-              await new Promise(r => setTimeout(r, 300));
+          // Play German if available or generate if missing
+          if (de) {
+              let urlToPlay = audioDeUrl;
+              
+              // If no cached URL, generate it
+              if (!urlToPlay) {
+                  try {
+                      const res = await api.post('/vocab/generate_audio', { text: de, lang: 'de' });
+                      urlToPlay = res.data.url;
+                  } catch(e) {
+                      console.error('Failed to generate German audio:', e);
+                      return;
+                  }
+              }
+              
+              if (urlToPlay) {
+                  await playAudioPromise(urlToPlay);
+                  await new Promise(r => setTimeout(r, 300));
+              }
           }
-      } catch(e) {}
+          
+          // Play translation (from cache or generate if missing)
+          if (trans) {
+              if (audioTransUrls && audioTransUrls.length > 0) {
+                  // Have cached URLs, play them
+                  for (const url of audioTransUrls) {
+                      if (url) {
+                          await playAudioPromise(url);
+                          await new Promise(r => setTimeout(r, 300));
+                      }
+                  }
+              } else {
+                  // No cached URLs, generate
+                  try {
+                      const res = await api.post('/vocab/generate_audio', { text: trans, lang: 'uk' });
+                      if (res.data.url) {
+                          await playAudioPromise(res.data.url);
+                      }
+                  } catch(e) {
+                      console.error('Failed to generate translation audio:', e);
+                  }
+              }
+          }
+      } catch(e) {
+          console.error('Playback error:', e);
+      }
   }
 
   async function playSentencePair(s) {
-      if (currentAudio) currentAudio.pause();
-      
-      // 1. Play German
-      if (s.audio_de) {
-          const url = s.audio_de.startsWith('http') ? s.audio_de : `/static/audio/sentences/${s.audio_de}`;
-          await playAudioPromise(url);
-      } else {
-          // Fallback TTS
-          await playAudioPromise((await api.post('/tts', { text: s.text_de, source: 'texts' })).data.url);
-      }
-      
-      await new Promise(r => setTimeout(r, 600));
-      
-      // 2. Play Translation
-      if (s.display_audio) {
-           const url = s.display_audio.startsWith('http') ? s.display_audio : `/static/audio/vocabulary/${s.display_audio}`;
-           await playAudioPromise(url);
-      }
+      // Removed - sentences no longer supported
   }
 
   // --- ITEM ACTIONS ---
 
   function toggleContext(id) {
-      if (expandedContexts.has(id)) {
-          expandedContexts.delete(id);
+      if (expandedContexts[id]) {
+          // Закриваємо контекст цього слова
+          delete expandedContexts[id];
       } else {
-          expandedContexts.clear();
-          expandedContexts.add(id);
+          // Закриваємо всі інші контексти
+          expandedContexts = {};
+          // Відкриваємо контекст цього слова
+          expandedContexts[id] = true;
       }
   }
 
@@ -572,152 +619,19 @@
 
   function handleGlobalClick(e) {
       if (editingId) cancelEdit();
-      if (expandedContexts.size > 0) {
-          expandedContexts.clear();
+      if (Object.keys(expandedContexts).length > 0) {
+          expandedContexts = {};
       }
   }
 
   function handleWindowBlur() {
       if (editingId) cancelEdit();
-      if (expandedContexts.size > 0) {
-          expandedContexts.clear();
+      if (Object.keys(expandedContexts).length > 0) {
+          expandedContexts = {};
       }
-  }
-
-  // --- PLAYER LOGIC ---
-  function openPlayer() {
-      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
-      if (items.length === 0) return;
-      playerPlaylist = [...items];
-      showPlayer = true;
-      playerIndex = 0;
-      playerIsPlaying = true;
-      
-      setTimeout(() => {
-          startVisualizer();
-          playCurrentSentence();
-      }, 0);
-  }
-
-  function closePlayer() {
-      showPlayer = false;
-      stopPlayerAudio();
-      playerIsPlaying = false;
-      playerIsLoop = false;
-      playerIsShuffle = false;
-      if (playerAnimId) cancelAnimationFrame(playerAnimId);
-  }
-
-  function stopPlayerAudio() {
-      if (playerAudio) {
-          playerAudio.pause();
-          playerAudio = null;
-      }
-  }
-
-  async function playCurrentSentence() {
-      if (!playerIsPlaying || !showPlayer) return;
-      stopPlayerAudio();
-
-      const item = playerPlaylist[playerIndex];
-      if (!item) return;
-
-      // Play DE
-      const urlDe = item.audio_de?.startsWith('http') ? item.audio_de : `/static/audio/sentences/${item.audio_de}`;
-      await playPlayerAudioFile(urlDe);
-      if (!playerIsPlaying || !showPlayer) return;
-
-      // Pause
-      await new Promise(r => setTimeout(r, 600));
-      if (!playerIsPlaying || !showPlayer) return;
-
-      // Play Trans
-      if (item.display_audio) {
-          const urlTrans = item.display_audio.startsWith('http') ? item.display_audio : `/static/audio/vocabulary/${item.display_audio}`;
-          await playPlayerAudioFile(urlTrans);
-      }
-
-      if (!playerIsPlaying || !showPlayer) return;
-
-      // Pause before next
-      await new Promise(r => setTimeout(r, 1000));
-      if (!playerIsPlaying || !showPlayer) return;
-
-      playNext(true);
-  }
-
-  function playPlayerAudioFile(url) {
-      return new Promise(resolve => {
-          if (!url) { resolve(); return; }
-          playerAudio = new Audio(url);
-          playerAudio.onended = resolve;
-          playerAudio.onerror = resolve;
-          playerAudio.play().catch(e => resolve());
-      });
-  }
-
-  function togglePlayerPlay() {
-      playerIsPlaying = !playerIsPlaying;
-      if (playerIsPlaying) playCurrentSentence();
-      else stopPlayerAudio();
-  }
-
-  function playNext(auto = false) {
-      if (playerIsShuffle) {
-           playerIndex = Math.floor(Math.random() * playerPlaylist.length);
-      } else {
-          playerIndex++;
-          if (playerIndex >= playerPlaylist.length) {
-              if (playerIsLoop) playerIndex = 0;
-              else {
-                  playerIndex = playerPlaylist.length - 1;
-                  playerIsPlaying = false;
-                  return;
-              }
-          }
-      }
-      if (!auto) playerIsPlaying = true;
-      playCurrentSentence();
-  }
-
-  function playPrev() {
-      playerIndex--;
-      if (playerIndex < 0) playerIndex = playerPlaylist.length - 1;
-      playerIsPlaying = true;
-      playCurrentSentence();
-  }
-
-  function startVisualizer() {
-      if (!playerCanvas) return;
-      const ctx = playerCanvas.getContext('2d');
-      playerCanvas.width = window.innerWidth;
-      playerCanvas.height = window.innerHeight;
-      let time = 0;
-
-      function animate() {
-          if (!showPlayer) return;
-          ctx.clearRect(0, 0, playerCanvas.width, playerCanvas.height);
-          ctx.beginPath();
-          ctx.strokeStyle = 'rgba(25, 118, 210, 0.3)';
-          ctx.lineWidth = 2;
-
-          for (let x = 0; x < playerCanvas.width; x++) {
-              const y = playerCanvas.height / 2 + Math.sin(x * 0.01 + time) * 50 * (playerIsPlaying ? 1 : 0.1) + Math.sin(x * 0.02 + time * 1.5) * 20;
-              if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-          }
-          ctx.stroke();
-          time += 0.05;
-          playerAnimId = requestAnimationFrame(animate);
-      }
-      animate();
   }
 
   function handleKeydown(e) {
-      if (showPlayer && e.key === 'Escape') {
-          closePlayer();
-          return;
-      }
-
       if (!showSession) return;
       
       if (e.key === 'Escape') {
@@ -758,10 +672,10 @@
   onDestroy(() => {
       if (fcLoopTimeout) clearTimeout(fcLoopTimeout);
       if (currentAudio) currentAudio.pause();
-      if (playerAudio) playerAudio.pause();
       window.removeEventListener('click', handleGlobalClick);
       window.removeEventListener('blur', handleWindowBlur);
       window.removeEventListener('keydown', handleKeydown);
+      expandedContexts = {}; // Закриваємо всі контексти при виході зе сторінки
   });
 
   function handleCardLeave(e) {
@@ -785,30 +699,18 @@
 </script>
 
 <div class="vocab-header-controls">
-    <div class="mode-switch">
-        <button class="mode-btn" class:active={activeTab === 'words'} onclick={() => switchTab('words')}>{ui.vocab_words}</button>
-        <button class="mode-btn" class:active={activeTab === 'sentences'} onclick={() => switchTab('sentences')}>{ui.vocab_sentences}</button>
-    </div>
-
     <div class="filters-row">
-        {#if activeTab === 'words'}
-            <div style="display: flex; gap: 10px;">
-                <button class="btn-contained practice-btn" onclick={() => { fcMode = 'study'; startSession(); }}>
-                    <span class="material-symbols-outlined">headphones</span> {ui.mode_training}
-                </button>
-                <button class="btn-contained practice-btn" onclick={() => { fcMode = 'review'; startSession(); }}>
-                    <span class="material-symbols-outlined">school</span> {ui.mode_test}
-                </button>
-                <button class="btn-contained practice-btn add-word-btn" onclick={openAddWordDialog}>
-                    <span class="material-symbols-outlined">add</span> {ui.add_custom_word_btn_label}
-                </button>
-            </div>
-        {:else}
-            <button class="btn-contained practice-btn" onclick={openPlayer}>
-                <span class="material-symbols-outlined">play_arrow</span>
-                {ui.play_all}
+        <div style="display: flex; gap: 10px;">
+            <button class="btn-contained practice-btn" onclick={() => { fcMode = 'study'; startSession(); }}>
+                <span class="material-symbols-outlined">headphones</span> {ui.mode_training}
             </button>
-        {/if}
+            <button class="btn-contained practice-btn" onclick={() => { fcMode = 'review'; startSession(); }}>
+                <span class="material-symbols-outlined">school</span> {ui.mode_test}
+            </button>
+            <button class="btn-contained practice-btn add-word-btn" onclick={openAddWordDialog}>
+                <span class="material-symbols-outlined">add</span> {ui.add_custom_word_btn_label}
+            </button>
+        </div>
 
         <div class="filters-right">
             <input type="text" class="search-input" placeholder={ui.search || 'Search...'} 
@@ -824,16 +726,14 @@
                 {/each}
             </div>
 
-            {#if activeTab === 'words'}
-                <div class="view-toggles">
-                    <button class="view-btn" class:active={viewMode === 'list'} onclick={() => viewMode = 'list'}>
-                        <span class="material-symbols-outlined">view_list</span>
-                    </button>
-                    <button class="view-btn" class:active={viewMode === 'grid'} onclick={() => viewMode = 'grid'}>
-                        <span class="material-symbols-outlined">grid_view</span>
-                    </button>
-                </div>
-            {/if}
+            <div class="view-toggles">
+                <button class="view-btn" class:active={viewMode === 'list'} onclick={() => viewMode = 'list'}>
+                    <span class="material-symbols-outlined">view_list</span>
+                </button>
+                <button class="view-btn" class:active={viewMode === 'grid'} onclick={() => viewMode = 'grid'}>
+                    <span class="material-symbols-outlined">grid_view</span>
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -977,176 +877,119 @@
         </div>
     </div>
     {/if}
-    {#if showPlayer}
-    <div class="player-overlay">
-        <canvas bind:this={playerCanvas} class="player-canvas"></canvas>
-        <button class="close-player-btn" onclick={closePlayer}>
-            <span class="material-symbols-outlined" style="font-size: 32px;">close</span>
-            <div style="font-size: 0.9rem; font-weight: bold; opacity: 0.8; text-align: center; margin-top: 2px;">Esc</div>
-        </button>
-        
-        <div class="player-content">
-            <div class="player-sent-de">{playerPlaylist[playerIndex]?.text_de}</div>
-            <div class="player-sent-trans">{playerPlaylist[playerIndex]?.display_trans}</div>
-            
-            <div class="player-controls">
-                <button class="ctrl-btn ctrl-btn-sm" class:active={playerIsLoop} onclick={() => playerIsLoop = !playerIsLoop} title="Loop">
-                    <span class="material-symbols-outlined">repeat</span>
-                </button>
-                <button class="ctrl-btn ctrl-btn-md" onclick={playPrev}>
-                    <span class="material-symbols-outlined" style="font-size: 36px;">skip_previous</span>
-                </button>
-                <button class="ctrl-btn ctrl-btn-lg" onclick={togglePlayerPlay}>
-                    <span class="material-symbols-outlined" style="font-size: 40px;">{playerIsPlaying ? 'pause' : 'play_arrow'}</span>
-                </button>
-                <button class="ctrl-btn ctrl-btn-md" onclick={() => playNext(false)}>
-                    <span class="material-symbols-outlined" style="font-size: 36px;">skip_next</span>
-                </button>
-                <button class="ctrl-btn ctrl-btn-sm" class:active={playerIsShuffle} onclick={() => playerIsShuffle = !playerIsShuffle} title="Mix">
-                    <span class="material-symbols-outlined">shuffle</span>
-                </button>
-            </div>
-        </div>
-    </div>
-    {/if}
 
-    {#if activeTab === 'words'}
-        <div class="vocab-wrapper {viewMode}">
-            {#each items as w (w.id)}
-                <div class="vocab-item lvl-strip-{w.level?.toLowerCase()}" class:grid-card={viewMode === 'grid'}
-                     role="button"
-                     tabindex="0"
-                     onkeydown={(e) => { if((e.key === 'Enter' || e.key === ' ') && viewMode==='grid' && !e.target.closest('button')) e.currentTarget.classList.toggle('flipped'); }}
-                     onclick={(e) => { 
-                        if(viewMode==='grid' && !e.target.closest('button')) e.currentTarget.classList.toggle('flipped');
-                        if(viewMode==='list' && expandedContexts.has(w.id)) e.stopPropagation();
-                     }}
-                     onmouseleave={handleCardLeave}
-                     onmouseenter={handleCardEnter}>
-                    
-                    <div class="vocab-card-inner">
-                        <div class="vocab-face vocab-front">
-                            {#if viewMode === 'grid'}
-                                <span class="level-badge lvl-{w.level?.toLowerCase()}" style="position:absolute; top:12px; left:12px;">{w.level}</span>
-                            {/if}
-                            
-                            <div class="item-content">
-                                <div class="vocab-main-row">
-                                    <div class="vocab-word-group">
-                                        <button class="btn-text list-audio-btn" onclick={(e) => { e.stopPropagation(); playVocabPair(w.display, w.display_trans); }}>
-                                            <span class="material-symbols-outlined">volume_up</span>
-                                        </button>
-                                        <div class="vocab-text-area" class:editing={editingId === w.id}>
-                                            <div class="word-text" 
-                                                 role="button" 
-                                                 tabindex="0" 
-                                                 onkeydown={(e) => { e.stopPropagation(); if(e.key === 'Enter' || e.key === ' ') toggleContext(w.id); }}
-                                                 onclick={(e) => { e.stopPropagation(); toggleContext(w.id); }}>
-                                                {w.display}
-                                            </div>
-                                            {#if editingId === w.id}
-                                                <input type="text" class="edit-input" bind:value={editValue} onclick={(e) => e.stopPropagation()} onkeydown={(e) => { e.stopPropagation(); if(e.key === 'Enter') saveEdit(w.id); }} />
-                                            {:else}
-                                                <div class="trans-text">{w.display_trans}</div>
-                                            {/if}
+    <div class="vocab-wrapper {viewMode}">
+        {#each items as w (w.id)}
+            <div class="vocab-item lvl-strip-{w.level?.toLowerCase()}" class:grid-card={viewMode === 'grid'}
+                 role="button"
+                 tabindex="0"
+                 onkeydown={(e) => { if((e.key === 'Enter' || e.key === ' ') && viewMode==='grid' && !e.target.closest('button')) e.currentTarget.classList.toggle('flipped'); }}
+                 onclick={(e) => { 
+                    if(viewMode==='grid' && !e.target.closest('button')) e.currentTarget.classList.toggle('flipped');
+                    if(viewMode==='list' && expandedContexts[w.id]) e.stopPropagation();
+                 }}
+                 onmouseleave={handleCardLeave}
+                 onmouseenter={handleCardEnter}>
+                
+                <div class="vocab-card-inner">
+                    <div class="vocab-face vocab-front">
+                        {#if viewMode === 'grid'}
+                            <span class="level-badge lvl-{w.level?.toLowerCase()}" style="position:absolute; top:12px; left:12px;">{w.level}</span>
+                        {/if}
+                        
+                        <div class="item-content">
+                            <div class="vocab-main-row">
+                                <div class="vocab-word-group">
+                                    <button class="btn-text list-audio-btn" onclick={(e) => { e.stopPropagation(); playVocabPair(w.display, w.display_trans, w.audio_de_url, w.audio_trans_urls); }}>
+                                        <span class="material-symbols-outlined">volume_up</span>
+                                    </button>
+                                    <div class="vocab-text-area" class:editing={editingId === w.id}>
+                                        <div class="word-text" 
+                                             role="button" 
+                                             tabindex="0" 
+                                             onkeydown={(e) => { e.stopPropagation(); if(e.key === 'Enter' || e.key === ' ') toggleContext(w.id); }}
+                                             onclick={(e) => { e.stopPropagation(); toggleContext(w.id); }}>
+                                            {w.display}
                                         </div>
+                                        {#if editingId === w.id}
+                                            <input type="text" class="edit-input" bind:value={editValue} onclick={(e) => e.stopPropagation()} onkeydown={(e) => { e.stopPropagation(); if(e.key === 'Enter') saveEdit(w.id); }} />
+                                        {:else}
+                                            <div class="trans-text">{w.display_trans}</div>
+                                        {/if}
                                     </div>
-                                    
-                                    {#if viewMode === 'list'}
-                                        <div class="list-tools" style="display:flex; align-items:center; gap: 8px;">
-                                            {#if editingId === w.id}
-                                                <button class="btn-text" style="color:var(--primary); padding:0; min-width:32px;" onclick={(e) => { e.stopPropagation(); saveEdit(w.id); }}>
-                                                    <span class="material-symbols-outlined">check</span>
-                                                </button>
-                                                <button class="btn-text" style="padding:0; min-width:32px;" onclick={(e) => { e.stopPropagation(); cancelEdit(); }}>
-                                                    <span class="material-symbols-outlined">close</span>
-                                                </button>
-                                            {:else}
-                                                <button class="btn-text" style="color:var(--primary); opacity:0.7; padding:0; min-width:32px;" onclick={(e) => { e.stopPropagation(); startEdit(w.id, w.display_trans); }}>
-                                                    <span class="material-symbols-outlined">edit</span>
-                                                </button>
-                                                <button class="btn-text delete-btn" onclick={(e) => { e.stopPropagation(); deleteItem(w.id); }}>
-                                                    <span class="material-symbols-outlined">delete</span>
-                                                </button>
-                                            {/if}
-                                        </div>
-                                    {/if}
                                 </div>
                                 
-                                {#if viewMode === 'list' && expandedContexts.has(w.id)}
-                                    <div class="ctx-block">
-                                        <div class="ctx-label">{ui.context}</div>
-                                        <div class="ctx-text">{w.ctx}</div>
-                                        {#if w.text_id}
-                                            <button type="button" class="ctx-link btn-text" style="padding:0; height:auto; text-transform:none;" onclick={() => router.goto(`/view/${w.text_id}`)}>
-                                                <span class="material-symbols-outlined" style="font-size:14px;">open_in_new</span> {ui.go_to_text}
+                                {#if viewMode === 'list'}
+                                    <div class="list-tools" style="display:flex; align-items:center; gap: 8px;">
+                                        {#if editingId === w.id}
+                                            <button class="btn-text" style="color:var(--primary); padding:0; min-width:32px;" onclick={(e) => { e.stopPropagation(); saveEdit(w.id); }}>
+                                                <span class="material-symbols-outlined">check</span>
+                                            </button>
+                                            <button class="btn-text" style="padding:0; min-width:32px;" onclick={(e) => { e.stopPropagation(); cancelEdit(); }}>
+                                                <span class="material-symbols-outlined">close</span>
+                                            </button>
+                                        {:else}
+                                            <button class="btn-text" style="color:var(--primary); opacity:0.7; padding:0; min-width:32px;" onclick={(e) => { e.stopPropagation(); startEdit(w.id, w.display_trans); }}>
+                                                <span class="material-symbols-outlined">edit</span>
+                                            </button>
+                                            <button class="btn-text delete-btn" onclick={(e) => { e.stopPropagation(); deleteItem(w.id); }}>
+                                                <span class="material-symbols-outlined">delete</span>
                                             </button>
                                         {/if}
                                     </div>
                                 {/if}
                             </div>
                             
-                            {#if viewMode === 'grid'}
-                                <div class="grid-footer">
-                                    <button class="btn-text" onclick={(e) => { e.stopPropagation(); playVocabPair(w.display, w.display_trans); }}>
-                                        <span class="material-symbols-outlined">volume_up</span>
-                                    </button>
-                                    {#if editingId === w.id}
-                                        <button class="btn-text" style="color:var(--primary); opacity:1;" onclick={(e) => { e.stopPropagation(); saveEdit(w.id); }}>
-                                            <span class="material-symbols-outlined">check</span>
-                                        </button>
-                                    {:else}
-                                        <button class="btn-text" style="color:var(--primary); opacity:0.7;" onclick={(e) => { e.stopPropagation(); startEdit(w.id, w.display_trans); }}>
-                                            <span class="material-symbols-outlined">edit</span>
+                            {#if viewMode === 'list' && expandedContexts[w.id] && w.ctx}
+                                <div class="ctx-block">
+                                    <div class="ctx-label">{ui.context}</div>
+                                    <div class="ctx-text">{w.ctx}</div>
+                                    {#if w.text_id}
+                                        <button type="button" class="ctx-link btn-text" style="padding:0; height:auto; text-transform:none;" onclick={() => router.goto(`/view/${w.text_id}`)}>
+                                            <span class="material-symbols-outlined" style="font-size:14px;">open_in_new</span> {ui.go_to_text}
                                         </button>
                                     {/if}
-                                    <button class="btn-text delete-btn" onclick={(e) => { e.stopPropagation(); deleteItem(w.id); }}>
-                                        <span class="material-symbols-outlined">delete</span>
-                                    </button>
                                 </div>
                             {/if}
                         </div>
-
+                        
                         {#if viewMode === 'grid'}
-                            <div class="vocab-face vocab-back">
-                                <div class="vocab-back-scroll">
-                                    <div class="ctx-text">{w.ctx}</div>
-                                </div>
-                                {#if w.text_id}
-                                    <button type="button" class="ctx-link btn-text" style="padding:0; height:auto; text-transform:none;" onclick={() => router.goto(`/view/${w.text_id}`)}>
-                                        <span class="material-symbols-outlined" style="font-size:14px;">open_in_new</span> {ui.go_to_text}
+                            <div class="grid-footer">
+                                <button class="btn-text" onclick={(e) => { e.stopPropagation(); playVocabPair(w.display, w.display_trans, w.audio_de_url, w.audio_trans_urls); }}>
+                                    <span class="material-symbols-outlined">volume_up</span>
+                                </button>
+                                {#if editingId === w.id}
+                                    <button class="btn-text" style="color:var(--primary); opacity:1;" onclick={(e) => { e.stopPropagation(); saveEdit(w.id); }}>
+                                        <span class="material-symbols-outlined">check</span>
+                                    </button>
+                                {:else}
+                                    <button class="btn-text" style="color:var(--primary); opacity:0.7;" onclick={(e) => { e.stopPropagation(); startEdit(w.id, w.display_trans); }}>
+                                        <span class="material-symbols-outlined">edit</span>
                                     </button>
                                 {/if}
+                                <button class="btn-text delete-btn" onclick={(e) => { e.stopPropagation(); deleteItem(w.id); }}>
+                                    <span class="material-symbols-outlined">delete</span>
+                                </button>
                             </div>
                         {/if}
                     </div>
-                </div>
-            {/each}
-        </div>
-    {:else}
-        <div class="sentences-list">
-            {#each items as s (s.id)}
-                <div class="vocab-item">
-                    <div class="vocab-main-row">
-                        <div class="vocab-word-group">
-                            <button class="btn-text list-audio-btn" onclick={() => playSentencePair(s)}>
-                                <span class="material-symbols-outlined">volume_up</span>
-                            </button>
-                            <div style="flex: 1; min-width: 0;">
-                                <div class="sent-de">{s.text_de}</div>
-                                <div class="sent-trans">{s.display_trans}</div>
+
+                    {#if viewMode === 'grid'}
+                        <div class="vocab-face vocab-back">
+                            <div class="vocab-back-scroll">
+                                <div class="ctx-text">{w.ctx}</div>
                             </div>
+                            {#if w.text_id}
+                                <button type="button" class="ctx-link btn-text" style="padding:0; height:auto; text-transform:none;" onclick={() => router.goto(`/view/${w.text_id}`)}>
+                                    <span class="material-symbols-outlined" style="font-size:14px;">open_in_new</span> {ui.go_to_text}
+                                </button>
+                            {/if}
                         </div>
-                        <div class="list-tools">
-                            <button class="btn-text delete-btn" onclick={() => deleteItem(s.fav_id, true)}>
-                                <span class="material-symbols-outlined">delete</span>
-                            </button>
-                        </div>
-                    </div>
+                    {/if}
                 </div>
-            {/each}
-        </div>
-    {/if}
+            </div>
+        {/each}
+    </div>
 
     {#if totalPages > 1}
         <div class="pagination">
@@ -1323,12 +1166,6 @@
         height: 40px; border-top: 1px solid var(--border); background: rgba(0,0,0,0.02);
         display: flex; justify-content: space-around; align-items: center;
     }
-
-    /* Sentences Tab */
-    .sentences-list { display: flex; flex-direction: column; gap: 8px; }
-    /* Re-using .vocab-item and its sub-classes for sentences to unify styles */
-    .sent-de { font-size: 1.1rem; margin-bottom: 4px; font-weight: 500; color: var(--primary); font-family: var(--font-text); }
-    .sent-trans { font-size: 0.9rem; opacity: 0.8; font-family: var(--font-text); }
 
     /* Flashcard Styles */
     .session-overlay {
@@ -1536,42 +1373,7 @@
     .page-btn { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; }
     .page-btn:disabled { opacity: 0.3; cursor: default; }
 
-    /* Player Styles */
-    .player-overlay {
-        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-        background: var(--bg); 
-        z-index: 10000;
-        display: flex; flex-direction: column; align-items: center; justify-content: center;
-        color: var(--on-surface);
-    }
-    .player-canvas {
-        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-        opacity: 0.2; pointer-events: none;
-    }
-    .player-content {
-        z-index: 2; text-align: center; padding: 20px; width: 90%; max-width: 600px;
-        flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center;
-    }
-    .player-sent-de { font-size: 1.5rem; font-weight: 500; margin-bottom: 24px; color: var(--primary); line-height: 1.4; }
-    .player-sent-trans { font-size: 1.1rem; opacity: 0.8; margin-bottom: 40px; line-height: 1.4; }
-    .player-controls {
-        display: flex; align-items: center; justify-content: center; gap: 24px;
-        margin-bottom: 60px; z-index: 2;
-    }
-    .ctrl-btn {
-        background: none; border: none; color: var(--on-surface); cursor: pointer;
-        display: flex; align-items: center; justify-content: center;
-        transition: transform 0.1s, color 0.2s; padding: 0;
-    }
-    .ctrl-btn:active { transform: scale(0.9); }
-    .ctrl-btn.active { color: var(--primary); }
-    .ctrl-btn-lg { width: 72px; height: 72px; border-radius: 50%; background: var(--primary); color: var(--on-primary); box-shadow: 0 6px 16px rgba(0,0,0,0.2); }
-    .ctrl-btn-md { width: 48px; height: 48px; opacity: 0.9; }
-    .ctrl-btn-sm { width: 40px; height: 40px; opacity: 0.6; }
-    .close-player-btn {
-        position: absolute; top: 24px; right: 24px; z-index: 3;
-        background: none; border: none; color: var(--on-surface); cursor: pointer; padding: 8px;
-    }
+    /* Player Styles (Removed) */
 
     .fc-study-hint-text { 
         text-align: center; 
