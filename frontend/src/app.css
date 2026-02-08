@@ -60,8 +60,7 @@ body {
     top: 57px;
     left: 0;
     width: 220px;
-    height: calc(100vh - 57px);
-    bottom: auto !important;
+    bottom: 0 !important;
     right: auto !important;
     flex-shrink: 0;
     padding: 0 !important;
@@ -72,6 +71,7 @@ body {
     justify-content: flex-start;
     z-index: 100;
     background: var(--surface);
+    overflow-y: auto;
   }
 
   .nav-mobile .nav-item { 
