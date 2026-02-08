@@ -44,6 +44,11 @@
   let showSessionSplash = $state(false);
   let sessionScore = $state(0);
 
+  // Add Custom Word State
+  let showAddWordDialog = $state(false);
+  let customWordInput = $state('');
+  let addingWord = $state(false);
+
   // Player State (Sentences)
   let showPlayer = $state(false);
   let playerPlaylist = $state([]);
@@ -192,6 +197,50 @@
       showSessionSplash = false;
       // Перезагружаємо сесію з тією ж конфігурацією
       startSession();
+  }
+
+  function openAddWordDialog() {
+      showAddWordDialog = true;
+      customWordInput = '';
+  }
+
+  function closeAddWordDialog() {
+      showAddWordDialog = false;
+      customWordInput = '';
+  }
+
+  async function addCustomWord() {
+      if (!customWordInput.trim()) {
+          addToast(ui.add_custom_word_empty, 'error');
+          return;
+      }
+
+      const words = customWordInput.trim().split(/\s+/);
+      if (words.length > 4) {
+          addToast(ui.add_custom_word_max_words, 'error');
+          return;
+      }
+
+      addingWord = true;
+      try {
+          const response = await api.post('/vocab/add_custom', {
+              text: customWordInput.trim()
+          });
+
+          if (response.data && response.data.success === false) {
+              addToast(response.data.error || ui.add_custom_word_invalid, 'error');
+              return;
+          }
+
+          addToast(ui.add_custom_word_success, 'success');
+          closeAddWordDialog();
+          loadData();
+      } catch (error) {
+          console.error('Error adding custom word:', error);
+          addToast(error.response?.data?.error || ui.add_custom_word_error, 'error');
+      } finally {
+          addingWord = false;
+      }
   }
 
   function launchConfetti() {
@@ -750,6 +799,9 @@
                 <button class="btn-contained practice-btn" onclick={() => { fcMode = 'review'; startSession(); }}>
                     <span class="material-symbols-outlined">school</span> {ui.mode_test}
                 </button>
+                <button class="btn-contained practice-btn add-word-btn" onclick={openAddWordDialog}>
+                    <span class="material-symbols-outlined">add</span> {ui.add_custom_word_btn_label}
+                </button>
             </div>
         {:else}
             <button class="btn-contained practice-btn" onclick={openPlayer}>
@@ -758,29 +810,31 @@
             </button>
         {/if}
 
-        <input type="text" class="search-input" placeholder={ui.search || 'Search...'} 
-               bind:value={searchQuery} oninput={onSearchChange} />
+        <div class="filters-right">
+            <input type="text" class="search-input" placeholder={ui.search || 'Search...'} 
+                   bind:value={searchQuery} oninput={onSearchChange} />
 
-        <div class="level-filters">
-            {#each allLevels as lvl}
-                <button class="lvl-filter" class:active={selectedLevels.includes(lvl)} 
-                        onclick={() => toggleLevel(lvl)}
-                        data-lvl={lvl}>
-                    {lvl}
-                </button>
-            {/each}
-        </div>
-
-        {#if activeTab === 'words'}
-            <div class="view-toggles">
-                <button class="view-btn" class:active={viewMode === 'list'} onclick={() => viewMode = 'list'}>
-                    <span class="material-symbols-outlined">view_list</span>
-                </button>
-                <button class="view-btn" class:active={viewMode === 'grid'} onclick={() => viewMode = 'grid'}>
-                    <span class="material-symbols-outlined">grid_view</span>
-                </button>
+            <div class="level-filters">
+                {#each allLevels as lvl}
+                    <button class="lvl-filter" class:active={selectedLevels.includes(lvl)} 
+                            onclick={() => toggleLevel(lvl)}
+                            data-lvl={lvl}>
+                        {lvl}
+                    </button>
+                {/each}
             </div>
-        {/if}
+
+            {#if activeTab === 'words'}
+                <div class="view-toggles">
+                    <button class="view-btn" class:active={viewMode === 'list'} onclick={() => viewMode = 'list'}>
+                        <span class="material-symbols-outlined">view_list</span>
+                    </button>
+                    <button class="view-btn" class:active={viewMode === 'grid'} onclick={() => viewMode = 'grid'}>
+                        <span class="material-symbols-outlined">grid_view</span>
+                    </button>
+                </div>
+            {/if}
+        </div>
     </div>
 </div>
 
@@ -1103,6 +1157,34 @@
     {/if}
 {/if}
 
+{#if showAddWordDialog}
+    <div class="add-word-overlay" role="dialog" aria-modal="true">
+        <div class="add-word-container">
+            <button class="add-word-close-btn" onclick={closeAddWordDialog} aria-label="Close">
+                <span class="material-symbols-outlined">close</span>
+            </button>
+            <h2>{ui.add_custom_word_title}</h2>
+            <p style="opacity: 0.7; margin-bottom: 20px;">{ui.add_custom_word_hint}</p>
+            
+            <div class="add-word-input-group">
+                <input 
+                    type="text" 
+                    class="add-word-input" 
+                    placeholder="{ui.add_custom_word_placeholder}" 
+                    bind:value={customWordInput}
+                    onkeydown={(e) => e.key === 'Enter' && addCustomWord()}
+                    disabled={addingWord} />
+                <button 
+                    class="btn-contained" 
+                    onclick={addCustomWord}
+                    disabled={addingWord || !customWordInput.trim()}>
+                    {addingWord ? ui.add_custom_word_adding : ui.add_custom_word_btn}
+                </button>
+            </div>
+        </div>
+    </div>
+{/if}
+
 <style>
     /* Global focus outline reset */
     :global(*) {
@@ -1145,7 +1227,9 @@
     .search-input::placeholder { opacity: 0.5; }
 
     .filters-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .filters-right { display: flex; align-items: center; gap: 10px; }
     .practice-btn { background: var(--secondary); color: #000; height: 32px; font-size: 0.85rem; }
+    .add-word-btn { background: #4CAF50; color: white; }
     
     .level-filters { display: flex; gap: 4px; margin-left: auto; }
     .lvl-filter {
@@ -1527,5 +1611,48 @@
             transform: translateY(100vh) rotateZ(360deg);
             opacity: 0;
         }
+    }
+
+    /* Add Word Dialog */
+    .add-word-overlay {
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(4px);
+        z-index: 5000; display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+    }
+
+    .add-word-container {
+        background: var(--surface); border-radius: 16px;
+        padding: 32px; max-width: 500px; width: 90%;
+        position: relative; box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+    }
+
+    .add-word-close-btn {
+        position: absolute; top: 16px; right: 16px;
+        background: none; border: none; cursor: pointer;
+        color: var(--on-surface); padding: 8px;
+        display: flex; align-items: center; justify-content: center;
+    }
+
+    .add-word-container h2 {
+        margin: 0 0 16px 0; color: var(--on-surface); text-align: center;
+    }
+
+    .add-word-input-group {
+        display: flex; gap: 10px; align-items: center;
+    }
+
+    .add-word-input {
+        flex: 1; padding: 12px; border: 1px solid var(--border);
+        border-radius: 8px; background: var(--bg); color: var(--on-surface);
+        font-size: 1rem; outline: none;
+    }
+
+    .add-word-input:disabled {
+        opacity: 0.6; cursor: not-allowed;
+    }
+
+    .add-word-input::placeholder {
+        opacity: 0.5;
     }
 </style>

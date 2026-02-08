@@ -103,6 +103,9 @@ class QuickTranslateRequest(BaseModel):
     sent_idx: int
     start_char_index: int
 
+class AddCustomWordRequest(BaseModel):
+    text: str
+
 class VocabUpdateRequest(BaseModel):
     id: str
     translation: str

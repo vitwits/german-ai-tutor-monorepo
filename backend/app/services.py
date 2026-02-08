@@ -600,10 +600,11 @@ async def evaluate_audio_with_gemini(original_text, audio_bytes, interface_lang,
             "transcribed_text": ""
         }
 
-async def translate_word(text, ctx, db: AsyncSession = None):
+async def translate_word(text, ctx, db: AsyncSession = None, user_id: str = None):
     """
     Translate word to 3 languages with retry logic.
     Attempts up to 3 times with 1 second delay between retries.
+    Calculates and records cost of translation.
     """
     import asyncio
     
@@ -626,6 +627,7 @@ async def translate_word(text, ctx, db: AsyncSession = None):
     print(f"📤 LLM INPUT TO translate_word:")
     print(f"{'='*80}")
     print(f"   model_id: {model_id}")
+    print(f"   user_id: {user_id}")
     print(f"   text: '{text}'")
     print(f"   ctx: '{ctx[:100]}...'")
     print(f"\n   📝 FULL PROMPT TO GEMINI:")
@@ -662,6 +664,24 @@ async def translate_word(text, ctx, db: AsyncSession = None):
             data["_full_prompt"] = prompt
             data["_full_response"] = response.text
             
+            # ============================================
+            # COST CALCULATION & RECORDING
+            # ============================================
+            if user_id and db:
+                print(f"\n📊 RECORDING COST FOR translate_word")
+                print(f"{'='*80}")
+                
+                # Call record_quick_translate_cost with full word data
+                from . import cost_calculation
+                cost_result = await cost_calculation.record_quick_translate_cost(user_id, data, db)
+                
+                print(f"✅ Cost recorded: {cost_result}")
+                
+                # Store cost info in response for debugging
+                data["_cost_info"] = cost_result
+            else:
+                print(f"\n⚠️ COST NOT RECORDED (user_id={user_id}, db={bool(db)})")
+            
             return data
         except Exception as e:
             print(f"Translate Error (attempt {attempt}/{max_retries}): {e}")
@@ -674,6 +694,153 @@ async def translate_word(text, ctx, db: AsyncSession = None):
             # Wait 1 second before retrying
             print(f"⏳ Waiting 1 second before retry...")
             await asyncio.sleep(1)
+
+
+async def translate_custom_word_async(text: str, user_id: str = None, db: AsyncSession = None):
+    """
+    Translate custom word/phrase without lesson context.
+    Validates that input is German, and returns example sentence.
+    Used for user-added custom vocabulary.
+    Calculates and records cost of translation.
+    """
+    import asyncio
+    
+    # Get model from DB or use default
+    model_id = 'gemini-2.0-flash' if not db else await get_llm_model_for_job('translate_custom_vocab', db)
+    
+    # Load prompt from DB
+    prompt_template = None
+    if db:
+        from .models import ModelPrompt
+        result = await db.execute(
+            select(ModelPrompt.prompt).where(
+                ModelPrompt.name == "add_custom_vocab"
+            )
+        )
+        prompt_template = result.scalar_one_or_none()
+    
+    # Fallback prompt if not in DB
+    if not prompt_template:
+        prompt_template = """Translate the German word or phrase: "{text}". Context: "{ctx}".  
+The input "{text}" has {word_count} words.  
+
+STRICT GRAMMAR RULES (NO EXCEPTIONS):  
+0. PRIORITY ORDER: First determine if input is phrase (2+ words) or single word (exactly 1 word). Then apply rules.  
+
+1. COLLOQUIALISMS, SLANG, CONTRACTIONS (HIGHEST PRIORITY):  
+   - If input is spoken contraction ("hast'e", "hab's", "bist'e", "gib's", "mach's") or slang ("nix", "ne"):  
+   - YOU MUST PRESERVE colloquial spelling in 'display' field.  
+   - DO NOT expand to standard German ("hast'e" ≠ "hast du").  
+   - Format: "colloquial_form (standard_form)".  
+   - Examples: "hast'e" → "hast'e (hast du)", "hab's" → "hab's (habe es)", "nix" → "nix (nichts)".  
+
+2. PHRASES (2+ words):  
+   - Convert to Nominative Singular: "die kontinuierliche Innovation".  
+   - NEVER use brackets "()" or dashes "(-)" for phrases.  
+   - Result MUST be clean text only.  
+   - NO "die kontinuierliche Innovation (die kontinuierlichen Innovationen)" — ONLY "die kontinuierliche Innovation".  
+
+3. SINGLE WORDS — Nouns:  
+   - MUST include correct definite article (der/die/das) in nominative singular + plural in brackets.  
+   - Example: "das Haus (die Häuser)".  
+   - Pluraletantum: "Leute (Pl.)".  
+   - Singularetantum: "das Obst (-)".  
+
+4. SINGLE WORDS — Verbs, Adjectives, Pronouns, Adverbs etc.:  
+   - Provide ONLY base/infinitive form.  
+   - FORBIDDEN: declensions, comparatives, endings in brackets.  
+   - Examples: "mein" → "mein", "langsam" → "langsam", "machen" → "machen".  
+
+5. TRANSLATIONS: 1–2 main meanings. Clean text only.  
+
+6. CEFR LEVEL (CRITICAL):  
+   - Output EXACTLY ONE of: "A1", "A2", "B1", "B2", "C1", "C2".  
+   - NEVER ranges ("A1-C2").  
+   - Examples: "Haus" → "A1", "Argument" → "B1".  
+
+7. VALIDATION:
+   - Check if input is valid German (word or phrase)
+   - If NOT German or invalid, return: {{"valid": false, "error": "Invalid German word or phrase"}}
+
+IF VALID GERMAN:
+Return ONLY minified JSON on a single line:
+{{"display":"Correct German form (No brackets for 2+ words)","ua":"Meanings in Ukrainian","en":"Meanings in English","level":"A1-C2","context":"Example sentence in German only"}}"""
+    
+    prompt = prompt_template.replace("{text}", text).replace("{word_count}", str(len(text.split()))).replace("{ctx}", "")
+    
+    print(f"\n{'='*80}")
+    print(f"📤 LLM INPUT TO translate_custom_word_async:")
+    print(f"{'='*80}")
+    print(f"   model_id: {model_id}")
+    print(f"   user_id: {user_id}")
+    print(f"   text: '{text}'")
+    print(f"\n   📝 FULL PROMPT:")
+    print(f"   {prompt}\n")
+    
+    # Retry logic: 3 attempts
+    max_retries = 3
+    for attempt in range(1, max_retries + 1):
+        try:
+            response = client.models.generate_content(
+                model=model_id,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json"
+                )
+            )
+            
+            print(f"\n{'='*80}")
+            print(f"📥 LLM OUTPUT (attempt {attempt}/{max_retries}):")
+            print(f"{'='*80}")
+            print(f"   raw response:\n{response.text}\n")
+            
+            data = json.loads(clean_json_response(response.text))
+            if isinstance(data, list):
+                data = data[0] if data else {}
+            
+            # Check if validation failed
+            if data.get("valid") == False:
+                return {"success": False, "error": data.get("error", "Invalid word or phrase")}
+            
+            # Store full prompt and response for cost calculation
+            data["_full_prompt"] = prompt
+            data["_full_response"] = response.text
+            
+            # ============================================
+            # COST CALCULATION & RECORDING
+            # ============================================
+            if user_id and db:
+                print(f"\n📊 RECORDING COST FOR translate_custom_word_async")
+                print(f"{'='*80}")
+                
+                # Call record_quick_translate_cost with full word data
+                from . import cost_calculation
+                cost_result = await cost_calculation.record_quick_translate_cost(user_id, data, db)
+                
+                print(f"✅ Cost recorded: {cost_result}")
+                
+                # Store cost info in response for debugging
+                data["_cost_info"] = cost_result
+            else:
+                print(f"\n⚠️ COST NOT RECORDED (user_id={user_id}, db={bool(db)})")
+            
+            # Success - validation passed
+            return {
+                "success": True,
+                "display": data.get("display", text),
+                "ua": data.get("ua", ""),
+                "en": data.get("en", ""),
+                "level": data.get("level", "A1"),
+                "context": data.get("context", "")
+            }
+            
+        except Exception as e:
+            print(f"Error (attempt {attempt}/{max_retries}): {e}")
+            if attempt == max_retries:
+                return {"success": False, "error": "Failed to process word"}
+            await asyncio.sleep(1)
+    
+    return {"success": False, "error": "All attempts failed"}
 
 
 # ======================== BILLING ENERGY MANAGEMENT ========================

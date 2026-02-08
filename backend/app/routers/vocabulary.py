@@ -8,7 +8,7 @@ from sqlalchemy import select, func, or_, update, delete
 
 from ..database import get_db
 from ..models import User, Vocabulary, UserFavoriteSentence, Sentence, ReportedLesson, UserBilling
-from ..schemas import VocabUpdateRequest, VocabRemoveRequest, ToggleFavRequest, VocabProgressRequest, QuickTranslateRequest, VocabWordSchema
+from ..schemas import VocabUpdateRequest, VocabRemoveRequest, ToggleFavRequest, VocabProgressRequest, QuickTranslateRequest, AddCustomWordRequest, VocabWordSchema
 from ..dependencies import get_current_user
 from .. import services
 from ..cost_calculation import record_translation_cost
@@ -324,7 +324,7 @@ async def quick_translate(
         return {"ok": False, "error_key": "word_exists"}
 
     # 2. Translate
-    word_data = await services.translate_word(req.text, req.ctx, db=db)
+    word_data = await services.translate_word(req.text, req.ctx, db=db, user_id=current_user.id)
     if not word_data or word_data.get('ua') == 'Error':
         return {"ok": False, "error_key": "translation_failed"}
 
@@ -563,3 +563,82 @@ async def report_text(
     await db.commit()
     
     return {"ok": True}
+
+
+@router.post("/vocab/add_custom")
+async def add_custom_word(
+    request: AddCustomWordRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Add a custom word to user's vocabulary (without lesson context)"""
+    from ..services import translate_custom_word_async
+    
+    text = request.text.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Text is required")
+    
+    # Check word count (max 4 words/phrase)
+    words = text.split()
+    if len(words) > 4:
+        raise HTTPException(status_code=400, detail="Maximum 4 words allowed")
+    
+    try:
+        # Use AI to translate and validate
+        translation_data = await translate_custom_word_async(text, user_id=current_user.id, db=db)
+        
+        # If AI validation failed (not German or invalid)
+        if translation_data.get("success") == False:
+            return {"success": False, "error": translation_data.get("error", "Invalid word or phrase")}
+        
+        # Create vocabulary entry
+        vocab = Vocabulary(
+            id=str(uuid.uuid4()),
+            user_id=current_user.id,
+            origin=text,  # Original German word
+            display=translation_data.get("display", text),  # Formatted German (with article/plural)
+            ua=translation_data.get("ua", ""),  # Ukrainian translation
+            en=translation_data.get("en", ""),  # English translation
+            level=translation_data.get("level", "A1"),
+            ctx=translation_data.get("context", ""),  # Example sentence
+            text_id=None,  # No linked lesson
+            is_favorite=1  # Custom words are added to favorites by default
+        )
+        
+        db.add(vocab)
+        await db.commit()
+        
+        # Generate audio for the word
+        try:
+            audio_de_url = await get_cached_or_generate_tts(text, "de", current_user.id, db, source='vocabulary', log_stats=True)
+            audio_ua_urls = []
+            if translation_data.get("ua"):
+                ua_parts = translation_data["ua"].split(",")
+                for part in ua_parts:
+                    url = await get_cached_or_generate_tts(part.strip(), "uk", current_user.id, db, source='vocabulary', log_stats=True)
+                    audio_ua_urls.append(url)
+            
+            audio_en_urls = []
+            if translation_data.get("en"):
+                en_parts = translation_data["en"].split(",")
+                for part in en_parts:
+                    url = await get_cached_or_generate_tts(part.strip(), "en", current_user.id, db, source='vocabulary', log_stats=True)
+                    audio_en_urls.append(url)
+            
+            # Update vocabulary with audio URLs
+            update_stmt = update(Vocabulary).where(Vocabulary.id == vocab.id).values(
+                audio_de=audio_de_url,
+                audio_ua="|".join(audio_ua_urls) if audio_ua_urls else None,
+                audio_en="|".join(audio_en_urls) if audio_en_urls else None
+            )
+            await db.execute(update_stmt)
+            await db.commit()
+        except Exception as audio_error:
+            print(f"Warning: Could not generate audio for custom word: {audio_error}")
+            # Continue without audio - it's not critical
+        
+        return {"success": True, "word_id": vocab.id}
+        
+    except Exception as e:
+        print(f"Error adding custom word: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error processing word: {str(e)}")
