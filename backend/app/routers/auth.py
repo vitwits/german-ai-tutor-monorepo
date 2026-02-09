@@ -102,7 +102,7 @@ async def read_users_me(current_user: User = Depends(get_current_user), db: Asyn
     )
     billing = billing_result.scalar_one_or_none()
     
-    # Create response with billing data
+    # Create response with only public billing data (energy_left and subscription_status)
     user_data = {
         "id": current_user.id,
         "email": current_user.email,
@@ -110,10 +110,7 @@ async def read_users_me(current_user: User = Depends(get_current_user), db: Asyn
         "interface_language": current_user.interface_language,
         "billing": {
             "energy_left": billing.energy_left if billing else 0.0,
-            "daily_spending": billing.daily_spending if billing else 0.0,
-            "price_per_point_usd": billing.price_per_point_usd if billing else 0.0,
-            "subscription_status": billing.subscription_status if billing else "inactive",
-            "billing_start_day": billing.billing_start_day if billing else 1
+            "subscription_status": billing.subscription_status if billing else "inactive"
         } if billing else None
     }
     

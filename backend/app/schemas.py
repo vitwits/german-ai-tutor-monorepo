@@ -20,7 +20,16 @@ class TokenData(BaseModel):
     email: str | None = None
     user_id: str | None = None
 
+class BillingDataPublic(BaseModel):
+    """Public billing data shown to user (only energy_left and subscription status)"""
+    energy_left: float
+    subscription_status: str
+    
+    class Config:
+        from_attributes = True
+
 class BillingData(BaseModel):
+    """Complete billing data (internal use only)"""
     energy_left: float
     daily_spending: float
     price_per_point_usd: float
@@ -33,9 +42,8 @@ class BillingData(BaseModel):
 class UserRead(UserBase):
     id: str
     level: str
-    credits: float
     interface_language: str
-    billing: Optional[BillingData] = None
+    billing: Optional[BillingDataPublic] = None
 
     class Config:
         from_attributes = True

@@ -88,6 +88,10 @@ class Vocabulary(Base):
     
     # Study tracking
     study_view_count: Mapped[int] = mapped_column(Integer, default=0)
+    
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
 
 class Sentence(Base):
     __tablename__ = "sentences"

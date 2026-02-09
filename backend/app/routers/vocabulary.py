@@ -121,7 +121,7 @@ async def get_vocab_list(
                 count_query = count_query.where(Vocabulary.level.in_(lvl_list))
 
         total = (await db.execute(count_query)).scalar_one()
-        result = await db.execute(query.order_by(Vocabulary.id.desc()).offset(offset).limit(per_page))
+        result = await db.execute(query.order_by(Vocabulary.created_at.desc()).offset(offset).limit(per_page))
         words = result.scalars().all()
         
         # Transform to dicts and add display_trans and audio URLs
