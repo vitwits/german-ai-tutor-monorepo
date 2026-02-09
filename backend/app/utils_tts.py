@@ -187,11 +187,8 @@ async def get_cached_or_generate_tts(
         tts_cost = 0.0  # Initialize cost variable
         
         if audio_content:
-            # Billing: Списуємо кредити тільки за генерацію (якщо не в фоновому режимі)
-            if deduct_credits:
-                provider = 'google'
-                cost = billing.calculate_tts_cost(text, provider)
-                await billing.deduct_credits(user_id, cost)
+            # Billing: Now handled by deduct_user_energy() in the endpoint
+            # (No longer using credits system)
             
             # Cost Calculation: Record TTS generation cost (тільки при генерації, не з кешу!)
             from . import cost_calculation

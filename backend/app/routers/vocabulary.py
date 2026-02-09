@@ -594,11 +594,15 @@ async def add_custom_word(
     
     try:
         # Use AI to translate and validate
-        translation_data = await translate_custom_word_async(text, user_id=current_user.id, db=db)
+        translation_result = await translate_custom_word_async(text, user_id=current_user.id, db=db)
         
         # If AI validation failed (not German or invalid)
-        if translation_data.get("success") == False:
-            return {"success": False, "error": translation_data.get("error", "Invalid word or phrase")}
+        if translation_result.get("success") == False:
+            return {"success": False, "error": translation_result.get("error", "Invalid word or phrase")}
+        
+        # Extract translation data and cost from result
+        translation_data = translation_result
+        llm_cost = translation_result.get("llm_cost", 0.0)  # LLM cost from translate_custom_word_async
         
         # Clean duplicates from translations (both UA and EN)
         translation_data['ua'] = remove_duplicate_parts(translation_data.get('ua'))
@@ -622,9 +626,15 @@ async def add_custom_word(
         await db.commit()
         
         # Generate audio for the word
+        total_tts_cost = 0.0
         try:
-            # Always generate German
-            audio_de_url = await get_cached_or_generate_tts(text, "de", current_user.id, db, source='vocabulary', log_stats=True)
+            # Always generate German (with return_cost=True to track cost)
+            # Use translation_data['display'] which is the German form, not the input text
+            audio_de_url, de_cost = await get_cached_or_generate_tts(
+                translation_data['display'], "de", current_user.id, db, source='vocabulary', 
+                log_stats=True, return_cost=True
+            )
+            total_tts_cost += de_cost
             
             # Generate translation audio only for interface language
             target_lang = 'uk' if current_user.interface_language == 'ukr' else 'en'
@@ -634,21 +644,31 @@ async def add_custom_word(
             if trans_text:
                 trans_parts = trans_text.split(",")
                 for part in trans_parts:
-                    url = await get_cached_or_generate_tts(part.strip(), target_lang, current_user.id, db, source='vocabulary', log_stats=True)
+                    url, trans_cost = await get_cached_or_generate_tts(
+                        part.strip(), target_lang, current_user.id, db, 
+                        source='vocabulary', log_stats=True, return_cost=True
+                    )
+                    total_tts_cost += trans_cost
                     if url:
                         audio_trans_urls.append(url)
             
-            # Update vocabulary with audio URLs
-            update_stmt = update(Vocabulary).where(Vocabulary.id == vocab.id).values(
-                audio_de=audio_de_url,
-                audio_ua="|".join(audio_trans_urls) if target_lang == 'uk' and audio_trans_urls else None,
-                audio_en="|".join(audio_trans_urls) if target_lang == 'en' and audio_trans_urls else None
-            )
-            await db.execute(update_stmt)
+            # Note: Audio URLs are not stored in vocabulary table
+            # They are generated on-demand when user clicks play (like in lesson view)
+            
             await db.commit()
         except Exception as audio_error:
             print(f"Warning: Could not generate audio for custom word: {audio_error}")
             # Continue without audio - it's not critical
+        
+        # Deduct energy from user for BOTH LLM and TTS costs
+        total_cost = llm_cost + total_tts_cost
+        if total_cost > 0:
+            energy_result = await services.deduct_user_energy(db, current_user.id, total_cost)
+            if not energy_result.get("ok"):
+                print(f"Warning: Could not deduct energy for custom word: {energy_result.get('error')}")
+                # Don't fail the request - the word was created successfully
+        else:
+            print(f"DEBUG: No cost to deduct (llm_cost={llm_cost}, tts_cost={total_tts_cost})")
         
         return {"success": True, "word_id": vocab.id}
         

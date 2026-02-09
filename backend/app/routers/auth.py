@@ -28,8 +28,7 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
             email=user_data.email,
             password_hash=get_password_hash(user_data.password),
             interface_language='ukr',
-            level='A2',
-            credits=1000.0
+            level='A2'
         )
         db.add(new_user)
         await db.flush()  # Flush to ensure user exists before creating billing
@@ -108,7 +107,6 @@ async def read_users_me(current_user: User = Depends(get_current_user), db: Asyn
         "id": current_user.id,
         "email": current_user.email,
         "level": current_user.level,
-        "credits": current_user.credits,
         "interface_language": current_user.interface_language,
         "billing": {
             "energy_left": billing.energy_left if billing else 0.0,

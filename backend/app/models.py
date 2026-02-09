@@ -13,7 +13,6 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String, nullable=False)
     interface_language: Mapped[str] = mapped_column(String, default='ukr')
     level: Mapped[str] = mapped_column(String, default='A2')
-    credits: Mapped[float] = mapped_column(Float, default=1000.0)
     is_admin: Mapped[int] = mapped_column(Integer, default=0)
     
     # Cost tracking

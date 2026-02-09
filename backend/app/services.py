@@ -853,7 +853,8 @@ Return ONLY minified JSON on a single line:
                 "ua": data.get("ua", ""),
                 "en": data.get("en", ""),
                 "level": data.get("level", "A1"),
-                "context": data.get("context", "")
+                "context": data.get("context", ""),
+                "llm_cost": data.get("_cost_info", {}).get("llm_cost", 0.0)
             }
             
         except Exception as e:
