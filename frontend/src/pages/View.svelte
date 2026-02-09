@@ -26,6 +26,8 @@
   let playingIndex = -1; // Index of sentence currently playing in Play All
   let currentAudio = null;
   let userInitiatedPlay = false; // true if user clicked Play (vs Play All calling playAudio)
+  let vocabPlayingId = null; // ID of vocabulary word currently playing
+  let currentVocabPlayId = null; // Track which vocab play session is active (to abort old ones)
   
   // Edit State
   let editingId = null;
@@ -270,22 +272,53 @@
       lastPlayedIdx = -1;
   }
 
-  async function playVocabPair(de, trans) {
+  async function playVocabPair(de, trans, vocabId) {
+      // If clicking the same word that's playing, toggle pause
+      if (vocabPlayingId === vocabId && currentAudio) {
+          currentAudio.pause();
+          vocabPlayingId = null;
+          return;
+      }
+      
+      // Stop any currently playing audio and mark old session as aborted
       if (currentAudio) currentAudio.pause();
+      const playSessionId = {}; // Unique object to track this play session
+      currentVocabPlayId = playSessionId;
+      vocabPlayingId = vocabId;
       
       try {
           const res = await api.post('/tts_pair', { de_text: de, trans_text: trans, source: 'vocabulary' });
           const urls = res.data.urls;
           
           for (const url of urls) {
+              // If this session was aborted (user clicked another word), stop immediately
+              if (currentVocabPlayId !== playSessionId) {
+                  return;
+              }
+              
               await new Promise(resolve => {
                   currentAudio = new Audio(url);
-                  currentAudio.onended = resolve;
+                  currentAudio.onended = () => {
+                      // Only resolve if this session is still active
+                      if (currentVocabPlayId === playSessionId) {
+                          resolve();
+                      }
+                  };
                   currentAudio.play().catch(resolve);
               });
               await new Promise(r => setTimeout(r, 300));
           }
-      } catch (e) { console.error(e); }
+          
+          // Clear playing state when finished (only if still current session)
+          if (currentVocabPlayId === playSessionId) {
+              vocabPlayingId = null;
+          }
+      } catch (e) { 
+          console.error(e);
+          if (currentVocabPlayId === playSessionId) {
+              vocabPlayingId = null;
+          }
+      }
   }
 
   // --- TRANSLATION & SELECTION ---
@@ -876,8 +909,8 @@
                 {#each vocab as v}
                     <div class="vocab-item" role="button" tabindex="0" onclick={() => { if (!editingId) toggleVocabFav(v.id); }}>
                         <div style="display:flex; align-items:center; gap:12px; flex: 1; min-width: 0;">
-                            <button class="btn-text" onclick={(e) => { e.stopPropagation(); playVocabPair(v.display, $user.interface_language === 'ukr' ? v.ua : v.en); }}>
-                                <span class="material-symbols-outlined" style="font-size:18px;">volume_up</span>
+                            <button class="btn-text" onclick={(e) => { e.stopPropagation(); playVocabPair(v.display, $user.interface_language === 'ukr' ? v.ua : v.en, v.id); }}>
+                                <span class="material-symbols-outlined" style="font-size:18px;">{vocabPlayingId === v.id ? 'pause' : 'volume_up'}</span>
                             </button>
                             <div style="overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0;">
                                 <span style="font-weight: 500; color: var(--primary); font-size: 1.1rem; cursor: pointer;" onclick={(e) => { e.stopPropagation(); scrollToWord(v.id); }} role="button" tabindex="0" onkeydown={(e) => e.key === 'Enter' && scrollToWord(v.id)}>{v.display}</span>
