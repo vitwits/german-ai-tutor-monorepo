@@ -1051,15 +1051,26 @@ async def create_lesson_from_user_text(text: str, prompt_template: str, db: Asyn
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
             temperature=0.3,
-            max_output_tokens=2000
+            max_output_tokens=4000
         )
     )
     
+    # Log token usage and cost
+    if hasattr(response, 'usage_metadata') and response.usage_metadata:
+        tokens_in = response.usage_metadata.prompt_token_count
+        tokens_out = response.usage_metadata.total_token_count - tokens_in
+        # Pricing for gemini-2.5-pro: $0.075/M input, $0.30/M output
+        cost = (tokens_in * 0.075 + tokens_out * 0.30) / 1_000_000
+        print(f"📊 LLM Cost: In={tokens_in} Out={tokens_out} Total={response.usage_metadata.total_token_count} | Cost=${cost:.6f}")
+    
     # Parse response - contains both validation and lesson data
     try:
+        if not response.text:
+            raise ValueError("Empty response from LLM")
         response_data = json.loads(response.text)
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, ValueError, TypeError) as e:
         # Default fallback if JSON parsing fails
+        print(f"⚠️ Error parsing response: {e}")
         response_data = {
             "validation_results": {
                 "text_is_completely_in_german": False,

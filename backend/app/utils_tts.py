@@ -178,7 +178,7 @@ async def get_cached_or_generate_tts(
         if source == 'vocabulary':
             job_name_map = {'de': 'vocabulary_tts_de', 'uk': 'vocabulary_tts_ua', 'en': 'vocabulary_tts_en'}
         else:  # texts
-            job_name_map = {'de': 'vocabulary_tts_de', 'uk': 'vocabulary_tts_ua', 'en': 'vocabulary_tts_en'}
+            job_name_map = {'de': 'generate_text_audio', 'uk': 'generate_text_audio', 'en': 'generate_text_audio'}
         
         job_name = job_name_map.get(lang, 'generate_text_audio')
         

@@ -24,9 +24,9 @@ async def generate_text_endpoint(
 ):
     # Map: Level -> Size -> Count
     sentence_map = {
-        'A1': {'S': 5, 'M': 8, 'L': 12}, 'A2': {'S': 6, 'M': 8, 'L': 11},
-        'B1': {'S': 5, 'M': 7, 'L': 10}, 'B2': {'S': 5, 'M': 7, 'L': 10},
-        'C1': {'S': 6, 'M': 8, 'L': 9}, 'C2': {'S': 6, 'M': 7, 'L': 8}
+        'A1': {'S': 5, 'M': 9, 'L': 13}, 'A2': {'S': 6, 'M': 10, 'L': 14},
+        'B1': {'S': 7, 'M': 10, 'L': 14}, 'B2': {'S': 6, 'M': 10, 'L': 14},
+        'C1': {'S': 6, 'M': 9, 'L': 11}, 'C2': {'S': 6, 'M': 9, 'L': 11}
     }
     count = sentence_map.get(req.level, sentence_map['A2']).get(req.size, 8)
 
@@ -704,16 +704,9 @@ async def create_own_text_endpoint(
     )
     db.add(user_lesson)
     
-    # Generate audio for sentences in background
-    if lesson_data.get("sentences"):
-        sentences = lesson_data["sentences"]
-        await _generate_audio_batch_background(
-            lesson_id=lesson_id,
-            user_id=current_user.id,
-            sentences=sentences,
-            lang="de",
-            db=db
-        )
+    # IMPORTANT: Audio is generated on-demand (when user clicks Play)
+    # This saves costs and is consistent with /generate endpoint
+    # For custom text, user will generate audio when needed
     
     # Record LLM cost (single call for validation + generation)
     total_cost = 0.0
