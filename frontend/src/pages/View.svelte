@@ -74,7 +74,12 @@
   $: ui = getUI($user?.interface_language || 'ukr');
 
   // Re-load text when id changes (only if user is loaded)
-  $: if (id && $user) loadText();
+  // ⭐ Залежимо тільки від id, НЕ від $user — інакше user.update() перезавантажує сторінку
+  let prevId = null;
+  $: if (id && id !== prevId && $user) {
+    prevId = id;
+    loadText();
+  }
 
   async function loadText() {
     loading = true;
