@@ -945,7 +945,7 @@
                                     <div class="ctx-label">{ui.context}</div>
                                     <div class="ctx-text">{w.ctx}</div>
                                     {#if w.text_id}
-                                        <button type="button" class="ctx-link btn-text" style="padding:0; height:auto; text-transform:none;" onclick={() => router.goto(`/view/${w.text_id}`)}>
+                                        <button type="button" class="ctx-link btn-text" style="padding:0; height:auto; text-transform:none;" onclick={() => router.goto(`/view/${w.text_id}#sent-${w.sentence_index}`)}>
                                             <span class="material-symbols-outlined" style="font-size:14px;">open_in_new</span> {ui.go_to_text}
                                         </button>
                                     {/if}
@@ -980,7 +980,7 @@
                                 <div class="ctx-text">{w.ctx}</div>
                             </div>
                             {#if w.text_id}
-                                <button type="button" class="ctx-link btn-text" style="padding:0; height:auto; text-transform:none;" onclick={() => router.goto(`/view/${w.text_id}`)}>
+                                <button type="button" class="ctx-link btn-text" style="padding:0; height:auto; text-transform:none;" onclick={() => router.goto(`/view/${w.text_id}#sent-${w.sentence_index}`)}>
                                     <span class="material-symbols-outlined" style="font-size:14px;">open_in_new</span> {ui.go_to_text}
                                 </button>
                             {/if}

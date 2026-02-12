@@ -148,6 +148,8 @@
       router.goto('/library');
     } finally {
       loading = false;
+      // Підсвічуємо речення якщо прийшли з Vocab через hash
+      highlightSentenceFromHash();
     }
   }
 
@@ -839,6 +841,22 @@
       window.addEventListener('beforeunload', handleBeforeUnload);
       document.addEventListener('click', handleLearnedClick);
   });
+
+  // Підсвічування речення при переході з Vocab (через URL hash #sent-N)
+  async function highlightSentenceFromHash() {
+    const hash = window.location.hash; // e.g. #sent-3
+    if (!hash || !hash.startsWith('#sent-')) return;
+    
+    await tick();
+    const el = document.getElementById(hash.slice(1)); // 'sent-3'
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('highlight-sentence');
+      setTimeout(() => el.classList.remove('highlight-sentence'), 2500);
+      // Очищуємо hash щоб не підсвічувати при наступному re-render
+      history.replaceState(null, '', window.location.pathname);
+    }
+  }
   onDestroy(() => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
       if (typeof document !== 'undefined') document.removeEventListener('click', handleLearnedClick);
