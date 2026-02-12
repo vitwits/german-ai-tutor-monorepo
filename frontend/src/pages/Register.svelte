@@ -9,11 +9,10 @@
   async function handleSubmit() {
     error = "";
     const res = await register(email, password);
-    if (res.ok) {
-      router.goto('/login');
-    } else {
+    if (!res.ok) {
       error = res.error;
     }
+    // register() вже робить редірект на '/' при успіху
   }
 </script>
 
