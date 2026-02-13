@@ -11,7 +11,6 @@
   // --- STATE ---
   let loading = true;
   let sentence = null;
-  let isFav = false;
   
   // Interaction Phase: 'idle' -> 'playing' -> 'recording' -> 'processing' -> 'splash' -> 'feedback'
   let phase = 'idle';
@@ -86,7 +85,6 @@
         return;
       }
       sentence = res.data.sentence;
-      isFav = res.data.is_fav;
     } catch (e) {
       console.error(e);
       addToast("Failed to load sentence", "error");
@@ -314,14 +312,6 @@
       phase = 'idle';
     }
   }
-
-  async function toggleFav() {
-    if (!sentence) return;
-    try {
-      const res = await api.post('/toggle_sentence_fav', { id: sentence.id });
-      isFav = res.data.is_fav;
-    } catch (e) { console.error(e); }
-  }
   
   async function reportSentence() {
       if (!sentence) return;
@@ -448,21 +438,15 @@
       </button>
     </div>
 
-    <!-- Fav Button -->
-    <button class="side-btn {phase === 'feedback' ? 'visible' : ''}" on:click={toggleFav} style="color: {isFav ? '#FFC107' : 'inherit'}">
-      <span class="material-symbols-outlined {isFav ? 'filled' : ''}">star</span>
-    </button>
+    <!-- Feedback Area -->
+    <div class="feedback-area">
+        {#if phase === 'feedback'}
+          <div class="user-transcript" transition:fade>{transcript}</div>
+          <div class="correction-box" transition:fade>{correction}</div>
+        {/if}
+    </div>
   </div>
-
-  <div class="feedback-area">
-      {#if phase === 'feedback'}
-        <div class="user-transcript" transition:fade>{transcript}</div>
-        <div class="correction-box" transition:fade>{correction}</div>
-      {/if}
-  </div>
-</div>
-
-<style>
+</div><style>
   .speak-container {
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     min-height: 70vh; text-align: center; position: relative;
