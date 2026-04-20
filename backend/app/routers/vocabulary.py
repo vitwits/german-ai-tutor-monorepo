@@ -436,10 +436,21 @@ async def update_word(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    lang = current_user.interface_language
+    from ..utils_tts import get_cached_or_generate_tts
     
+    lang = current_user.interface_language
+    target_lang = 'uk' if lang == 'ukr' else 'en'
+    
+    # 1. Get existing word
+    result = await db.execute(select(Vocabulary).where(Vocabulary.id == req.id, Vocabulary.user_id == current_user.id))
+    word = result.scalar_one_or_none()
+    
+    if not word:
+        raise HTTPException(status_code=404, detail="Word not found")
+    
+    # 2. Update database
     values = {}
-    if lang == 'ukr':
+    if target_lang == 'uk':
         values['ua'] = req.translation
     else:
         values['en'] = req.translation
@@ -450,7 +461,39 @@ async def update_word(
         .values(**values)
     )
     await db.commit()
-    return {"ok": True}
+    
+    # 6. Generate audio for new parts and collect ALL audio URLs (old + new)
+    total_cost = 0.0
+    all_audio_urls = []
+    try:
+        # Parse all new translation parts (in order)
+        trans_parts = [p.strip() for p in req.translation.split(",") if p.strip()]
+        
+        # For each part, get existing URL or generate new one
+        for part in trans_parts:
+            url, cost = await get_cached_or_generate_tts(
+                part, target_lang, current_user.id, db, 
+                source='vocabulary', log_stats=True, return_cost=True
+            )
+            if url:
+                all_audio_urls.append(url)
+            total_cost += cost
+        
+        # Deduct energy if new audio was generated
+        if total_cost > 0:
+            energy_result = await services.deduct_user_energy(db, current_user.id, total_cost)
+            if not energy_result.get("ok"):
+                print(f"Warning: Could not deduct energy for updated translation: {energy_result.get('error')}")
+    except Exception as audio_error:
+        print(f"Warning: Could not generate audio for updated translation: {audio_error}")
+        # Continue without failing - word was updated successfully
+    
+    # 7. Return updated word with all audio URLs
+    return {
+        "ok": True,
+        "audio_trans_urls": all_audio_urls,  # All audio URLs (old + new) for frontend
+        "translation": req.translation
+    }
 
 @router.post("/toggle_fav")
 async def toggle_fav(

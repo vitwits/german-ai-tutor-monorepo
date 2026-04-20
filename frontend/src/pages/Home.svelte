@@ -26,6 +26,16 @@
       .trim();                    // Видалемо пробіли на початку і в кінці
   }
 
+  // Функція для очищення тексту від невалідних символів перед відправкою
+  function cleanText(text) {
+    // Видалити символи, що не є німецькими, англійськими, цифрами, пунктуацією або пробілами
+    // Дозволяємо: a-z, A-Z, 0-9, німецькі умлаути (äöüÄÖÜß), пунктуацію, пробіли
+    return text
+      .replace(/[^\w\säöüÄÖÜß\-.,!?;:„"«»‚'„"\(\)\[\]\{\}\/\\\&@#*+=/]/g, '')
+      .replace(/\s+/g, ' ')  // Стискаємо множинні пробіли
+      .trim();
+  }
+
   // Функція для обрізки тексту на 1000 символів на межі речення
   function trimToSentence(text) {
     if (text.length <= 1000) return text;
@@ -48,18 +58,11 @@
     return trimmed;
   }
 
-  // Реактивна перевірка - нормалізуємо та обрізаємо текст
-  $: if (customText !== undefined) {
-    // Спочатку нормалізуємо (видаляємо переноси, множинні пробіли)
-    const normalized = normalizeText(customText);
-    
-    // Потім обрізаємо якщо більше 1000 символів
-    const trimmed = trimToSentence(normalized);
-    
-    // Оновлюємо тільки якщо щось змінилось
-    if (trimmed !== customText) {
-      customText = trimmed;
-    }
+  // Функція для обробки змін у текстовому полі
+  // Нормалізує та обрізає текст ТІЛЬКИ на виході (перед відправкою)
+  function onCustomTextInput(event) {
+    // Дозволяємо користувачу писати вільно, включаючи пробіли
+    // Нормалізація виконується тільки при відправці через trimToSentence у handleSubmit
   }
 
   async function handleSubmit() {
@@ -88,12 +91,16 @@
       let endpoint, payload;
       
       if (mode === "text") {
-        // Use create_own_text endpoint for user-provided text
-        // Text is already normalized and trimmed by reactive statement
-        // Server will determine language level from the text
+        // Normalize and clean the text ONLY when submitting
+        // This prevents interference with user typing (especially with spaces)
+        let normalized = normalizeText(customText);
+        // Remove non-German/non-standard characters
+        normalized = cleanText(normalized);
+        const trimmed = trimToSentence(normalized);
+        
         endpoint = "create_own_text";
         payload = {
-          text: customText
+          text: trimmed
         };
       } else {
         // Use standard generate endpoint for topic-based generation
@@ -219,6 +226,9 @@
     {#if mode === 'text'}
         <div class="form-group">
             <label class="form-label" for="customText">{ui.your_german_text}</label>
+            <p style="font-size: 0.85rem; color: var(--on-surface-dim); margin-bottom: 10px;">
+                💡 {ui.use_your_german_text}
+            </p>
             <textarea
                 id="customText"
                 bind:value={customText}

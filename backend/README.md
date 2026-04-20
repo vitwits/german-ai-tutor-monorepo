@@ -1,3 +1,4 @@
+source /Users/omicron/Desktop/german_ai_tutor/venv/bin/activate
 
 pip install poetry
 poetry install --no-root

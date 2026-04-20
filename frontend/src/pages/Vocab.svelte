@@ -48,6 +48,7 @@
   let showAddWordDialog = $state(false);
   let customWordInput = $state('');
   let addingWord = $state(false);
+  let customWordInputRef = $state(null); // Посилання на input елемент
 
   // Player State (Removed - sentences no longer supported)
   
@@ -194,6 +195,10 @@
   function openAddWordDialog() {
       showAddWordDialog = true;
       customWordInput = '';
+      // Фокусуємо input після того як попап відкривається
+      setTimeout(() => {
+        if (customWordInputRef) customWordInputRef.focus();
+      }, 0);
   }
 
   function closeAddWordDialog() {
@@ -287,13 +292,19 @@
 
       // 4. Play Back Audio (Translation)
       if (fcAudioEnabled) {
+          const transLang = $user?.interface_language === 'ukr' ? 'uk' : 'en';
           let transUrls = card.audio_trans_urls;
           // If no cached URLs, generate them
           if (!transUrls || transUrls.length === 0) {
               try {
-                  const res = await api.post('/vocab/generate_audio', { text: card.trans, lang: 'uk' });
-                  if (res.data.url) {
-                      transUrls = [res.data.url];
+                  // Split translation by commas and generate each part
+                  const transParts = card.trans.split(',').map(p => p.trim()).filter(p => p);
+                  transUrls = [];
+                  for (const part of transParts) {
+                      const res = await api.post('/vocab/generate_audio', { text: part, lang: transLang });
+                      if (res.data.url) {
+                          transUrls.push(res.data.url);
+                      }
                   }
               } catch(e) {
                   console.error('Failed to generate translation audio:', e);
@@ -504,6 +515,9 @@
       if (currentAudio) currentAudio.pause();
       
       try {
+          // Determine translation language based on user's interface language
+          const transLang = $user?.interface_language === 'ukr' ? 'uk' : 'en';
+          
           // Play German if available or generate if missing
           if (de) {
               let urlToPlay = audioDeUrl;
@@ -536,11 +550,16 @@
                       }
                   }
               } else {
-                  // No cached URLs, generate
+                  // No cached URLs - need to generate for each part
                   try {
-                      const res = await api.post('/vocab/generate_audio', { text: trans, lang: 'uk' });
-                      if (res.data.url) {
-                          await playAudioPromise(res.data.url);
+                      // Split translation by commas
+                      const transParts = trans.split(',').map(p => p.trim()).filter(p => p);
+                      for (const part of transParts) {
+                          const res = await api.post('/vocab/generate_audio', { text: part, lang: transLang });
+                          if (res.data.url) {
+                              await playAudioPromise(res.data.url);
+                              await new Promise(r => setTimeout(r, 300));
+                          }
                       }
                   } catch(e) {
                       console.error('Failed to generate translation audio:', e);
@@ -611,8 +630,13 @@
 
   async function saveEdit(id) {
       try {
-          await api.post('/update_word', { id, translation: editValue });
-          items = items.map(i => i.id === id ? { ...i, display_trans: editValue } : i);
+          const res = await api.post('/update_word', { id, translation: editValue });
+          // Update both translation and audio URLs from response
+          items = items.map(i => i.id === id ? { 
+              ...i, 
+              display_trans: editValue,
+              audio_trans_urls: res.data.audio_trans_urls || []
+          } : i);
           editingId = null;
       } catch(e) { addToast("Error saving", "error"); }
   }
@@ -1015,6 +1039,7 @@
                     class="add-word-input" 
                     placeholder="{ui.add_custom_word_placeholder}" 
                     bind:value={customWordInput}
+                    bind:this={customWordInputRef}
                     onkeydown={(e) => e.key === 'Enter' && addCustomWord()}
                     disabled={addingWord} />
                 <button 
