@@ -127,7 +127,7 @@ class QuizResult(Base):
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
-    text_id: Mapped[Optional[str]] = mapped_column(ForeignKey("texts.id"), nullable=True)  # Old user-specific texts
+    text_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # Old user-specific texts (removed FK to deleted texts table)
     lesson_id: Mapped[Optional[str]] = mapped_column(ForeignKey("lessons.id"), nullable=True)  # New global lessons
     score: Mapped[Optional[int]] = mapped_column(Integer)
     total_questions: Mapped[Optional[int]] = mapped_column(Integer)
