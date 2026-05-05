@@ -111,6 +111,12 @@
     searchTimeout = setTimeout(loadData, 300);
   }
 
+  function clearSearch() {
+      searchQuery = '';
+      page = 1;
+      loadData();
+  }
+
   function switchTab(tab) {
       activeTab = tab;
       page = 1;
@@ -839,8 +845,13 @@
         </div>
 
         <div class="filters-right">
-            <input type="text" class="search-input" placeholder={ui.search || 'Search...'} 
-                   bind:value={searchQuery} oninput={onSearchChange} />
+            <div class="search-input-wrapper">
+                <input type="text" class="search-input" placeholder={ui.search || 'Search...'} 
+                       bind:value={searchQuery} oninput={onSearchChange} />
+                {#if searchQuery}
+                    <button class="clear-search-btn" onclick={clearSearch}><span class="material-symbols-outlined">close</span></button>
+                {/if}
+            </div>
 
             <div class="level-filters">
                 {#each allLevels as lvl}
@@ -1676,5 +1687,24 @@
 
     .add-word-input::placeholder {
         opacity: 0.5;
+    }
+
+    /* Search Input with Clear Button */
+    .search-input-wrapper {
+        position: relative;
+        display: flex;
+        align-items: center;
+    }
+
+    .clear-search-btn {
+        position: absolute;
+        right: 8px;
+        background: none;
+        border: none;
+        color: var(--on-surface);
+        opacity: 0.6;
+        cursor: pointer;
+        padding: 4px;
+        display: flex; /* Ensure icon is centered */
     }
 </style>
