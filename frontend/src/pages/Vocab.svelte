@@ -60,6 +60,28 @@
   let editingId = $state(null);
   let editValue = $state("");
 
+  // Обчислення "розумного" діапазону сторінок для пагінації
+  let paginationRange = $derived.by(() => {
+      const delta = 1; // Кількість сторінок до/після поточної
+      const range = [];
+      for (let i = 1; i <= totalPages; i++) {
+          if (i === 1 || i === totalPages || (i >= page - delta && i <= page + delta)) {
+              range.push(i);
+          }
+      }
+      const withDots = [];
+      let l;
+      for (let i of range) {
+          if (l) {
+              if (i - l === 2) withDots.push(l + 1);
+              else if (i - l !== 1) withDots.push('...');
+          }
+          withDots.push(i);
+          l = i;
+      }
+      return withDots;
+  });
+
   let ui = $derived(getUI($user?.interface_language || 'ukr'));
 
   async function loadData() {
@@ -68,6 +90,7 @@
         const params = {
             page,
             mode: activeTab,
+            per_page: 30, // Оновлено до 30 елементів
             levels: selectedLevels.join(','),
             q: searchQuery
         };
@@ -1152,9 +1175,23 @@
 
     {#if totalPages > 1}
         <div class="pagination">
-            <button class="page-btn" disabled={page===1} onclick={() => changePage(page-1)}>&lt;</button>
-            <span>{page} / {totalPages}</span>
-            <button class="page-btn" disabled={page===totalPages} onclick={() => changePage(page+1)}>&gt;</button>
+            <button class="page-btn nav-btn" disabled={page===1} onclick={() => changePage(page-1)}>
+                <span class="material-symbols-outlined">chevron_left</span>
+            </button>
+
+            {#each paginationRange as p}
+                {#if p === '...'}
+                    <span class="page-dots">...</span>
+                {:else}
+                    <button class="page-btn" class:active={p === page} onclick={() => changePage(p)}>
+                        {p}
+                    </button>
+                {/if}
+            {/each}
+
+            <button class="page-btn nav-btn" disabled={page===totalPages} onclick={() => changePage(page+1)}>
+                <span class="material-symbols-outlined">chevron_right</span>
+            </button>
         </div>
     {/if}
 {/if}
@@ -1529,9 +1566,32 @@
         color: var(--primary);
     }
 
-    .pagination { display: flex; justify-content: center; gap: 10px; margin-top: 20px; align-items: center; }
-    .page-btn { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; }
+    .pagination { 
+        display: flex; justify-content: center; gap: 8px; margin-top: 30px; align-items: center; flex-wrap: wrap; 
+    }
+    .page-btn { 
+        min-width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; 
+        background: var(--surface); color: var(--on-surface); border: 1px solid var(--border); 
+        border-radius: 8px; cursor: pointer; font-weight: 500; transition: all 0.2s;
+        padding: 0 8px; font-size: 0.95rem;
+    }
+    .page-btn:hover:not(:disabled) { 
+        border-color: var(--primary); color: var(--primary); background: rgba(0,0,0,0.02); 
+    }
+    .page-btn.active { 
+        background: var(--primary); color: white; border-color: var(--primary); 
+        box-shadow: 0 2px 8px rgba(25, 118, 210, 0.3); 
+    }
     .page-btn:disabled { opacity: 0.3; cursor: default; }
+    .page-btn.nav-btn { 
+        border-color: transparent; background: transparent; 
+    }
+    .page-btn.nav-btn:hover:not(:disabled) { 
+        background: rgba(0,0,0,0.05); 
+    }
+    .page-dots { 
+        width: 32px; text-align: center; opacity: 0.5; font-weight: bold; 
+    }
 
     /* Player Styles (Removed) */
 
