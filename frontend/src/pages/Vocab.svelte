@@ -40,6 +40,7 @@
   let fcAudioEnabled = $state(true);
   let fcStudyLoop = $state(false); // Цикличное воспроизведение в режиме Study
   let fcReverseMode = $state(false); // Показывать перевод сначала, потом немецкий
+  let fcUseContextMode = $state(false); // Показувати речення замість слів
   
   // Session Completion Splash Screen
   let showSessionSplash = $state(false);
@@ -50,6 +51,8 @@
   let customWordInput = $state('');
   let addingWord = $state(false);
   let customWordInputRef = $state(null); // Посилання на input елемент
+
+  let hasCtxTrans = $derived(originalSessionCards.some(c => c.ctx_trans));
 
   // Player State (Removed - sentences no longer supported)
   
@@ -145,6 +148,7 @@
             fcStudyLoop = false; // Цикл отключен по умолчанию
             fcReviewStarted = fcMode === 'review' ? false : true; // Study auto-plays, Review needs manual start
             fcIsRandom = true; // Завжди рандомний порядок
+            fcUseContextMode = false; // По замовчуванню - слова
         } else {
             addToast("No words found for session", "info");
         }
@@ -298,11 +302,11 @@
       };
 
       // 1. Play Front Audio (based on direction)
-      if (fcAudioEnabled) {
+      if (fcAudioEnabled && !fcUseContextMode) {
           if (fcReverseMode) await playTranslation();
           else await playGerman();
       } else {
-          await new Promise(r => setTimeout(r, 1000));
+          await new Promise(r => setTimeout(r, fcUseContextMode ? 3000 : 1000));
       }
       
       if (!fcIsPlaying) return;
@@ -315,11 +319,11 @@
       isFlipped = true;
 
       // 4. Play Back Audio (based on direction)
-      if (fcAudioEnabled) {
+      if (fcAudioEnabled && !fcUseContextMode) {
           if (fcReverseMode) await playGerman();
           else await playTranslation();
       } else {
-          await new Promise(r => setTimeout(r, 1000));
+          await new Promise(r => setTimeout(r, fcUseContextMode ? 3000 : 1000));
       }
       
       if (!fcIsPlaying) return;
@@ -365,7 +369,7 @@
           fcReviewStarted = true;
           currentCardIdx = 0;
           const card = sessionCards[currentCardIdx];
-          if (fcAudioEnabled) {
+          if (fcAudioEnabled && !fcUseContextMode) {
               if (fcReverseMode) {
                   // Play translation sequentially
                   const transLang = $user?.interface_language === 'ukr' ? 'uk' : 'en';
@@ -394,7 +398,7 @@
     isFlipped = !isFlipped;
     if (isFlipped) {
         const card = sessionCards[currentCardIdx];
-        if (fcAudioEnabled) {
+        if (fcAudioEnabled && !fcUseContextMode) {
             if (fcReverseMode) {
                 // Back side is German in reverse mode
                 playAudio(card.audio_de_url);
@@ -457,6 +461,29 @@
       fcAudioEnabled = !fcAudioEnabled;
   }
 
+  function toggleFcContextMode() {
+      if (!hasCtxTrans) {
+          addToast(ui.fc_no_ctx_trans || "No context translations available", "info");
+          return;
+      }
+      
+      fcUseContextMode = !fcUseContextMode;
+      isFlipped = false;
+      
+      // Зупиняємо програвання при зміні режиму
+      if (fcLoopTimeout) clearTimeout(fcLoopTimeout);
+      if (currentAudio) currentAudio.pause();
+      fcIsPlaying = false;
+
+      if (fcUseContextMode) {
+          sessionCards = originalSessionCards.filter(c => c.ctx_trans);
+      } else {
+          sessionCards = [...originalSessionCards];
+      }
+      
+      if (currentCardIdx >= sessionCards.length) currentCardIdx = 0;
+  }
+
   function toggleFcReverseMode() {
       fcReverseMode = !fcReverseMode;
       isFlipped = false; // Сбросить флип при переключении режима
@@ -506,7 +533,7 @@
         if (currentCardIdx < sessionCards.length - 1) {
             currentCardIdx++;
             const nextCard = sessionCards[currentCardIdx];
-            if (fcAudioEnabled) {
+            if (fcAudioEnabled && !fcUseContextMode) {
                 if (fcReverseMode) {
                     const transLang = $user?.interface_language === 'ukr' ? 'uk' : 'en';
                     (async () => {
@@ -858,12 +885,16 @@
                             <span class="level-badge lvl-{sessionCards[currentCardIdx].level?.toLowerCase()}" style="position:absolute; top:20px; left:20px; z-index: 5;">
                                 {sessionCards[currentCardIdx].level || '?'}
                             </span>
-                            <div class="fc-word">{sessionCards[currentCardIdx].trans}</div>
+                            <div class={fcUseContextMode ? "fc-ctx" : "fc-word"}>
+                                {fcUseContextMode ? sessionCards[currentCardIdx].ctx_trans : sessionCards[currentCardIdx].trans}
+                            </div>
                         </div>
 
                         <div class="fc-face fc-back">
-                            <div class="fc-word">{sessionCards[currentCardIdx].display}</div>
-                            {#if fcMode === 'review' || !fcIsPlaying}
+                            <div class={fcUseContextMode ? "fc-ctx" : "fc-word"}>
+                                {fcUseContextMode ? sessionCards[currentCardIdx].ctx : sessionCards[currentCardIdx].display}
+                            </div>
+                            {#if !fcUseContextMode && (fcMode === 'review' || !fcIsPlaying)}
                                 <div class="fc-ctx" style="margin-top: 20px;">{sessionCards[currentCardIdx].ctx}</div>
                                 {#if sessionCards[currentCardIdx].ctx_trans}
                                     <div class="fc-ctx-trans" style="opacity: 0.7; font-size: 1.1rem; margin-top: 10px; font-style: italic;">{sessionCards[currentCardIdx].ctx_trans}</div>
@@ -876,12 +907,16 @@
                             <span class="level-badge lvl-{sessionCards[currentCardIdx].level?.toLowerCase()}" style="position:absolute; top:20px; left:20px; z-index: 5;">
                                 {sessionCards[currentCardIdx].level || '?'}
                             </span>
-                            <div class="fc-word">{sessionCards[currentCardIdx].display}</div>
+                            <div class={fcUseContextMode ? "fc-ctx" : "fc-word"}>
+                                {fcUseContextMode ? sessionCards[currentCardIdx].ctx : sessionCards[currentCardIdx].display}
+                            </div>
                         </div>
 
                         <div class="fc-face fc-back">
-                            <div class="fc-trans">{sessionCards[currentCardIdx].trans}</div>
-                            {#if fcMode === 'review' || !fcIsPlaying}
+                            <div class={fcUseContextMode ? "fc-ctx" : "fc-trans"}>
+                                {fcUseContextMode ? sessionCards[currentCardIdx].ctx_trans : sessionCards[currentCardIdx].trans}
+                            </div>
+                            {#if !fcUseContextMode && (fcMode === 'review' || !fcIsPlaying)}
                                 <div class="fc-ctx">{sessionCards[currentCardIdx].ctx}</div>
                                 {#if sessionCards[currentCardIdx].ctx_trans}
                                     <div class="fc-ctx-trans" style="opacity: 0.7; font-size: 1.1rem; margin-top: 10px; font-style: italic;">{sessionCards[currentCardIdx].ctx_trans}</div>
@@ -916,6 +951,9 @@
                         <button class="fc-play-btn" onclick={toggleFcPlay}>
                             <span class="material-symbols-outlined">{fcIsPlaying ? 'pause' : 'play_arrow'}</span>
                         </button>
+                        <button class="fc-icon-btn" class:active={fcUseContextMode} onclick={(e) => { e.stopPropagation(); toggleFcContextMode(); }} title="Режим речень">
+                            <span class="material-symbols-outlined">description</span>
+                        </button>
                         <button class="fc-icon-btn" class:active={fcStudyLoop} onclick={(e) => { e.stopPropagation(); fcStudyLoop = !fcStudyLoop; }}>
                             <span class="material-symbols-outlined">repeat</span>
                         </button>
@@ -929,6 +967,9 @@
                             <button class="fc-icon-btn" class:active={fcReverseMode} onclick={(e) => { e.stopPropagation(); toggleFcReverseMode(); }} title="Переключить порядок: перевод сначала">
                                 <span class="material-symbols-outlined">flip</span>
                             </button>
+                            <button class="fc-icon-btn" class:active={fcUseContextMode} onclick={(e) => { e.stopPropagation(); toggleFcContextMode(); }} title="Режим речень">
+                                <span class="material-symbols-outlined">description</span>
+                            </button>
                         </div>
                     {:else}
                         <div class="fc-ctrl-row">
@@ -937,6 +978,9 @@
                             </button>
                             <button class="fc-icon-btn" class:active={fcReverseMode} onclick={(e) => { e.stopPropagation(); toggleFcReverseMode(); }} title="Переключить порядок: перевод сначала">
                                 <span class="material-symbols-outlined">flip</span>
+                            </button>
+                            <button class="fc-icon-btn" class:active={fcUseContextMode} onclick={(e) => { e.stopPropagation(); toggleFcContextMode(); }} title="Режим речень">
+                                <span class="material-symbols-outlined">description</span>
                             </button>
                         </div>
                     {/if}
