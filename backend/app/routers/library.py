@@ -247,7 +247,7 @@ async def get_library(
     # Query: Join UserLesson (user's lessons) with Lesson (lesson content)
     from sqlalchemy import and_
     
-    query = select(Lesson).join(
+    query = select(Lesson, UserLesson.is_favorite).join(
         UserLesson,
         UserLesson.lesson_id == Lesson.id
     ).where(UserLesson.user_id == current_user.id)
@@ -283,10 +283,10 @@ async def get_library(
     
     query = query.offset((page - 1) * per_page).limit(per_page)
     result = await db.execute(query)
-    lessons = result.scalars().all()
+    rows = result.all()
     
     text_models = []
-    for lesson in lessons:
+    for lesson, is_fav in rows:
         # Convert Lesson to TextReadSchema format for backward compatibility
         tm = TextReadSchema(
             id=lesson.id,
@@ -295,7 +295,7 @@ async def get_library(
             level=lesson.level,
             content_json=lesson.content_json,
             quiz_json=lesson.quiz_json,
-            is_favorite=0  # Will be set from UserLesson below
+            is_favorite=is_fav
         )
         try:
             titles = json.loads(lesson.title) if lesson.title else {}
@@ -386,13 +386,15 @@ async def toggle_text_fav(
     )
     ul = user_lesson.scalar_one_or_none()
     
-    if ul:
-        ul.is_favorite = 1 - ul.is_favorite
-    else:
-        # Fallback to old Text table
-        text = await db.get(Text, req.id)
-        if text and text.user_id == current_user.id:
-            text.is_favorite = 1 - text.is_favorite
+    if ul: # If UserLesson exists, toggle its favorite status
+        ul.is_favorite = 1 if ul.is_favorite == 0 else 0
+    else: # If UserLesson does not exist, create it and set as favorite
+        new_user_lesson = UserLesson(
+            user_id=current_user.id,
+            lesson_id=req.id,
+            is_favorite=1
+        )
+        db.add(new_user_lesson)
     
     await db.commit()
     return {"ok": True}
@@ -543,12 +545,13 @@ async def get_text(text_id: str, db: AsyncSession = Depends(get_db), current_use
     
     # Verify user has access to this lesson
     if lesson:
-        user_lesson = await db.execute(
+        user_lesson_result = await db.execute(
             select(UserLesson).where(
                 and_(UserLesson.user_id == current_user.id, UserLesson.lesson_id == text_id)
             )
         )
-        if not user_lesson.scalar_one_or_none():
+        ul = user_lesson_result.scalar_one_or_none()
+        if not ul:
             raise HTTPException(404, "Lesson not found")
         
         # Convert Lesson to TextReadSchema format
@@ -559,7 +562,7 @@ async def get_text(text_id: str, db: AsyncSession = Depends(get_db), current_use
             level=lesson.level,
             content_json=lesson.content_json,
             quiz_json=lesson.quiz_json,
-            is_favorite=0
+            is_favorite=ul.is_favorite
         )
     else:
         raise HTTPException(404, "Lesson not found")
@@ -660,9 +663,7 @@ async def create_own_text_endpoint(
     if not validation_data.get("overall_validity"):
         # Determine which validation failed
         error_key = "validation_failed"
-        if not validation_data.get("text_is_completely_in_german"):
-            error_key = "validation_not_german"
-        elif not validation_data.get("is_ethical"):
+        if not validation_data.get("is_ethical"):
             error_key = "validation_not_ethical"
         elif not validation_data.get("no_sexual_content"):
             error_key = "validation_sexual_content"

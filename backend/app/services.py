@@ -854,6 +854,8 @@ Return ONLY minified JSON on a single line:
                 "en": data.get("en", ""),
                 "level": data.get("level", "A1"),
                 "context": data.get("context", ""),
+                "en_context": data.get("en_context", ""),
+                "ua_context": data.get("ua_context", ""),
                 "llm_cost": data.get("_cost_info", {}).get("llm_cost", 0.0)
             }
             
@@ -1073,7 +1075,6 @@ async def create_lesson_from_user_text(text: str, prompt_template: str, db: Asyn
         print(f"⚠️ Error parsing response: {e}")
         response_data = {
             "validation_results": {
-                "text_is_completely_in_german": False,
                 "is_ethical": False,
                 "no_sexual_content": False,
                 "no_prohibited_topics": False,

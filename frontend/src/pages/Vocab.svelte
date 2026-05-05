@@ -811,6 +811,9 @@
                         <div class="fc-trans">{sessionCards[currentCardIdx].trans}</div>
                         {#if fcMode === 'review' || !fcIsPlaying}
                             <div class="fc-ctx">{sessionCards[currentCardIdx].ctx}</div>
+                            {#if sessionCards[currentCardIdx].ctx_trans}
+                                <div class="fc-ctx-trans" style="opacity: 0.7; font-size: 1.1rem; margin-top: 10px; font-style: italic;">{sessionCards[currentCardIdx].ctx_trans}</div>
+                            {/if}
                         {/if}
                     </div>
                 </div>
@@ -968,6 +971,9 @@
                                 <div class="ctx-block">
                                     <div class="ctx-label">{ui.context}</div>
                                     <div class="ctx-text">{w.ctx}</div>
+                                    {#if w.display_ctx_trans}
+                                        <div class="ctx-text-trans" style="opacity: 0.7; font-size: 0.85rem; margin-top: 4px; font-style: italic; color: var(--primary);">{w.display_ctx_trans}</div>
+                                    {/if}
                                     {#if w.text_id}
                                         <button type="button" class="ctx-link btn-text" style="padding:0; height:auto; text-transform:none;" onclick={() => router.goto(`/view/${w.text_id}#sent-${w.sentence_index}`)}>
                                             <span class="material-symbols-outlined" style="font-size:14px;">open_in_new</span> {ui.go_to_text}
@@ -1002,6 +1008,9 @@
                         <div class="vocab-face vocab-back">
                             <div class="vocab-back-scroll">
                                 <div class="ctx-text">{w.ctx}</div>
+                                {#if w.display_ctx_trans}
+                                    <div class="ctx-text-trans" style="opacity: 0.7; font-size: 0.9rem; margin-top: 8px; font-style: italic; color: var(--primary);">{w.display_ctx_trans}</div>
+                                {/if}
                             </div>
                             {#if w.text_id}
                                 <button type="button" class="ctx-link btn-text" style="padding:0; height:auto; text-transform:none;" onclick={() => router.goto(`/view/${w.text_id}#sent-${w.sentence_index}`)}>

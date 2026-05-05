@@ -133,6 +133,7 @@ async def get_vocab_list(
             item = VocabWordSchema.model_validate(w)
             # Add computed field
             item.display_trans = w.ua if target_lang == 'uk' else w.en
+            item.display_ctx_trans = w.ctx_ua if target_lang == 'uk' else w.ctx_en
             
             # Add audio URLs (check cache, don't generate)
             audio_de = await get_cached_or_generate_tts(w.display, 'de', current_user.id, db, source='vocabulary', generate=False)
@@ -234,6 +235,7 @@ async def vocab_session(
     
     for w in words:
         trans = w.ua if target_lang == 'uk' else w.en
+        ctx_trans = w.ctx_ua if target_lang == 'uk' else w.ctx_en
         
         # Отримуємо аудіо з правильної папки (vocabulary, не texts!)
         audio_de = await get_cached_or_generate_tts(w.display, 'de', current_user.id, db, source='vocabulary', generate=False)
@@ -250,6 +252,7 @@ async def vocab_session(
             "display": w.display,
             "trans": trans,
             "ctx": w.ctx,
+            "ctx_trans": ctx_trans,
             "level": w.level,
             "audio_de_url": audio_de,
             "audio_trans_urls": trans_urls,
@@ -660,7 +663,9 @@ async def add_custom_word(
             ua=translation_data.get("ua", ""),  # Ukrainian translation
             en=translation_data.get("en", ""),  # English translation
             level=translation_data.get("level", "A1"),
-            ctx=translation_data.get("context", ""),  # Example sentence
+            ctx=translation_data.get("context", ""),  # Example sentence in German
+            ctx_ua=translation_data.get("ua_context", ""),  # Ukrainian translation of context
+            ctx_en=translation_data.get("en_context", ""),  # English translation of context
             text_id=None,  # No linked lesson
             is_favorite=1  # Custom words are added to favorites by default
         )

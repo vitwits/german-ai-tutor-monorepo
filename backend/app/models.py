@@ -72,6 +72,8 @@ class Vocabulary(Base):
     ua: Mapped[Optional[str]] = mapped_column(String)
     en: Mapped[Optional[str]] = mapped_column(String)
     ctx: Mapped[Optional[str]] = mapped_column(String)
+    ctx_ua: Mapped[Optional[str]] = mapped_column(String)  # Ukrainian translation of context
+    ctx_en: Mapped[Optional[str]] = mapped_column(String)  # English translation of context
     is_favorite: Mapped[int] = mapped_column(Integer, default=0)
     level: Mapped[Optional[str]] = mapped_column(String)
     

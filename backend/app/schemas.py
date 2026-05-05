@@ -88,6 +88,8 @@ class VocabWordSchema(BaseModel):
     ua: Optional[str]
     en: Optional[str]
     ctx: Optional[str]
+    ctx_ua: Optional[str]
+    ctx_en: Optional[str]
     is_favorite: int
     level: Optional[str]
     text_id: Optional[str]
@@ -100,6 +102,7 @@ class VocabWordSchema(BaseModel):
     last_reviewed: Optional[datetime] = None
     study_view_count: Optional[int] = 0
     display_trans: Optional[str] = None
+    display_ctx_trans: Optional[str] = None
     audio_de_url: Optional[str] = None
     audio_trans_urls: Optional[list] = None
 

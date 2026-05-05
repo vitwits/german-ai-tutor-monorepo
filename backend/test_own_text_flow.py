@@ -10,7 +10,6 @@ import sys
 # Simulate the LLM response from texts_create_own_text prompt
 MOCK_LLM_RESPONSE = """{
   "validation_results": {
-    "text_is_completely_in_german": true,
     "is_ethical": true,
     "no_sexual_content": true,
     "no_prohibited_topics": true,
@@ -70,7 +69,6 @@ def test_response_parsing():
     print(f"  ✓ Validation results: {validation_data}")
     
     required_validation_fields = [
-        "text_is_completely_in_german",
         "is_ethical",
         "no_sexual_content",
         "no_prohibited_topics",
@@ -120,7 +118,6 @@ def test_validation_logic():
     
     # Test 2: Check error conditions
     test_cases = [
-        ("text_is_completely_in_german", "validation_not_german"),
         ("is_ethical", "validation_not_ethical"),
         ("no_sexual_content", "validation_sexual_content"),
         ("no_prohibited_topics", "validation_prohibited_topics"),
@@ -145,7 +142,6 @@ def test_invalid_response():
         print("  ✓ Invalid JSON detected, using fallback structure")
         fallback = {
             "validation_results": {
-                "text_is_completely_in_german": False,
                 "is_ethical": False,
                 "no_sexual_content": False,
                 "no_prohibited_topics": False,
