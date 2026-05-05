@@ -39,6 +39,7 @@
   let fcIsRandom = $state(false);
   let fcAudioEnabled = $state(true);
   let fcStudyLoop = $state(false); // Цикличное воспроизведение в режиме Study
+  let fcReverseMode = $state(false); // Показывать перевод сначала, потом немецкий
   
   // Session Completion Splash Screen
   let showSessionSplash = $state(false);
@@ -262,21 +263,44 @@
       const card = sessionCards[currentCardIdx];
       isFlipped = false;
 
-      // 1. Play Front Audio (German)
-      if (fcAudioEnabled) {
+      // Helper logic for German audio
+      const playGerman = async () => {
           let deUrl = card.audio_de_url;
-          // If no cached URL, generate it
           if (!deUrl) {
               try {
                   const res = await api.post('/vocab/generate_audio', { text: card.display, lang: 'de' });
                   deUrl = res.data.url;
-              } catch(e) {
-                  console.error('Failed to generate German audio:', e);
+              } catch(e) { console.error(e); }
+          }
+          if (deUrl) await playAudioPromise(deUrl);
+      };
+
+      // Helper logic for Translation audio
+      const playTranslation = async () => {
+          const transLang = $user?.interface_language === 'ukr' ? 'uk' : 'en';
+          let transUrls = card.audio_trans_urls;
+          if (!transUrls || transUrls.length === 0) {
+              try {
+                  const transParts = card.trans.split(',').map(p => p.trim()).filter(p => p);
+                  transUrls = [];
+                  for (const part of transParts) {
+                      const res = await api.post('/vocab/generate_audio', { text: part, lang: transLang });
+                      if (res.data.url) transUrls.push(res.data.url);
+                  }
+              } catch(e) { console.error(e); }
+          }
+          if (transUrls && transUrls.length > 0) {
+              for (const url of transUrls) {
+                  if (!fcIsPlaying) break;
+                  await playAudioPromise(url);
               }
           }
-          if (deUrl) {
-              await playAudioPromise(deUrl);
-          }
+      };
+
+      // 1. Play Front Audio (based on direction)
+      if (fcAudioEnabled) {
+          if (fcReverseMode) await playTranslation();
+          else await playGerman();
       } else {
           await new Promise(r => setTimeout(r, 1000));
       }
@@ -290,32 +314,10 @@
       // 3. Flip
       isFlipped = true;
 
-      // 4. Play Back Audio (Translation)
+      // 4. Play Back Audio (based on direction)
       if (fcAudioEnabled) {
-          const transLang = $user?.interface_language === 'ukr' ? 'uk' : 'en';
-          let transUrls = card.audio_trans_urls;
-          // If no cached URLs, generate them
-          if (!transUrls || transUrls.length === 0) {
-              try {
-                  // Split translation by commas and generate each part
-                  const transParts = card.trans.split(',').map(p => p.trim()).filter(p => p);
-                  transUrls = [];
-                  for (const part of transParts) {
-                      const res = await api.post('/vocab/generate_audio', { text: part, lang: transLang });
-                      if (res.data.url) {
-                          transUrls.push(res.data.url);
-                      }
-                  }
-              } catch(e) {
-                  console.error('Failed to generate translation audio:', e);
-              }
-          }
-          if (transUrls && transUrls.length > 0) {
-              for (const url of transUrls) {
-                  if (!fcIsPlaying) break;
-                  await playAudioPromise(url);
-              }
-          }
+          if (fcReverseMode) await playGerman();
+          else await playTranslation();
       } else {
           await new Promise(r => setTimeout(r, 1000));
       }
@@ -362,7 +364,24 @@
       if (fcMode === 'review') {
           fcReviewStarted = true;
           currentCardIdx = 0;
-          playAudio(sessionCards[currentCardIdx]?.audio_de_url);
+          const card = sessionCards[currentCardIdx];
+          if (fcAudioEnabled) {
+              if (fcReverseMode) {
+                  // Play translation sequentially
+                  const transLang = $user?.interface_language === 'ukr' ? 'uk' : 'en';
+                  (async () => {
+                      const transParts = card.trans.split(',').map(p => p.trim()).filter(p => p);
+                      for (const part of transParts) {
+                          try {
+                              const res = await api.post('/vocab/generate_audio', { text: part, lang: transLang });
+                              if (res.data.url) await playAudioPromise(res.data.url);
+                          } catch(e) { console.error(e); }
+                      }
+                  })();
+              } else {
+                  playAudio(card.audio_de_url);
+              }
+          }
       }
   }
 
@@ -374,11 +393,23 @@
     if (!fcReviewStarted) return;
     isFlipped = !isFlipped;
     if (isFlipped) {
-        // Play translation audio (all parts sequentially)
         const card = sessionCards[currentCardIdx];
-        if (card.audio_trans_urls?.length) {
-            for (const url of card.audio_trans_urls) {
-                await playAudioPromise(url);
+        if (fcAudioEnabled) {
+            if (fcReverseMode) {
+                // Back side is German in reverse mode
+                playAudio(card.audio_de_url);
+            } else {
+                // Back side is Translation in normal mode
+                if (card.audio_trans_urls?.length) {
+                    for (const url of card.audio_trans_urls) await playAudioPromise(url);
+                } else {
+                    const transLang = $user?.interface_language === 'ukr' ? 'uk' : 'en';
+                    const transParts = card.trans.split(',').map(p => p.trim()).filter(p => p);
+                    for (const part of transParts) {
+                        const res = await api.post('/vocab/generate_audio', { text: part, lang: transLang });
+                        if (res.data.url) await playAudioPromise(res.data.url);
+                    }
+                }
             }
         }
     }
@@ -426,6 +457,11 @@
       fcAudioEnabled = !fcAudioEnabled;
   }
 
+  function toggleFcReverseMode() {
+      fcReverseMode = !fcReverseMode;
+      isFlipped = false; // Сбросить флип при переключении режима
+  }
+
   function prevCard() {
       if (fcLoopTimeout) clearTimeout(fcLoopTimeout);
       if (currentAudio) currentAudio.pause();
@@ -469,7 +505,23 @@
         isFlipped = false;
         if (currentCardIdx < sessionCards.length - 1) {
             currentCardIdx++;
-            playAudio(sessionCards[currentCardIdx].audio_de_url);
+            const nextCard = sessionCards[currentCardIdx];
+            if (fcAudioEnabled) {
+                if (fcReverseMode) {
+                    const transLang = $user?.interface_language === 'ukr' ? 'uk' : 'en';
+                    (async () => {
+                        const transParts = nextCard.trans.split(',').map(p => p.trim()).filter(p => p);
+                        for (const part of transParts) {
+                            try {
+                                const res = await api.post('/vocab/generate_audio', { text: part, lang: transLang });
+                                if (res.data.url) await playAudioPromise(res.data.url);
+                            } catch(e) { console.error(e); }
+                        }
+                    })();
+                } else {
+                    playAudio(nextCard.audio_de_url);
+                }
+            }
         } else {
             // Кінець сесії Review - показуємо splash screen
             showSessionSplash = true;
@@ -800,22 +852,43 @@
                      tabindex="0"
                      style="display: {fcMode === 'review' && !fcReviewStarted ? 'none' : 'block'}">
                     
-                    <div class="fc-face fc-front">
-                        <span class="level-badge lvl-{sessionCards[currentCardIdx].level?.toLowerCase()}" style="position:absolute; top:20px; left:20px; z-index: 5;">
-                            {sessionCards[currentCardIdx].level || '?'}
-                        </span>
-                        <div class="fc-word">{sessionCards[currentCardIdx].display}</div>
-                    </div>
+                    {#if fcReverseMode}
+                        <!-- Режим развернутый: переводы сначала -->
+                        <div class="fc-face fc-front">
+                            <span class="level-badge lvl-{sessionCards[currentCardIdx].level?.toLowerCase()}" style="position:absolute; top:20px; left:20px; z-index: 5;">
+                                {sessionCards[currentCardIdx].level || '?'}
+                            </span>
+                            <div class="fc-word">{sessionCards[currentCardIdx].trans}</div>
+                        </div>
 
-                    <div class="fc-face fc-back">
-                        <div class="fc-trans">{sessionCards[currentCardIdx].trans}</div>
-                        {#if fcMode === 'review' || !fcIsPlaying}
-                            <div class="fc-ctx">{sessionCards[currentCardIdx].ctx}</div>
-                            {#if sessionCards[currentCardIdx].ctx_trans}
-                                <div class="fc-ctx-trans" style="opacity: 0.7; font-size: 1.1rem; margin-top: 10px; font-style: italic;">{sessionCards[currentCardIdx].ctx_trans}</div>
+                        <div class="fc-face fc-back">
+                            <div class="fc-word">{sessionCards[currentCardIdx].display}</div>
+                            {#if fcMode === 'review' || !fcIsPlaying}
+                                <div class="fc-ctx" style="margin-top: 20px;">{sessionCards[currentCardIdx].ctx}</div>
+                                {#if sessionCards[currentCardIdx].ctx_trans}
+                                    <div class="fc-ctx-trans" style="opacity: 0.7; font-size: 1.1rem; margin-top: 10px; font-style: italic;">{sessionCards[currentCardIdx].ctx_trans}</div>
+                                {/if}
                             {/if}
-                        {/if}
-                    </div>
+                        </div>
+                    {:else}
+                        <!-- Нормальный режим: немецкий сначала -->
+                        <div class="fc-face fc-front">
+                            <span class="level-badge lvl-{sessionCards[currentCardIdx].level?.toLowerCase()}" style="position:absolute; top:20px; left:20px; z-index: 5;">
+                                {sessionCards[currentCardIdx].level || '?'}
+                            </span>
+                            <div class="fc-word">{sessionCards[currentCardIdx].display}</div>
+                        </div>
+
+                        <div class="fc-face fc-back">
+                            <div class="fc-trans">{sessionCards[currentCardIdx].trans}</div>
+                            {#if fcMode === 'review' || !fcIsPlaying}
+                                <div class="fc-ctx">{sessionCards[currentCardIdx].ctx}</div>
+                                {#if sessionCards[currentCardIdx].ctx_trans}
+                                    <div class="fc-ctx-trans" style="opacity: 0.7; font-size: 1.1rem; margin-top: 10px; font-style: italic;">{sessionCards[currentCardIdx].ctx_trans}</div>
+                                {/if}
+                            {/if}
+                        </div>
+                    {/if}
                 </div>
             </div>
 
@@ -837,6 +910,9 @@
                         <button class="fc-icon-btn" class:active={fcAudioEnabled} onclick={(e) => { e.stopPropagation(); toggleFcAudio(); }}>
                             <span class="material-symbols-outlined">volume_up</span>
                         </button>
+                        <button class="fc-icon-btn" class:active={fcReverseMode} onclick={(e) => { e.stopPropagation(); toggleFcReverseMode(); }} title="Переключить порядок: перевод сначала">
+                            <span class="material-symbols-outlined">flip</span>
+                        </button>
                         <button class="fc-play-btn" onclick={toggleFcPlay}>
                             <span class="material-symbols-outlined">{fcIsPlaying ? 'pause' : 'play_arrow'}</span>
                         </button>
@@ -850,11 +926,17 @@
                             <button class="fc-icon-btn" class:active={fcAudioEnabled} onclick={(e) => { e.stopPropagation(); toggleFcAudio(); }}>
                                 <span class="material-symbols-outlined">volume_up</span>
                             </button>
+                            <button class="fc-icon-btn" class:active={fcReverseMode} onclick={(e) => { e.stopPropagation(); toggleFcReverseMode(); }} title="Переключить порядок: перевод сначала">
+                                <span class="material-symbols-outlined">flip</span>
+                            </button>
                         </div>
                     {:else}
                         <div class="fc-ctrl-row">
                             <button class="fc-icon-btn" class:active={fcAudioEnabled} onclick={(e) => { e.stopPropagation(); toggleFcAudio(); }}>
                                 <span class="material-symbols-outlined">volume_up</span>
+                            </button>
+                            <button class="fc-icon-btn" class:active={fcReverseMode} onclick={(e) => { e.stopPropagation(); toggleFcReverseMode(); }} title="Переключить порядок: перевод сначала">
+                                <span class="material-symbols-outlined">flip</span>
                             </button>
                         </div>
                     {/if}
