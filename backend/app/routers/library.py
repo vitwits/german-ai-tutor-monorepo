@@ -653,26 +653,11 @@ async def create_own_text_endpoint(
         raise HTTPException(status_code=500, detail="Prompt not found")
     
     # Call LLM once - returns both validation results and lesson data
-    validation_data, lesson_data, prompt_text, response_text, model_id = await services.create_lesson_from_user_text(
+    lesson_data, prompt_text, response_text, model_id = await services.create_lesson_from_user_text(
         text=req.text,
         prompt_template=prompt_obj.prompt,
         db=db
     )
-    
-    # Check validation results
-    if not validation_data.get("overall_validity"):
-        # Determine which validation failed
-        error_key = "validation_failed"
-        if not validation_data.get("is_ethical"):
-            error_key = "validation_not_ethical"
-        elif not validation_data.get("no_sexual_content"):
-            error_key = "validation_sexual_content"
-        elif not validation_data.get("no_prohibited_topics"):
-            error_key = "validation_prohibited_topics"
-        elif not validation_data.get("is_safe_for_work"):
-            error_key = "validation_not_safe"
-        
-        raise HTTPException(status_code=400, detail={"error_key": error_key})
     
     # Validation passed - save lesson to database
     lesson_id = str(uuid.uuid4())

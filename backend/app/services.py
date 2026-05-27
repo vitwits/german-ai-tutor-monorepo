@@ -1053,7 +1053,7 @@ async def create_lesson_from_user_text(text: str, prompt_template: str, db: Asyn
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
             temperature=0.3,
-            max_output_tokens=4000
+            max_output_tokens=21000
         )
     )
     
@@ -1074,13 +1074,6 @@ async def create_lesson_from_user_text(text: str, prompt_template: str, db: Asyn
         # Default fallback if JSON parsing fails
         print(f"⚠️ Error parsing response: {e}")
         response_data = {
-            "validation_results": {
-                "is_ethical": False,
-                "no_sexual_content": False,
-                "no_prohibited_topics": False,
-                "is_safe_for_work": False,
-                "overall_validity": False
-            },
             "title_de": "Custom Lesson",
             "title_ua": "Користувацький урок",
             "title_en": "Custom Lesson",
@@ -1089,9 +1082,6 @@ async def create_lesson_from_user_text(text: str, prompt_template: str, db: Asyn
             "quiz": [],
             "vocabulary": []
         }
-    
-    # Extract validation results
-    validation_data = response_data.get("validation_results", {})
     
     # Extract lesson data from response
     lesson_data = {
@@ -1104,4 +1094,4 @@ async def create_lesson_from_user_text(text: str, prompt_template: str, db: Asyn
         "vocabulary": response_data.get("vocabulary", [])
     }
     
-    return validation_data, lesson_data, prompt, response.text, model_id
+    return lesson_data, prompt, response.text, model_id
