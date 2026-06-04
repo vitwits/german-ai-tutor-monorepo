@@ -17,10 +17,10 @@ services:
       # Монтуємо папку зі статичними файлами (наприклад, аудіо)
       - ./backend/static:/app/static
       # Монтуємо файл service-account.json як "тільки для читання"
-      - ./service-account.json:/app/service-account.json:ro
+      - ./service-account.json:/var/secrets/service-account.json:ro
     environment:
       # Вказуємо Python-додатку, де знайти service-account.json всередині контейнера
-      - GOOGLE_APPLICATION_CREDENTIALS=/app/service-account.json
+      - GOOGLE_APPLICATION_CREDENTIALS=/var/secrets/service-account.json
 
   frontend:
     build:
@@ -29,6 +29,6 @@ services:
     container_name: german_tutor_frontend
     restart: always
     ports:
-      - "80:80" # Фронтенд буде доступний на порту 80 хоста
+      - "80:80"
     depends_on:
       - backend # Фронтенд залежить від бекенду

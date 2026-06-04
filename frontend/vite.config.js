@@ -7,13 +7,20 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        // У Docker мережі звертаємось до сервісу за іменем 'backend'
+        target: 'http://backend:8000',
         changeOrigin: true,
       },
       '/static': {
-        target: 'http://localhost:8000',
+        target: 'http://backend:8000',
         changeOrigin: true,
       }
+    },
+    host: '0.0.0.0',
+    port: 5173,
+    watch: {
+      // Використовуємо polling, якщо файлова система не прокидає події (важливо для Docker)
+      usePolling: true,
     }
   }
 })

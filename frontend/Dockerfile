@@ -1,10 +1,10 @@
 # Stage 1: Build the Svelte application
-FROM node:20-alpine AS build-stage
+FROM node:20-slim AS build-stage
 WORKDIR /app
 
 # Copy package.json and package-lock.json to install dependencies
 COPY package*.json ./
-RUN npm install
+RUN npm install && npm cache clean --force
 
 # Copy the rest of the frontend code and build the application
 COPY . .
