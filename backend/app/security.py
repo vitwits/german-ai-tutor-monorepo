@@ -1,13 +1,12 @@
+import os
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from dotenv import load_dotenv
-import os
 
-# Load .env from monorepo root
-MONOREPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
-load_dotenv(os.path.join(MONOREPO_ROOT, ".env"))
+# У Docker змінні середовища будуть передані напряму, для локальної розробки load_dotenv() знайде .env у корені
+load_dotenv()
 
 # Секретний ключ має бути в .env, тут фолбек для розробки
 SECRET_KEY = os.getenv("SECRET_KEY", "dev-key-change-this-in-prod")

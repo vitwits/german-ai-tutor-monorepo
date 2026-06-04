@@ -2,11 +2,11 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 # Завантажимо .env файл
-env_path = Path(__file__).parent.parent.parent / ".env"
-load_dotenv(env_path)
+# У Docker змінні середовища будуть передані напряму, для локальної розробки load_dotenv() знайде .env у корені
+load_dotenv()
 
 # Визначення бази даних - використовуємо PostgreSQL або SQLite залежно від конфігу
 DB_TYPE = os.getenv("DB_TYPE", "sqlite")  # 'sqlite' або 'postgres'
@@ -36,4 +36,3 @@ class Base(DeclarativeBase):
 async def get_db():
     async with AsyncSessionLocal() as session:
         yield session
-

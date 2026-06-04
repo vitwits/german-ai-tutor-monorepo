@@ -1,16 +1,34 @@
 services:
-  db:
-    image: postgres:15-alpine
-    container_name: german_tutor_db
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: german_tutor_backend
     restart: always
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+    # Завантажуємо змінні середовища для бекенду з файлу .env у корені
+    # АБО, якщо ти хочеш окремий .env для бекенду, створи файл backend/.env
+    # і вкажи env_file: ./backend/.env
+    env_file: ./.env
     ports:
-      - "${POSTGRES_PORT}:5432"
+      - "8000:8000"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      # Монтуємо папку з базою даних SQLite для збереження даних
+      - ./backend/data:/app/data
+      # Монтуємо папку зі статичними файлами (наприклад, аудіо)
+      - ./backend/static:/app/static
+      # Монтуємо файл service-account.json як "тільки для читання"
+      - ./service-account.json:/app/service-account.json:ro
+    environment:
+      # Вказуємо Python-додатку, де знайти service-account.json всередині контейнера
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/service-account.json
 
-volumes:
-  postgres_data:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: german_tutor_frontend
+    restart: always
+    ports:
+      - "80:80" # Фронтенд буде доступний на порту 80 хоста
+    depends_on:
+      - backend # Фронтенд залежить від бекенду

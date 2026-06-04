@@ -11,15 +11,11 @@ from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-# Визначаємо корінь monorepo (на два рівні вище від app/services.py)
-MONOREPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
-load_dotenv(os.path.join(MONOREPO_ROOT, ".env"))
+# У Docker змінні середовища будуть передані напряму, для локальної розробки load_dotenv() знайде .env у корені
+load_dotenv()
 
-# Виправляємо шлях до credentials, якщо він відносний
-creds = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-if creds and not os.path.isabs(creds):
-    # Якщо в .env просто "service-account.json", додаємо повний шлях
-    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.path.join(MONOREPO_ROOT, creds)
+# GOOGLE_APPLICATION_CREDENTIALS буде встановлено як змінна середовища в Docker Compose,
+# тому Python-додаток знайде її автоматично. Додаткова логіка тут не потрібна.
 
 # Ініціалізація клієнта (New SDK)
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
