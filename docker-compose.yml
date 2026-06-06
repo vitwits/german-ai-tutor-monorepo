@@ -5,21 +5,14 @@ services:
       dockerfile: Dockerfile
     container_name: german_tutor_backend
     restart: always
-    # Завантажуємо змінні середовища для бекенду з файлу .env у корені
-    # АБО, якщо ти хочеш окремий .env для бекенду, створи файл backend/.env
-    # і вкажи env_file: ./backend/.env
     env_file: ./.env
     ports:
       - "8000:8000"
     volumes:
-      # Монтуємо папку з базою даних SQLite для збереження даних
       - ./backend/data:/app/data
-      # Монтуємо папку зі статичними файлами (наприклад, аудіо)
       - ./backend/static:/app/static
-      # Монтуємо файл service-account.json як "тільки для читання"
       - ./service-account.json:/var/secrets/service-account.json:ro
     environment:
-      # Вказуємо Python-додатку, де знайти service-account.json всередині контейнера
       - GOOGLE_APPLICATION_CREDENTIALS=/var/secrets/service-account.json
 
   frontend:
