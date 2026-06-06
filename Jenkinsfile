@@ -31,9 +31,9 @@ pipeline {
                     steps {
                         dir('backend') {
                             echo "Running Backend Checks using system Poetry..."
-                            // Додано --no-root, щоб уникнути помилки пакування
                             sh 'poetry install --no-root'
-                            sh 'set -o pipefail; poetry run flake8 . --format=default | tee flake8_report.txt'
+                            // Додаємо шебанг #!/bin/bash на початку рядка
+                            sh '#!/bin/bash\nset -o pipefail; poetry run flake8 . --format=default | tee flake8_report.txt'
                             sh 'poetry run pytest --junitxml=pytest_report.xml'
                         }
                     }
