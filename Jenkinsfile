@@ -4,7 +4,7 @@ pipeline {
 
     environment {
         GEMINI_API_KEY = credentials('GEMINI_API_KEY_SECRET')
-        GITHUB_TOKEN   = credentials('github-creds')
+        GITHUB_TOKEN   = credentials('jenkins-github-ai-tutor')
     }
 
     options {
