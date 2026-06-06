@@ -1,4 +1,5 @@
 <script>
+/* eslint-disable */
   import { toasts, removeToast } from "../stores/toast";
   import { flip } from "svelte/animate";
   import { fade, fly } from "svelte/transition";

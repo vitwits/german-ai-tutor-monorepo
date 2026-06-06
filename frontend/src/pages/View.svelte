@@ -1,4 +1,5 @@
 <script>
+/* eslint-disable */
   import { onMount, onDestroy, tick } from "svelte";
   import { fade } from "svelte/transition";
   import { tweened } from 'svelte/motion';

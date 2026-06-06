@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen } from '@testing-library/svelte/svelte5';
+import { render } from '@testing-library/svelte/svelte5';
 import Toast from '../Toast.svelte';
-import { toasts, addToast, removeToast } from '../../stores/toast';
+import { toasts } from '../../stores/toast';
 
 // Mock the stores
 vi.mock('../../stores/toast', () => ({
@@ -19,8 +19,6 @@ vi.mock('../../stores/auth', () => ({
 }));
 
 describe('Toast Component', () => {
-    let unsubscribe;
-
     beforeEach(() => {
         // Set up the store with initial data
         const mockToasts = [
@@ -40,7 +38,7 @@ describe('Toast Component', () => {
     });
 
     it('should display toast message', async () => {
-        const { component, container } = render(Toast);
+        const { container } = render(Toast);
 
         // Check that toast element exists
         const toastElement = container.querySelector('.toast');

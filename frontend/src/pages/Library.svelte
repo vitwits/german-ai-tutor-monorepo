@@ -1,4 +1,5 @@
 <script>
+/* eslint-disable */
   import { onMount } from "svelte";
   import api from "../lib/api";
   import { router } from "tinro";

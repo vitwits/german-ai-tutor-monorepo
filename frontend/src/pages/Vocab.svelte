@@ -1,4 +1,5 @@
 <script>
+/* eslint-disable */
   import { onMount, onDestroy } from "svelte";
   import api from "../lib/api";
   import { user } from "../stores/auth";

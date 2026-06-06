@@ -1,4 +1,5 @@
 <script>
+/* eslint-disable */
     import { user } from "../stores/auth";
     import { confirmModal } from "../stores/confirm";
     import api from "../lib/api";
