@@ -76,7 +76,8 @@ pipeline {
                     post {
                         always {
                             recordIssues(enabledForFailure: true, ignoreQualityGate: true, tools: [checkStyle(id: 'eslint', name: 'ESLint', pattern: 'frontend/eslint_report.xml')])
-                            junit allowEmptyResults: true, testResults: 'frontend/vitest_report.xml'
+                            // Додали keepLongStdio, щоб попередити падіння через системні ворнінги Vite
+                            junit allowEmptyResults: true, keepLongStdio: true, testResults: 'frontend/vitest_report.xml'
                         }
                     }
                 }
@@ -87,13 +88,12 @@ pipeline {
     post {
         always {
             script {
-                // Захищене очищення звітів
                 sh 'rm -f backend/flake8_report.txt backend/pytest_report.xml frontend/eslint_report.xml frontend/vitest_report.xml'
             }
         }
         success {
             script {
-                // Використовуємо новий виділений Secret Text токен для сповіщень
+                // Виправлено ID: додано 's' в github-notifications-token
                 withCredentials([string(credentialsId: 'github-notifications-token', variable: 'GAI_TOKEN')]) {
                     try {
                         githubNotify context: 'ci/jenkins/push-check', 
@@ -111,7 +111,7 @@ pipeline {
         }
         failure {
             script {
-                // Використовуємо новий виділений Secret Text токен для сповіщень
+                // Виправлено ID: додано 's' в github-notifications-token
                 withCredentials([string(credentialsId: 'github-notifications-token', variable: 'GAI_TOKEN')]) {
                     try {
                         githubNotify context: 'ci/jenkins/push-check', 
