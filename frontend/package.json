@@ -13,7 +13,7 @@
     "lint": "eslint src/ --format checkstyle --output-file eslint_report.xml"
   },
   "devDependencies": {
-    "@sveltejs/vite-plugin-svelte": "^3.1.0",
+    "@sveltejs/vite-plugin-svelte": "^4.0.0",
     "@testing-library/svelte": "^4.1.0",
     "@testing-library/user-event": "^14.5.2",
     "@typescript-eslint/eslint-plugin": "^7.18.0",

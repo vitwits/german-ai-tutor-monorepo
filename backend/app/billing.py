@@ -4,13 +4,13 @@ from .models import User
 
 PRICING = {
     # --- ТЕКСТ (Gemini Flash 2.5 lite) ---
-    'ai_request_fixed': 0.1,  # Мінімальна плата за звернення до AI
+    'ai_request_fixed': 0.1,    # Мінімальна плата за звернення до AI
     'translation_per_char': 0.001,  # $1 за 1M символів
-    
+
     # --- АУДІО (TTS) ---
     'tts_google_per_char': 0.004,  # $4 за 1M символів
     'tts_azure_per_char': 0.015,  # $15 за 1M символів
-    
+
     # --- SPEAKING (Speech-to-Text) ---
     'stt_fixed_request': 6.0,  # $0.006 за транзакцію STT (до 15 сек)
     'speaking_evaluation': 5.0,  # Вартість оцінки вимови
