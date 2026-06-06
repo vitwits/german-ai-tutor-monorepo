@@ -2,6 +2,83 @@
 
 This template should help get you started developing with Svelte in Vite.
 
+## Getting Started
+
+### Installation
+
+```bash
+npm install
+```
+
+### Development
+
+```bash
+npm run dev
+```
+
+### Build
+
+```bash
+npm run build
+```
+
+### Preview
+
+```bash
+npm run preview
+```
+
+## Testing
+
+This project uses **Vitest** and **Testing Library** for unit and component testing.
+
+### Running Tests
+
+```bash
+# Run tests in watch mode
+npm run test
+
+# Run tests once
+npm run test:run
+
+# View test UI dashboard
+npm run test:ui
+```
+
+### Test Structure
+
+Tests are located alongside components in `__tests__` folders:
+
+```
+src/
+├── components/
+│   ├── __tests__/
+│   │   ├── Toast.test.js
+│   │   └── ProgressSplash.test.js
+│   ├── Toast.svelte
+│   └── ...
+├── __tests__/
+│   └── utils.test.js
+└── ...
+```
+
+### Writing Tests
+
+Example test for a Svelte component:
+
+```javascript
+import { describe, it, expect } from 'vitest';
+import { render } from '@testing-library/svelte';
+import MyComponent from '../MyComponent.svelte';
+
+describe('MyComponent', () => {
+  it('should render', () => {
+    const { container } = render(MyComponent);
+    expect(container).toBeTruthy();
+  });
+});
+```
+
 ## Recommended IDE Setup
 
 [VS Code](https://code.visualstudio.com/) + [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode).
