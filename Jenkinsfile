@@ -76,7 +76,6 @@ pipeline {
                     post {
                         always {
                             recordIssues(enabledForFailure: true, ignoreQualityGate: true, tools: [checkStyle(id: 'eslint', name: 'ESLint', pattern: 'frontend/eslint_report.xml')])
-                            // Додали keepLongStdio, щоб попередити падіння через системні ворнінги Vite
                             junit allowEmptyResults: true, keepLongStdio: true, testResults: 'frontend/vitest_report.xml'
                         }
                     }
@@ -93,37 +92,33 @@ pipeline {
         }
         success {
             script {
-                // Виправлено ID: додано 's' в github-notifications-token
-                withCredentials([string(credentialsId: 'github-notifications-token', variable: 'GAI_TOKEN')]) {
-                    try {
-                        githubNotify context: 'ci/jenkins/push-check', 
-                                     status: 'SUCCESS', 
-                                     description: 'All checks passed successfully!',
-                                     account: 'vitwits',
-                                     repo: 'language-AI-tutor',
-                                     credentialsId: 'github-notifications-token',
-                                     sha: "${env.GIT_COMMIT}"
-                    } catch (Exception e) {
-                        echo "Warning: Failed to send GitHub notification: ${e.message}"
-                    }
+                try {
+                    // Прямий виклик без обгорток env чи звичайних credentials блоків
+                    githubNotify context: 'ci/jenkins/push-check', 
+                                 status: 'SUCCESS', 
+                                 description: 'All checks passed successfully!',
+                                 account: 'vitwits',
+                                 repo: 'language-AI-tutor',
+                                 credentialsId: 'github-notifications-token',
+                                 sha: "${env.GIT_COMMIT}"
+                } catch (Exception e) {
+                    echo "Warning: Failed to send GitHub notification: ${e.message}"
                 }
             }
         }
         failure {
             script {
-                // Виправлено ID: додано 's' в github-notifications-token
-                withCredentials([string(credentialsId: 'github-notifications-token', variable: 'GAI_TOKEN')]) {
-                    try {
-                        githubNotify context: 'ci/jenkins/push-check', 
-                                     status: 'FAILURE', 
-                                     description: 'Pipeline checks failed.',
-                                     account: 'vitwits',
-                                     repo: 'language-AI-tutor',
-                                     credentialsId: 'github-notifications-token',
-                                     sha: "${env.GIT_COMMIT}"
-                    } catch (Exception e) {
-                        echo "Warning: Failed to send GitHub notification: ${e.message}"
-                    }
+                try {
+                    // Прямий виклик без обгорток env чи звичайних credentials блоків
+                    githubNotify context: 'ci/jenkins/push-check', 
+                                 status: 'FAILURE', 
+                                 description: 'Pipeline checks failed.',
+                                 account: 'vitwits',
+                                 repo: 'language-AI-tutor',
+                                 credentialsId: 'github-notifications-token',
+                                 sha: "${env.GIT_COMMIT}"
+                } catch (Exception e) {
+                    echo "Warning: Failed to send GitHub notification: ${e.message}"
                 }
             }
         }
