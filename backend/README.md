@@ -31,7 +31,7 @@ pip install poetry
 poetry install --no-root
 ```
 
-This installs all dependencies from `pyproject.toml` and `poetry.lock` files.
+This installs all dependencies from `pyproject.toml` and `poetry.lock` files, including development dependencies like pytest.
 
 ## Running the Application
 
@@ -57,6 +57,62 @@ Swagger UI documentation is available at:
 http://localhost:8000/docs
 ```
 
+## Testing
+
+### Running Tests
+
+Run all tests:
+
+```bash
+poetry run pytest
+```
+
+Or after activating virtual environment:
+
+```bash
+pytest
+```
+
+### Running Tests in Watch Mode
+
+For continuous testing during development:
+
+```bash
+poetry run pytest -v --tb=short
+```
+
+### Running Specific Test File
+
+```bash
+poetry run pytest tests/test_api.py -v
+```
+
+### Running Specific Test Class or Function
+
+```bash
+poetry run pytest tests/test_api.py::TestHealthEndpoint -v
+poetry run pytest tests/test_utils.py::test_addition -v
+```
+
+### Test Coverage Report
+
+Generate a coverage report:
+
+```bash
+poetry run pytest --cov=app tests/
+```
+
+## Test Structure
+
+```
+tests/
+├── __init__.py           # Tests package marker
+├── conftest.py           # Shared fixtures and configuration
+├── test_api.py           # API endpoint tests
+├── test_utils.py         # Utility function tests
+└── test_fixtures.py      # Fixture validation tests
+```
+
 ## Managing Dependencies
 
 ### Adding a New Dependency
@@ -65,7 +121,18 @@ http://localhost:8000/docs
 poetry add package_name
 ```
 
-This automatically updates `pyproject.toml` and `poetry.lock`.
+### Adding a Development Dependency (Testing, Linting, etc.)
+
+```bash
+poetry add --group dev package_name
+```
+
+For example:
+
+```bash
+poetry add --group dev black  # Code formatter
+poetry add --group dev pytest-cov  # Coverage reporting
+```
 
 ### Updating Dependencies
 
@@ -89,15 +156,15 @@ poetry --version
 
 ## Dependency Storage Explanation
 
-**Where are dependencies stored?**
+### Where are dependencies stored?
 
 - **`pyproject.toml`** - Lists all project dependencies with version constraints (human-readable)
 - **`poetry.lock`** - Locks specific versions for reproducibility (auto-generated, don't edit manually)
 
-**How does it work?**
+### How does it work?
 
 1. When you run `poetry add pytest`, Poetry:
-   - Adds `pytest` to `pyproject.toml`
+   - Adds `pytest` to `pyproject.toml` (under dev dependencies)
    - Resolves the exact version and adds it to `poetry.lock`
    - Installs it in the virtual environment
 
@@ -106,11 +173,24 @@ poetry --version
    - Uses exact versions from `poetry.lock`
    - Ensures everyone has the same environment
 
-**For new machines:**
+### For new machines:
 
 Just run:
+
 ```bash
 poetry install --no-root
 ```
 
 Poetry reads `poetry.lock` and installs the exact same versions. No manual installation needed!
+
+### Development vs. Production Dependencies
+
+Development dependencies (testing tools, formatters, etc.) are installed separately:
+
+```toml
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.0"
+pytest-asyncio = "^0.21.0"
+```
+
+These are not included when deploying to production.
