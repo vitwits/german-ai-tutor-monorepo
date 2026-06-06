@@ -3,6 +3,7 @@ pipeline {
     agent any
 
     environment {
+        // Креди таємниці підтягуються глобально для всього білду
         GEMINI_API_KEY = credentials('GEMINI_API_KEY_SECRET')
     }
 
@@ -37,7 +38,6 @@ pipeline {
                             echo "Running Backend Checks using system Poetry..."
                             sh 'poetry install --no-root'
                             
-                            // Зберігаємо статус виходу в змінну, щоб Jenkins не падав при помилках лінту
                             script {
                                 sh(
                                     script: '#!/bin/bash\nset -o pipefail; poetry run flake8 . --format=default | tee flake8_report.txt',
@@ -63,14 +63,15 @@ pipeline {
                             echo "Running Frontend Checks using system npm..."
                             sh 'npm install'
                             
-                            // Аналогічно ігноруємо статус помилки для фронтенд-лінтера
                             script {
+                                // Використовуємо надійний tee для збереження результату лінтера без падінь
                                 sh(
-                                    script: 'npm run lint -- --output-file eslint_report.xml',
+                                    script: '#!/bin/bash\nset -o pipefail; npm run lint | tee eslint_report.xml',
                                     returnStatus: true
                                 )
                             }
                             
+                            echo "Linting finished. Running Vitest..."
                             sh 'npm run test:run -- --reporter=junit --outputFile=vitest_report.xml'
                         }
                     }
@@ -93,22 +94,34 @@ pipeline {
             }
         }
         success {
-            githubNotify context: 'ci/jenkins/push-check', 
-                         status: 'SUCCESS', 
-                         description: 'All checks passed successfully!',
-                         account: 'vitwits',
-                         repo: 'language-AI-tutor',
-                         credentialsId: 'jenkins-github-ai-tutor',
-                         sha: "${env.GIT_COMMIT}"
+            script {
+                try {
+                    githubNotify context: 'ci/jenkins/push-check', 
+                                 status: 'SUCCESS', 
+                                 description: 'All checks passed successfully!',
+                                 account: 'vitwits',
+                                 repo: 'language-AI-tutor',
+                                 credentialsId: 'jenkins-github-ai-tutor',
+                                 sha: "${env.GIT_COMMIT}"
+                } catch (Exception e) {
+                    echo "Warning: GitHub Notification failed but build is SUCCESS: ${e.message}"
+                }
+            }
         }
         failure {
-            githubNotify context: 'ci/jenkins/push-check', 
-                         status: 'FAILURE', 
-                         description: 'Pipeline checks failed.',
-                         account: 'vitwits',
-                         repo: 'language-AI-tutor',
-                         credentialsId: 'jenkins-github-ai-tutor',
-                         sha: "${env.GIT_COMMIT}"
+            script {
+                try {
+                    githubNotify context: 'ci/jenkins/push-check', 
+                                 status: 'FAILURE', 
+                                 description: 'Pipeline checks failed.',
+                                 account: 'vitwits',
+                                 repo: 'language-AI-tutor',
+                                 credentialsId: 'jenkins-github-ai-tutor',
+                                 sha: "${env.GIT_COMMIT}"
+                } catch (Exception e) {
+                    echo "Warning: GitHub Notification failed: ${e.message}"
+                }
+            }
         }
     }
 }
