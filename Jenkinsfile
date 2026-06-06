@@ -1,6 +1,6 @@
 // Jenkinsfile for German AI Tutor Monorepo - Docker-based Push Check Pipeline
 pipeline {
-    agent none // Run stages inside individual Docker containers
+    agent none // Individual stages define their own runtime containers
 
     options {
         timeout(time: 15, unit: 'MINUTES')
@@ -14,7 +14,7 @@ pipeline {
 
     stages {
         stage('Guard') {
-            agent any
+            agent any // Runs natively on the base Jenkins executor node
             steps {
                 script {
                     def currentBranch = env.GIT_BRANCH ?: ''
@@ -78,22 +78,26 @@ pipeline {
         }
     }
 
+    // Global pipeline post actions run at the very end
     post {
         always {
-            agent any
-            script {
-                dir('backend') { sh 'rm -f flake8_report.txt pytest_report.xml' }
-                dir('frontend') { sh 'rm -f eslint_report.xml vitest_report.xml' }
+            // Force execution back onto a standard agent node to run cleanup commands safely
+            node('built-in' || 'master' || 'any') {
+                script {
+                    dir('backend') { sh 'rm -f flake8_report.txt pytest_report.xml' }
+                    dir('frontend') { sh 'rm -f eslint_report.xml vitest_report.xml' }
+                }
             }
         }
-        // Сюди ми повернули чистий, декларативний Jenkins без кастомних скриптів
         success {
-            agent any
-            githubNotify context: 'ci/jenkins/push-check', status: 'SUCCESS', description: 'All checks passed successfully!'
+            node('built-in' || 'master' || 'any') {
+                githubNotify context: 'ci/jenkins/push-check', status: 'SUCCESS', description: 'All checks passed successfully!'
+            }
         }
         failure {
-            agent any
-            githubNotify context: 'ci/jenkins/push-check', status: 'FAILURE', description: 'Pipeline checks failed.'
+            node('built-in' || 'master' || 'any') {
+                githubNotify context: 'ci/jenkins/push-check', status: 'FAILURE', description: 'Pipeline checks failed.'
+            }
         }
     }
 }
