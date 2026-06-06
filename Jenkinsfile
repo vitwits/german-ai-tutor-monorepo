@@ -32,8 +32,16 @@ pipeline {
                         dir('backend') {
                             echo "Running Backend Checks using system Poetry..."
                             sh 'poetry install --no-root'
-                            // Додаємо шебанг #!/bin/bash на початку рядка
-                            sh '#!/bin/bash\nset -o pipefail; poetry run flake8 || true . --config=.flake8 --format=default | tee flake8_report.txt'
+                            
+                            // Зберігаємо статус виходу в змінну, щоб Jenkins не падав при помилках лінту
+                            script {
+                                sh(
+                                    script: '#!/bin/bash\nset -o pipefail; poetry run flake8 . --format=default | tee flake8_report.txt',
+                                    returnStatus: true
+                                )
+                            }
+                            
+                            echo "Flake8 finished. Moving straight to tests..."
                             sh 'poetry run pytest --junitxml=pytest_report.xml'
                         }
                     }
@@ -50,7 +58,15 @@ pipeline {
                         dir('frontend') {
                             echo "Running Frontend Checks using system npm..."
                             sh 'npm install'
-                            sh 'npm run lint || true'
+                            
+                            // Аналогічно ігноруємо статус помилки для фронтенд-лінтера
+                            script {
+                                sh(
+                                    script: 'npm run lint -- --output-file eslint_report.xml',
+                                    returnStatus: true
+                                )
+                            }
+                            
                             sh 'npm run test:run -- --reporter=junit --outputFile=vitest_report.xml'
                         }
                     }
@@ -73,7 +89,6 @@ pipeline {
             }
         }
         success {
-            // Явно передаємо змінні для зв'язку з GitHub
             githubNotify context: 'ci/jenkins/push-check', 
                          status: 'SUCCESS', 
                          description: 'All checks passed successfully!',
