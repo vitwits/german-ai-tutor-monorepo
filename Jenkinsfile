@@ -4,7 +4,6 @@ pipeline {
 
     environment {
         GEMINI_API_KEY = credentials('GEMINI_API_KEY_SECRET')
-        GITHUB_TOKEN   = credentials('jenkins-github-ai-tutor')
     }
 
     options {
@@ -88,36 +87,43 @@ pipeline {
     post {
         always {
             script {
-                dir('backend') { sh 'rm -f flake8_report.txt pytest_report.xml' }
-                dir('frontend') { sh 'rm -f eslint_report.xml vitest_report.xml' }
+                // Захищене очищення звітів
+                sh 'rm -f backend/flake8_report.txt backend/pytest_report.xml frontend/eslint_report.xml frontend/vitest_report.xml'
             }
         }
         success {
             script {
-                try {
-                    // Прибрали credentialsId, плагін сам підтягне GITHUB_TOKEN з блоку environment
-                    githubNotify context: 'ci/jenkins/push-check', 
-                                 status: 'SUCCESS', 
-                                 description: 'All checks passed successfully!',
-                                 account: 'vitwits',
-                                 repo: 'language-AI-tutor',
-                                 sha: "${env.GIT_COMMIT}"
-                } catch (Exception e) {
-                    echo "Warning: Failed to send GitHub notification: ${e.message}"
+                // Використовуємо новий виділений Secret Text токен для сповіщень
+                withCredentials([string(credentialsId: 'github-notifications-token', variable: 'GAI_TOKEN')]) {
+                    try {
+                        githubNotify context: 'ci/jenkins/push-check', 
+                                     status: 'SUCCESS', 
+                                     description: 'All checks passed successfully!',
+                                     account: 'vitwits',
+                                     repo: 'language-AI-tutor',
+                                     credentialsId: 'github-notifications-token',
+                                     sha: "${env.GIT_COMMIT}"
+                    } catch (Exception e) {
+                        echo "Warning: Failed to send GitHub notification: ${e.message}"
+                    }
                 }
             }
         }
         failure {
             script {
-                try {
-                    githubNotify context: 'ci/jenkins/push-check', 
-                                 status: 'FAILURE', 
-                                 description: 'Pipeline checks failed.',
-                                 account: 'vitwits',
-                                 repo: 'language-AI-tutor',
-                                 sha: "${env.GIT_COMMIT}"
-                } catch (Exception e) {
-                    echo "Warning: Failed to send GitHub notification: ${e.message}"
+                // Використовуємо новий виділений Secret Text токен для сповіщень
+                withCredentials([string(credentialsId: 'github-notifications-token', variable: 'GAI_TOKEN')]) {
+                    try {
+                        githubNotify context: 'ci/jenkins/push-check', 
+                                     status: 'FAILURE', 
+                                     description: 'Pipeline checks failed.',
+                                     account: 'vitwits',
+                                     repo: 'language-AI-tutor',
+                                     credentialsId: 'github-notifications-token',
+                                     sha: "${env.GIT_COMMIT}"
+                    } catch (Exception e) {
+                        echo "Warning: Failed to send GitHub notification: ${e.message}"
+                    }
                 }
             }
         }
