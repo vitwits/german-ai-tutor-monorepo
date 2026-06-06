@@ -94,7 +94,6 @@ pipeline {
         success {
             script {
                 try {
-                    // Передаємо абсолютно всі параметри явно, щоб плагін не гадав
                     githubNotify context: 'ci/jenkins/push-check', 
                                  status: 'SUCCESS', 
                                  description: 'All checks passed successfully!',
