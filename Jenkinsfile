@@ -21,10 +21,7 @@ pipeline {
     stages {
         stage('Branch Check') {
             when {
-                branch 'main'
-            }
-            steps {
-                error("Skipping pipeline for main branch. This pipeline is for feature branches only.")
+                branch 'feature/**'
             }
         }
 
