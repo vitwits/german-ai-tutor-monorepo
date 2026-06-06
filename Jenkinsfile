@@ -1,6 +1,10 @@
 // Jenkinsfile for German AI Tutor Monorepo - Host-based Push Check Pipeline
 pipeline {
-    agent any 
+    agent any
+
+    environment {
+        GEMINI_API_KEY = credentials('GEMINI_API_KEY_SECRET')
+    }
 
     options {
         timeout(time: 15, unit: 'MINUTES')
