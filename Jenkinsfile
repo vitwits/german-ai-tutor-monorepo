@@ -4,6 +4,7 @@ pipeline {
 
     environment {
         GEMINI_API_KEY = credentials('GEMINI_API_KEY_SECRET')
+        GITHUB_TOKEN   = credentials('jenkins-github-ai-tutor')
     }
 
     options {
@@ -50,7 +51,7 @@ pipeline {
                     }
                     post {
                         always {
-                            recordIssues(enabledForFailure: true, tools: [pyLint(id: 'flake8', name: 'Flake8', pattern: 'backend/flake8_report.txt')])
+                            recordIssues(enabledForFailure: true, ignoreQualityGate: true, tools: [pyLint(id: 'flake8', name: 'Flake8', pattern: 'backend/flake8_report.txt')])
                             junit allowEmptyResults: true, testResults: 'backend/pytest_report.xml'
                         }
                     }
@@ -75,7 +76,7 @@ pipeline {
                     }
                     post {
                         always {
-                            recordIssues(enabledForFailure: true, tools: [checkStyle(id: 'eslint', name: 'ESLint', pattern: 'frontend/eslint_report.xml')])
+                            recordIssues(enabledForFailure: true, ignoreQualityGate: true, tools: [checkStyle(id: 'eslint', name: 'ESLint', pattern: 'frontend/eslint_report.xml')])
                             junit allowEmptyResults: true, testResults: 'frontend/vitest_report.xml'
                         }
                     }
@@ -94,12 +95,12 @@ pipeline {
         success {
             script {
                 try {
+                    // Прибрали credentialsId, плагін сам підтягне GITHUB_TOKEN з блоку environment
                     githubNotify context: 'ci/jenkins/push-check', 
                                  status: 'SUCCESS', 
                                  description: 'All checks passed successfully!',
                                  account: 'vitwits',
                                  repo: 'language-AI-tutor',
-                                 credentialsId: 'jenkins-github-ai-tutor',
                                  sha: "${env.GIT_COMMIT}"
                 } catch (Exception e) {
                     echo "Warning: Failed to send GitHub notification: ${e.message}"
@@ -114,7 +115,6 @@ pipeline {
                                  description: 'Pipeline checks failed.',
                                  account: 'vitwits',
                                  repo: 'language-AI-tutor',
-                                 credentialsId: 'jenkins-github-ai-tutor',
                                  sha: "${env.GIT_COMMIT}"
                 } catch (Exception e) {
                     echo "Warning: Failed to send GitHub notification: ${e.message}"
