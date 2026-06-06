@@ -1,6 +1,6 @@
 // Jenkinsfile for German AI Tutor Monorepo - Host-based Push Check Pipeline
 pipeline {
-    agent any // Runs directly on the host machine using Poetry and npm installed via Ansible
+    agent any 
 
     options {
         timeout(time: 15, unit: 'MINUTES')
@@ -31,7 +31,8 @@ pipeline {
                     steps {
                         dir('backend') {
                             echo "Running Backend Checks using system Poetry..."
-                            sh 'poetry install'
+                            // Додано --no-root, щоб уникнути помилки пакування
+                            sh 'poetry install --no-root'
                             sh 'set -o pipefail; poetry run flake8 . --format=default | tee flake8_report.txt'
                             sh 'poetry run pytest --junitxml=pytest_report.xml'
                         }
@@ -64,7 +65,6 @@ pipeline {
         }
     }
 
-    // Global pipeline post actions for cleanup and GitHub notifications
     post {
         always {
             script {
@@ -73,10 +73,23 @@ pipeline {
             }
         }
         success {
-            githubNotify context: 'ci/jenkins/push-check', status: 'SUCCESS', description: 'All checks passed successfully!'
+            // Явно передаємо змінні для зв'язку з GitHub
+            githubNotify context: 'ci/jenkins/push-check', 
+                         status: 'SUCCESS', 
+                         description: 'All checks passed successfully!',
+                         account: 'vitwits',
+                         repo: 'language-AI-tutor',
+                         credentialsId: 'jenkins-github-ai-tutor',
+                         sha: "${env.GIT_COMMIT}"
         }
         failure {
-            githubNotify context: 'ci/jenkins/push-check', status: 'FAILURE', description: 'Pipeline checks failed.'
+            githubNotify context: 'ci/jenkins/push-check', 
+                         status: 'FAILURE', 
+                         description: 'Pipeline checks failed.',
+                         account: 'vitwits',
+                         repo: 'language-AI-tutor',
+                         credentialsId: 'jenkins-github-ai-tutor',
+                         sha: "${env.GIT_COMMIT}"
         }
     }
 }
