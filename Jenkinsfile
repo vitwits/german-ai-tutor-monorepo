@@ -1,6 +1,6 @@
-// Jenkinsfile for German AI Tutor Monorepo - Docker-based Push Check Pipeline
+// Jenkinsfile for German AI Tutor Monorepo - Host-based Push Check Pipeline
 pipeline {
-    agent none // Individual stages define their own runtime containers
+    agent any // Runs directly on the host machine using Poetry and npm installed via Ansible
 
     options {
         timeout(time: 15, unit: 'MINUTES')
@@ -14,7 +14,6 @@ pipeline {
 
     stages {
         stage('Guard') {
-            agent any // Runs natively on the base Jenkins executor node
             steps {
                 script {
                     def currentBranch = env.GIT_BRANCH ?: ''
@@ -29,16 +28,9 @@ pipeline {
         stage('Parallel Checks') {
             parallel {
                 stage('Backend Checks') {
-                    agent {
-                        docker {
-                            image 'python:3.12-slim'
-                            reuseNode true
-                        }
-                    }
                     steps {
                         dir('backend') {
-                            echo "Running Backend Checks..."
-                            sh 'pip install poetry'
+                            echo "Running Backend Checks using system Poetry..."
                             sh 'poetry install'
                             sh 'set -o pipefail; poetry run flake8 . --format=default | tee flake8_report.txt'
                             sh 'poetry run pytest --junitxml=pytest_report.xml'
@@ -53,15 +45,9 @@ pipeline {
                 }
 
                 stage('Frontend Checks') {
-                    agent {
-                        docker {
-                            image 'node:20-slim'
-                            reuseNode true
-                        }
-                    }
                     steps {
                         dir('frontend') {
-                            echo "Running Frontend Checks..."
+                            echo "Running Frontend Checks using system npm..."
                             sh 'npm install'
                             sh 'npm run lint'
                             sh 'npm run test:run -- --reporter=junit --outputFile=vitest_report.xml'
@@ -78,26 +64,19 @@ pipeline {
         }
     }
 
-    // Global pipeline post actions run at the very end
+    // Global pipeline post actions for cleanup and GitHub notifications
     post {
         always {
-            // Force execution back onto a standard agent node to run cleanup commands safely
-            node('built-in' || 'master' || 'any') {
-                script {
-                    dir('backend') { sh 'rm -f flake8_report.txt pytest_report.xml' }
-                    dir('frontend') { sh 'rm -f eslint_report.xml vitest_report.xml' }
-                }
+            script {
+                dir('backend') { sh 'rm -f flake8_report.txt pytest_report.xml' }
+                dir('frontend') { sh 'rm -f eslint_report.xml vitest_report.xml' }
             }
         }
         success {
-            node('built-in' || 'master' || 'any') {
-                githubNotify context: 'ci/jenkins/push-check', status: 'SUCCESS', description: 'All checks passed successfully!'
-            }
+            githubNotify context: 'ci/jenkins/push-check', status: 'SUCCESS', description: 'All checks passed successfully!'
         }
         failure {
-            node('built-in' || 'master' || 'any') {
-                githubNotify context: 'ci/jenkins/push-check', status: 'FAILURE', description: 'Pipeline checks failed.'
-            }
+            githubNotify context: 'ci/jenkins/push-check', status: 'FAILURE', description: 'Pipeline checks failed.'
         }
     }
 }
