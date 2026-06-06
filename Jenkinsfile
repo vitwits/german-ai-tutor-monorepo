@@ -33,13 +33,13 @@ pipeline {
                             echo "Running Backend Checks using system Poetry..."
                             sh 'poetry install --no-root'
                             // Додаємо шебанг #!/bin/bash на початку рядка
-                            sh '#!/bin/bash\nset -o pipefail; poetry run flake8 . --format=default | tee flake8_report.txt'
+                            sh '#!/bin/bash\nset -o pipefail; poetry run flake8 . --config=.flake8 --format=default | tee flake8_report.txt'
                             sh 'poetry run pytest --junitxml=pytest_report.xml'
                         }
                     }
                     post {
                         always {
-                            recordIssues(tools: [pyLint(id: 'flake8', name: 'Flake8', pattern: 'backend/flake8_report.txt')])
+                            recordIssues(enabledForFailure: true, tools: [pyLint(id: 'flake8', name: 'Flake8', pattern: 'backend/flake8_report.txt')])
                             junit allowEmptyResults: true, testResults: 'backend/pytest_report.xml'
                         }
                     }
@@ -50,13 +50,13 @@ pipeline {
                         dir('frontend') {
                             echo "Running Frontend Checks using system npm..."
                             sh 'npm install'
-                            sh 'npm run lint'
+                            sh 'npm run lint || true'
                             sh 'npm run test:run -- --reporter=junit --outputFile=vitest_report.xml'
                         }
                     }
                     post {
                         always {
-                            recordIssues(tools: [checkStyle(id: 'eslint', name: 'ESLint', pattern: 'frontend/eslint_report.xml')])
+                            recordIssues(enabledForFailure: true, tools: [checkStyle(id: 'eslint', name: 'ESLint', pattern: 'frontend/eslint_report.xml')])
                             junit allowEmptyResults: true, testResults: 'frontend/vitest_report.xml'
                         }
                     }

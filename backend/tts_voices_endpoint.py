@@ -5,6 +5,16 @@ This file contains the endpoint and UI for managing TTS voices.
 Append this to the admin_router.py file after the delete_llm_price function.
 """
 
+from fastapi import Depends, Request, APIRouter
+from fastapi.responses import HTMLResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from app.database import get_db
+from app.models import User, TTSVoice, TTSModel
+from app.dependencies import check_admin_access
+
+router = APIRouter()
+
 # ============ TTS VOICES ============
 
 @router.get("/tts-voices", response_class=HTMLResponse)
