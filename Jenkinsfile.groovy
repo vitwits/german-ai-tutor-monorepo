@@ -2,7 +2,7 @@
 // Runs on pushes to non-main branches to perform parallel static analysis and tests.
 
 pipeline {
-    agent any
+    agent any // Runs on your local VM
 
     options {
         timeout(time: 15, unit: 'MINUTES')
@@ -19,16 +19,21 @@ pipeline {
     }
 
     stages {
-        stage('Branch Check') {
-            when {
-                branch 'feature/**'
+        stage('Guard') {
+            steps {
+                script {
+                    // Standard Git jobs use GIT_BRANCH (e.g., "origin/main" or "origin/feature/setup-jenkins")
+                    def currentBranch = env.GIT_BRANCH ?: ''
+                    echo "Processing branch: ${currentBranch}"
+                    
+                    if (currentBranch.endsWith('/main') || currentBranch == 'main') {
+                        error("Aborting build: This pipeline should not run on the 'main' branch.")
+                    }
+                }
             }
         }
 
         stage('Parallel Checks') {
-            when {
-                not { branch 'main' }
-            }
             parallel {
                 stage('Backend Checks') {
                     steps {
@@ -36,8 +41,8 @@ pipeline {
                             echo "Running Backend Static Analysis and Tests..."
                             sh 'poetry install'
                             
-                            // Static analysis - failure here will now stop the pipeline
-                            sh 'poetry run flake8 . --format=default > flake8_report.txt'
+                            // Use tee to write to a file AND keep flake8's true exit code visible to Jenkins
+                            sh 'set -o pipefail; poetry run flake8 . --format=default | tee flake8_report.txt'
                             
                             // Unit tests
                             sh 'poetry run pytest --junitxml=pytest_report.xml'
@@ -57,7 +62,7 @@ pipeline {
                             echo "Running Frontend Static Analysis and Tests..."
                             sh 'npm install'
                             
-                            // Static analysis - failure here will now stop the pipeline
+                            // Static analysis - failure here will correctly stop the pipeline
                             sh 'npm run lint'
                             
                             // Unit tests
@@ -78,7 +83,7 @@ pipeline {
     post {
         always {
             script {
-                // Cleanup artifacts to save disk space
+                // Cleanup artifacts to save disk space safely
                 dir('backend') {
                     sh 'rm -f flake8_report.txt pytest_report.xml'
                 }

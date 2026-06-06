@@ -19,21 +19,27 @@ PRICING = {
     'lesson_generation': 2.0,      # Вартість генерації уроку
 }
 
+
 def calculate_tts_cost(text, provider='google'):
-    if not text: return 0
+    if not text:
+        return 0
     length = len(text)
     rate = PRICING['tts_azure_per_char'] if provider == 'azure' else PRICING['tts_google_per_char']
     cost = length * rate
     return max(0.1, round(cost, 3))
 
+
 def calculate_translation_cost(text):
-    if not text: return 0
+    if not text:
+        return 0
     length = len(text)
     cost = length * PRICING['translation_per_char']
     return max(0.01, round(cost, 3))
 
+
 async def deduct_credits(user_id: str, cost: float) -> float | None:
-    if cost <= 0: return None
+    if cost <= 0:
+        return None
     async with AsyncSessionLocal() as session:
         result = await session.execute(select(User).where(User.id == user_id))
         user = result.scalar_one_or_none()

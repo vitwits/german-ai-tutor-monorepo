@@ -1,8 +1,7 @@
 import os
-from pathlib import Path
 from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy.orm import DeclarativeBase
 
 # Завантажимо .env файл
 # У Docker змінні середовища будуть передані напряму, для локальної розробки load_dotenv() знайде .env у корені
