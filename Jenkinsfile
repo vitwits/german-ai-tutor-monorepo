@@ -3,7 +3,6 @@ pipeline {
     agent any
 
     environment {
-        // Креди таємниці підтягуються глобально для всього білду
         GEMINI_API_KEY = credentials('GEMINI_API_KEY_SECRET')
     }
 
@@ -64,7 +63,6 @@ pipeline {
                             sh 'npm install'
                             
                             script {
-                                // Використовуємо надійний tee для збереження результату лінтера без падінь
                                 sh(
                                     script: '#!/bin/bash\nset -o pipefail; npm run lint | tee eslint_report.xml',
                                     returnStatus: true
@@ -96,6 +94,7 @@ pipeline {
         success {
             script {
                 try {
+                    // Передаємо абсолютно всі параметри явно, щоб плагін не гадав
                     githubNotify context: 'ci/jenkins/push-check', 
                                  status: 'SUCCESS', 
                                  description: 'All checks passed successfully!',
@@ -104,7 +103,7 @@ pipeline {
                                  credentialsId: 'jenkins-github-ai-tutor',
                                  sha: "${env.GIT_COMMIT}"
                 } catch (Exception e) {
-                    echo "Warning: GitHub Notification failed but build is SUCCESS: ${e.message}"
+                    echo "Warning: Failed to send GitHub notification: ${e.message}"
                 }
             }
         }
@@ -119,7 +118,7 @@ pipeline {
                                  credentialsId: 'jenkins-github-ai-tutor',
                                  sha: "${env.GIT_COMMIT}"
                 } catch (Exception e) {
-                    echo "Warning: GitHub Notification failed: ${e.message}"
+                    echo "Warning: Failed to send GitHub notification: ${e.message}"
                 }
             }
         }
