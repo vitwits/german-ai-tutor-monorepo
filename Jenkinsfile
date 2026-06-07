@@ -74,7 +74,7 @@ pipeline {
                             }
                             
                             echo "Linting finished. Running Vitest..."
-                            sh 'npm run test:run -- --reporter=junit --outputFile=vitest_report.xml'
+                            sh 'npm run test:run -- --reporter=default --reporter=junit --outputFile=vitest_report.xml'
                         }
                     }
                     post {
