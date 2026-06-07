@@ -4,6 +4,8 @@ pipeline {
 
     environment {
         GEMINI_API_KEY = credentials('GEMINI_API_KEY_SECRET')
+        APP_SECRET_KEY = credentials('SECRET_KEY_SECRET')
+        SERVICE_ACCOUNT_FILE = credentials('GOOGLE_SERVICE_ACCOUNT_JSON')
         NEXUS_REGISTRY = 'nexus.box.com:5000'
         APP_VERSION    = "1.0.${env.BUILD_NUMBER}"
         NEXUS_CREDS    = credentials('NEXUS_CREDENTIALS_ID')
@@ -192,6 +194,25 @@ pipeline {
                             sh """
                                 docker rmi ${NEXUS_REGISTRY}/german-tutor-frontend:${APP_VERSION} \
                                 ${NEXUS_REGISTRY}/german-tutor-frontend:latest || true
+                            """
+                        }
+                    }
+                }
+
+                stage('Deploy to Production') {
+                    steps {
+                        script {
+                            echo "🚀 Starting Deployment of version ${APP_VERSION}..."
+                            // Using -e for dynamic parameters in Ansible Playbook
+                            sh """
+                                ansible-playbook -i deploy/hosts.ini deploy/deploy.yml \
+                                -e "nexus_registry=${NEXUS_REGISTRY}" \
+                                -e "app_version=${APP_VERSION}" \
+                                -e "gemini_api_key=${GEMINI_API_KEY}" \
+                                -e "app_secret_key=${APP_SECRET_KEY}" \
+                                -e "service_account_src=${SERVICE_ACCOUNT_FILE}" \
+                                -e "nexus_user=${NEXUS_CREDS_USR}" \
+                                -e "nexus_password=${NEXUS_CREDS_PSW}"
                             """
                         }
                     }

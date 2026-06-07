@@ -1,0 +1,63 @@
+---
+- name: Deployment Playbook for German AI Tutor
+  hosts: production
+  become: yes
+  vars:
+    app_dir: "/opt/german_ai_tutor"
+    # Defaults (will be assigned via Jenkins -e)
+    registry: "{{ nexus_registry | default('localhost:8082') }}"
+    version: "{{ app_version | default('latest') }}"
+
+  tasks:
+    - name: Ensure application and data directories exist
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: jenkins
+        group: docker
+        mode: '0775'
+      loop:
+        - "{{ app_dir }}"
+        - "{{ app_dir }}/backend/data"
+        - "{{ app_dir }}/backend/static"
+
+    - name: Create .env file from Jenkins secrets
+      copy:
+        dest: "{{ app_dir }}/.env"
+        content: |
+          GEMINI_API_KEY={{ gemini_api_key }}
+          SECRET_KEY={{ app_secret_key }}
+          GOOGLE_APPLICATION_CREDENTIALS=/var/secrets/service-account.json
+          DB_TYPE=sqlite
+        owner: jenkins
+        mode: '0600'
+
+    - name: Copy service-account.json from Jenkins
+      copy:
+        src: "{{ service_account_src }}"
+        dest: "{{ app_dir }}/service-account.json"
+        owner: jenkins
+        mode: '0600'
+
+    - name: Synchronize docker-compose.yml
+      template:
+        src: "../docker-compose.yml"
+        dest: "{{ app_dir }}/docker-compose.yml"
+        owner: jenkins
+        mode: '0644'
+
+    - name: Login to Nexus Registry
+      docker_login:
+        registry_url: "http://{{ registry }}"
+        username: "{{ nexus_user | default(omit) }}"
+        password: "{{ nexus_password | default(omit) }}"
+        reauthorize: yes
+
+    - name: Deploy application via Docker Compose
+      community.docker.docker_compose_v2:
+        project_src: "{{ app_dir }}"
+        state: present
+        pull: always
+      environment:
+        IMAGE_VERSION: "{{ version }}"
+        REGISTRY_URL: "{{ registry }}"
