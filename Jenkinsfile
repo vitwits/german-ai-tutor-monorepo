@@ -16,7 +16,7 @@ pipeline {
     }
 
     triggers {
-        pollSCM('H * * * *') // Перевірка щогодини
+        pollSCM('H * * * *')
     }
 
     stages {
@@ -30,8 +30,9 @@ pipeline {
         }
 
         stage('Parallel Checks') {
-            // ПРОСТО І ЗРОЗУМІЛО: ловить будь-яку гілку, де є /feature/
-            when { branch wildcard: "**/feature/**", comparator: "EQUALS" }
+            // ПРОСТО І ПРАВИЛЬНО: використовуємо pattern + ANT компаратор.
+            // Зловить і feature/tutor, і origin/feature/tutor
+            when { branch pattern: "**/feature/**", comparator: "ANT" }
             
             parallel {
                 stage('Backend Checks') {
@@ -95,8 +96,8 @@ pipeline {
         }
 
         stage('Release (Tests + Build + Push)') {
-            // ПРОСТО І ЗРОЗУМІЛО: ловить і main, і origin/main
-            when { branch wildcard: "**/main", comparator: "EQUALS" }
+            // ПРОСТО І ПРАВИЛЬНО: для main гілки з будь-яким префіксом
+            when { branch pattern: "**/main", comparator: "ANT" }
             
             stages {
                 stage('Final Validation') {
