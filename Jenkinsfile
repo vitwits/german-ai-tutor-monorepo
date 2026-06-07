@@ -160,7 +160,6 @@ pipeline {
                 stage('Build and Push Docker Images') {
                     steps {
                         script {
-                            // ТУТ ВИПРАВЛЕНО: Замість localhost:8082 тепер використовується змінна ${NEXUS_REGISTRY}
                             sh "echo \${NEXUS_CREDS_PSW} | docker login -u \${NEXUS_CREDS_USR} --password-stdin ${NEXUS_REGISTRY}"
 
                             dir('backend') {
