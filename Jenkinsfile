@@ -4,7 +4,7 @@ pipeline {
 
     environment {
         GEMINI_API_KEY = credentials('GEMINI_API_KEY_SECRET')
-        NEXUS_REGISTRY = 'localhost:8082'
+        NEXUS_REGISTRY = 'nexus.box.com:8082' 
         APP_VERSION    = "1.0.${env.BUILD_NUMBER}"
         NEXUS_CREDS    = credentials('NEXUS_CREDENTIALS_ID')
     }
@@ -160,7 +160,7 @@ pipeline {
                 stage('Build and Push Docker Images') {
                     steps {
                         script {
-                            sh "echo ${NEXUS_CREDS_PSW} | docker login -u ${NEXUS_CREDS_USR} --password-stdin ${NEXUS_REGISTRY}"
+                            sh "echo \${NEXUS_CREDS_PSW} | docker login -u \${NEXUS_CREDS_USR} --password-stdin ${NEXUS_REGISTRY}"
 
                             dir('backend') {
                                 def backendImage = "${NEXUS_REGISTRY}/german-tutor-backend"
