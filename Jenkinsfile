@@ -1,12 +1,12 @@
-// Jenkinsfile for German AI Tutor Monorepo - Host-based Push Check Pipeline
+// Jenkinsfile for German AI Tutor Monorepo
 pipeline {
     agent any
 
     environment {
         GEMINI_API_KEY = credentials('GEMINI_API_KEY_SECRET')
-        NEXUS_CREDS = credentials('NEXUS_CREDENTIALS_ID')
         NEXUS_REGISTRY = 'localhost:8082'
-        APP_VERSION = "1.0.${env.BUILD_NUMBER}"
+        APP_VERSION    = "1.0.${env.BUILD_NUMBER}"
+        NEXUS_CREDS    = credentials('NEXUS_CREDENTIALS_ID')
     }
 
     options {
@@ -16,14 +16,25 @@ pipeline {
     }
 
     triggers {
-        pollSCM('H * * * *')
+        pollSCM('H * * * *') // Перевірка репозиторію кожну годину з оптимізованим хешем
     }
 
     stages {
+        stage('Guard') {
+            steps {
+                script {
+                    def branchName = env.BRANCH_NAME ?: env.GIT_BRANCH ?: ""
+                    echo "Processing branch: ${branchName}"
+                }
+            }
+        }
+
         stage('Parallel Checks') {
+            // Зловить і feature/your-branch, і origin/feature/your-branch
+            when { branch pattern: ".*feature/.*", comparator: "REGEXP" }
+            
             parallel {
                 stage('Backend Checks') {
-                    when { branch pattern: "feature/**", comparator: "ANT" }
                     steps {
                         dir('backend') {
                             echo "Running Backend Checks using system Poetry..."
@@ -53,7 +64,6 @@ pipeline {
                 }
 
                 stage('Frontend Checks') {
-                    when { branch pattern: "feature/**", comparator: "ANT" }
                     steps {
                         dir('frontend') {
                             echo "Running Frontend Checks using system npm..."
@@ -85,7 +95,9 @@ pipeline {
         }
 
         stage('Release (Tests + Build + Push)') {
-            when { branch 'main' }
+            // Зловить і main, і origin/main
+            when { branch pattern: ".*main", comparator: "REGEXP" }
+            
             stages {
                 stage('Final Validation') {
                     parallel {
@@ -116,10 +128,10 @@ pipeline {
                 stage('Build and Push Docker Images') {
                     steps {
                         script {
-                            // Логін в Nexus Docker Registry
+                            // Логін в Nexus Docker Registry за допомогою сервісного користувача jenkins-user
                             sh "echo ${NEXUS_CREDS_PSW} | docker login -u ${NEXUS_CREDS_USR} --password-stdin ${NEXUS_REGISTRY}"
                             
-                            // Бекенд
+                            // Збірка та завантаження бекенду
                             dir('backend') {
                                 def backendImage = "${NEXUS_REGISTRY}/german-tutor-backend"
                                 sh "docker build -t ${backendImage}:${APP_VERSION} -t ${backendImage}:latest ."
@@ -127,7 +139,7 @@ pipeline {
                                 sh "docker push ${backendImage}:latest"
                             }
                             
-                            // Фронтенд
+                            // Збірка та завантаження фронтенду
                             dir('frontend') {
                                 def frontendImage = "${NEXUS_REGISTRY}/german-tutor-frontend"
                                 sh "docker build -t ${frontendImage}:${APP_VERSION} -t ${frontendImage}:latest ."
@@ -139,7 +151,7 @@ pipeline {
                     post {
                         always {
                             sh "docker logout ${NEXUS_REGISTRY}"
-                            // Очищення локальних образів після пушу, щоб не забивати місце на диску
+                            // Очищення локальних образів на хості Jenkins, щоб не забивати диск
                             sh "docker rmi ${NEXUS_REGISTRY}/german-tutor-backend:${APP_VERSION} ${NEXUS_REGISTRY}/german-tutor-backend:latest || true"
                             sh "docker rmi ${NEXUS_REGISTRY}/german-tutor-frontend:${APP_VERSION} ${NEXUS_REGISTRY}/german-tutor-frontend:latest || true"
                         }
@@ -152,6 +164,7 @@ pipeline {
     post {
         always {
             script {
+                // Прибирання звітів за собою (оскільки працюємо на Host-based агенлі)
                 sh 'rm -f backend/flake8_report.txt backend/pytest_report.xml frontend/eslint_report.xml frontend/vitest_report.xml'
             }
         }
