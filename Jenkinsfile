@@ -4,6 +4,9 @@ pipeline {
 
     environment {
         GEMINI_API_KEY = credentials('GEMINI_API_KEY_SECRET')
+        NEXUS_CREDS = credentials('NEXUS_CREDENTIALS_ID')
+        NEXUS_REGISTRY = 'localhost:8082'
+        APP_VERSION = "1.0.${env.BUILD_NUMBER}"
     }
 
     options {
@@ -13,25 +16,14 @@ pipeline {
     }
 
     triggers {
-        pollSCM('* * * * *')
+        pollSCM('H * * * *')
     }
 
     stages {
-        stage('Guard') {
-            steps {
-                script {
-                    def currentBranch = env.GIT_BRANCH ?: ''
-                    echo "Processing branch: ${currentBranch}"
-                    if (currentBranch.endsWith('/main') || currentBranch == 'main') {
-                        error("Aborting build: This pipeline should not run on the 'main' branch.")
-                    }
-                }
-            }
-        }
-
         stage('Parallel Checks') {
             parallel {
                 stage('Backend Checks') {
+                    when { branch pattern: "feature/**", comparator: "ANT" }
                     steps {
                         dir('backend') {
                             echo "Running Backend Checks using system Poetry..."
@@ -61,6 +53,7 @@ pipeline {
                 }
 
                 stage('Frontend Checks') {
+                    when { branch pattern: "feature/**", comparator: "ANT" }
                     steps {
                         dir('frontend') {
                             echo "Running Frontend Checks using system npm..."
@@ -85,6 +78,70 @@ pipeline {
                                 tools: [checkStyle(id: 'eslint', name: 'ESLint', pattern: 'frontend/eslint_report.xml')]
                             )
                             junit allowEmptyResults: true, keepLongStdio: true, testResults: 'frontend/vitest_report.xml'
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Release (Tests + Build + Push)') {
+            when { branch 'main' }
+            stages {
+                stage('Final Validation') {
+                    parallel {
+                        stage('Backend Test') {
+                            steps {
+                                dir('backend') {
+                                    sh 'poetry install --no-root'
+                                    sh 'poetry run pytest --junitxml=pytest_report.xml'
+                                }
+                            }
+                        }
+                        stage('Frontend Test') {
+                            steps {
+                                dir('frontend') {
+                                    sh 'npm install'
+                                    sh 'npm run test:run -- --reporter=junit --outputFile=vitest_report.xml'
+                                }
+                            }
+                        }
+                    }
+                    post {
+                        always {
+                            junit allowEmptyResults: true, testResults: '**/pytest_report.xml, **/vitest_report.xml'
+                        }
+                    }
+                }
+
+                stage('Build and Push Docker Images') {
+                    steps {
+                        script {
+                            // Логін в Nexus Docker Registry
+                            sh "echo ${NEXUS_CREDS_PSW} | docker login -u ${NEXUS_CREDS_USR} --password-stdin ${NEXUS_REGISTRY}"
+                            
+                            // Бекенд
+                            dir('backend') {
+                                def backendImage = "${NEXUS_REGISTRY}/german-tutor-backend"
+                                sh "docker build -t ${backendImage}:${APP_VERSION} -t ${backendImage}:latest ."
+                                sh "docker push ${backendImage}:${APP_VERSION}"
+                                sh "docker push ${backendImage}:latest"
+                            }
+                            
+                            // Фронтенд
+                            dir('frontend') {
+                                def frontendImage = "${NEXUS_REGISTRY}/german-tutor-frontend"
+                                sh "docker build -t ${frontendImage}:${APP_VERSION} -t ${frontendImage}:latest ."
+                                sh "docker push ${frontendImage}:${APP_VERSION}"
+                                sh "docker push ${frontendImage}:latest"
+                            }
+                        }
+                    }
+                    post {
+                        always {
+                            sh "docker logout ${NEXUS_REGISTRY}"
+                            // Очищення локальних образів після пушу, щоб не забивати місце на диску
+                            sh "docker rmi ${NEXUS_REGISTRY}/german-tutor-backend:${APP_VERSION} ${NEXUS_REGISTRY}/german-tutor-backend:latest || true"
+                            sh "docker rmi ${NEXUS_REGISTRY}/german-tutor-frontend:${APP_VERSION} ${NEXUS_REGISTRY}/german-tutor-frontend:latest || true"
                         }
                     }
                 }
@@ -121,7 +178,7 @@ pipeline {
             publishChecks(
                 name: 'CI / Push Checks',
                 summary: 'Pipeline was aborted.',
-                conclusion: 'CANCELED',   // ← Важливо: CANCELED (одне L)
+                conclusion: 'CANCELED',
                 detailsURL: "${env.BUILD_URL}"
             )
         }
