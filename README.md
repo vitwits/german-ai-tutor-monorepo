@@ -336,6 +336,12 @@ cat service-account.json | head -5
 docker compose exec backend env | grep GOOGLE
 ```
 
+## Docker Compose Commands on PROD
+
+cd /opt/german_ai_tutor
+sudo docker compose --env-file .env up -d
+
+
 ## Documentation
 
 - **Backend:** See [backend/README.md](backend/README.md)
