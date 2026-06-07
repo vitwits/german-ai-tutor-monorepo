@@ -24,6 +24,6 @@ services:
     container_name: german_tutor_frontend
     restart: always
     ports:
-      - "80:80"
+      - "3000:80"
     depends_on:
       - backend # Фронтенд залежить від бекенду
