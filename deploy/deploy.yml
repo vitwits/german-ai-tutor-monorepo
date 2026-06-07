@@ -22,6 +22,15 @@
         - "{{ app_dir }}/backend/static"
         - "{{ app_dir }}/backend"
         - "{{ app_dir }}/frontend"
+      register: dir_creation
+
+    - name: Ensure correct permissions for database file
+      file:
+        path: "{{ app_dir }}/backend/data/app.db"
+        owner: jenkins
+        group: docker
+        mode: '0664'
+      ignore_errors: yes # Якщо файлу ще немає, це не помилка
 
     - name: Create .env file from Jenkins secrets
       copy:
