@@ -160,7 +160,7 @@ pipeline {
                 stage('Build and Push Docker Images') {
                     steps {
                         script {
-                            sh "echo \${NEXUS_CREDS_PSW} | docker login -u \${NEXUS_CREDS_USR} --password-stdin ${NEXUS_REGISTRY}"
+                            sh "echo \${NEXUS_CREDS_PSW} | docker login -u \${NEXUS_CREDS_USR} --password-stdin https://${NEXUS_REGISTRY}"
 
                             dir('backend') {
                                 def backendImage = "${NEXUS_REGISTRY}/german-tutor-backend"
