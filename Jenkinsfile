@@ -23,7 +23,7 @@ pipeline {
         stage('Guard') {
             steps {
                 script {
-                    env.CURRENT_BRANCH = env.GIT_BRANCH ?: ''
+                    env.CURRENT_RANCH = env.GIT_BRANCH ?: ''
                     echo "Processing branch: ${env.CURRENT_BRANCH}"
                 }
             }
