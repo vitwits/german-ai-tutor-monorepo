@@ -1,5 +1,6 @@
 services:
   backend:
+    image: ${REGISTRY_URL:-local}/german-tutor-backend:${IMAGE_VERSION:-latest}
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -16,6 +17,7 @@ services:
       - GOOGLE_APPLICATION_CREDENTIALS=/var/secrets/service-account.json
 
   frontend:
+    image: ${REGISTRY_URL:-local}/german-tutor-frontend:${IMAGE_VERSION:-latest}
     build:
       context: ./frontend
       dockerfile: Dockerfile
