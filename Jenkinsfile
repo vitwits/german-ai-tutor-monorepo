@@ -121,7 +121,7 @@ pipeline {
             publishChecks(
                 name: 'CI / Push Checks',
                 summary: 'Pipeline was aborted.',
-                conclusion: 'CANCELLED',
+                conclusion: 'CANCELED',   // ← Важливо: CANCELED (одне L)
                 detailsURL: "${env.BUILD_URL}"
             )
         }
