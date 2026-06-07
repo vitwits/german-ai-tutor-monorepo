@@ -30,6 +30,17 @@ pipeline {
         }
 
         stage('Parallel Checks') {
+            steps {
+                // Початок GitHub Check (IN_PROGRESS)
+                githubChecks(
+                    name: 'CI / Push Checks',
+                    status: 'IN_PROGRESS',
+                    account: 'vitwits',
+                    repo: 'language-AI-tutor',
+                    credentialsId: 'github-notifications-token',
+                    sha: "${env.GIT_COMMIT}"
+                )
+            }
             parallel {
                 stage('Backend Checks') {
                     steps {
@@ -39,7 +50,7 @@ pipeline {
                             
                             script {
                                 sh(
-                                    script: '#!/bin/bash\nset -o pipefail; poetry run flake8 . --format=default | tee flake8_report.txt',
+                                    script: 'poetry run flake8 . --format=default > flake8_report.txt || true',
                                     returnStatus: true
                                 )
                             }
@@ -50,7 +61,11 @@ pipeline {
                     }
                     post {
                         always {
-                            recordIssues(enabledForFailure: true, ignoreQualityGate: true, tools: [pyLint(id: 'flake8', name: 'Flake8', pattern: 'backend/flake8_report.txt')])
+                            recordIssues(
+                                enabledForFailure: true, 
+                                ignoreQualityGate: true, 
+                                tools: [pyLint(id: 'flake8', name: 'Flake8', pattern: 'backend/flake8_report.txt')]
+                            )
                             junit allowEmptyResults: true, testResults: 'backend/pytest_report.xml'
                         }
                     }
@@ -64,7 +79,7 @@ pipeline {
                             
                             script {
                                 sh(
-                                    script: '#!/bin/bash\nset -o pipefail; npm run lint | tee eslint_report.xml',
+                                    script: 'npm run lint > eslint_report.xml || true',
                                     returnStatus: true
                                 )
                             }
@@ -75,7 +90,11 @@ pipeline {
                     }
                     post {
                         always {
-                            recordIssues(enabledForFailure: true, ignoreQualityGate: true, tools: [checkStyle(id: 'eslint', name: 'ESLint', pattern: 'frontend/eslint_report.xml')])
+                            recordIssues(
+                                enabledForFailure: true, 
+                                ignoreQualityGate: true, 
+                                tools: [checkStyle(id: 'eslint', name: 'ESLint', pattern: 'frontend/eslint_report.xml')]
+                            )
                             junit allowEmptyResults: true, keepLongStdio: true, testResults: 'frontend/vitest_report.xml'
                         }
                     }
@@ -90,37 +109,47 @@ pipeline {
                 sh 'rm -f backend/flake8_report.txt backend/pytest_report.xml frontend/eslint_report.xml frontend/vitest_report.xml'
             }
         }
+
         success {
-            script {
-                try {
-                    // Прямий виклик без обгорток env чи звичайних credentials блоків
-                    githubNotify context: 'ci/jenkins/push-check', 
-                                 status: 'SUCCESS', 
-                                 description: 'All checks passed successfully!',
-                                 account: 'vitwits',
-                                 repo: 'language-AI-tutor',
-                                 credentialsId: 'github-repo-clone-creds',
-                                 sha: "${env.GIT_COMMIT}"
-                } catch (Exception e) {
-                    echo "Warning: Failed to send GitHub notification: ${e.message}"
-                }
-            }
+            githubChecks(
+                name: 'CI / Push Checks',
+                status: 'COMPLETED',
+                conclusion: 'SUCCESS',
+                summary: 'All checks passed successfully! ✅',
+                detailsURL: "${env.BUILD_URL}",
+                account: 'vitwits',
+                repo: 'language-AI-tutor',
+                credentialsId: 'github-notifications-token',
+                sha: "${env.GIT_COMMIT}"
+            )
         }
+
         failure {
-            script {
-                try {
-                    // Прямий виклик без обгорток env чи звичайних credentials блоків
-                    githubNotify context: 'ci/jenkins/push-check', 
-                                 status: 'FAILURE', 
-                                 description: 'Pipeline checks failed.',
-                                 account: 'vitwits',
-                                 repo: 'language-AI-tutor',
-                                 credentialsId: 'github-repo-clone-creds',
-                                 sha: "${env.GIT_COMMIT}"
-                } catch (Exception e) {
-                    echo "Warning: Failed to send GitHub notification: ${e.message}"
-                }
-            }
+            githubChecks(
+                name: 'CI / Push Checks',
+                status: 'COMPLETED',
+                conclusion: 'FAILURE',
+                summary: 'Some checks failed. Please review the logs.',
+                detailsURL: "${env.BUILD_URL}",
+                account: 'vitwits',
+                repo: 'language-AI-tutor',
+                credentialsId: 'github-notifications-token',
+                sha: "${env.GIT_COMMIT}"
+            )
+        }
+
+        aborted {
+            githubChecks(
+                name: 'CI / Push Checks',
+                status: 'COMPLETED',
+                conclusion: 'CANCELLED',
+                summary: 'Pipeline was aborted.',
+                detailsURL: "${env.BUILD_URL}",
+                account: 'vitwits',
+                repo: 'language-AI-tutor',
+                credentialsId: 'github-notifications-token',
+                sha: "${env.GIT_COMMIT}"
+            )
         }
     }
 }
