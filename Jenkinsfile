@@ -209,7 +209,7 @@ pipeline {
 
         success {
             publishChecks(
-                name: 'CI / Push Checks',
+                name: 'ci/jenkins/push-new-check',
                 summary: 'All checks passed successfully! ✅',
                 conclusion: 'SUCCESS',
                 detailsURL: "${env.BUILD_URL}"
@@ -218,7 +218,7 @@ pipeline {
 
         failure {
             publishChecks(
-                name: 'CI / Push Checks',
+                name: 'ci/jenkins/push-new-check',
                 summary: 'Some checks failed. Please review the logs.',
                 conclusion: 'FAILURE',
                 detailsURL: "${env.BUILD_URL}"
@@ -227,7 +227,7 @@ pipeline {
 
         aborted {
             publishChecks(
-                name: 'CI / Push Checks',
+                name: 'ci/jenkins/push-new-check',
                 summary: 'Pipeline was aborted.',
                 conclusion: 'CANCELED',
                 detailsURL: "${env.BUILD_URL}"
