@@ -20,6 +20,8 @@
         - "{{ app_dir }}"
         - "{{ app_dir }}/backend/data"
         - "{{ app_dir }}/backend/static"
+        - "{{ app_dir }}/backend"
+        - "{{ app_dir }}/frontend"
 
     - name: Create .env file from Jenkins secrets
       copy:
@@ -58,6 +60,7 @@
         project_src: "{{ app_dir }}"
         state: present
         pull: always
+        build: never
       environment:
         IMAGE_VERSION: "{{ version }}"
         REGISTRY_URL: "{{ registry }}"

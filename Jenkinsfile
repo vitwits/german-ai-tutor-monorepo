@@ -203,17 +203,17 @@ pipeline {
                     steps {
                         script {
                             echo "🚀 Starting Deployment of version ${APP_VERSION}..."
-                            // Using -e for dynamic parameters in Ansible Playbook
-                            sh """
+                            // Використовуємо одинарні лапки для безпечної передачі секретів через змінні оточення
+                            sh '''
                                 ansible-playbook -i deploy/hosts.ini deploy/deploy.yml \
-                                -e "nexus_registry=${NEXUS_REGISTRY}" \
-                                -e "app_version=${APP_VERSION}" \
-                                -e "gemini_api_key=${GEMINI_API_KEY}" \
-                                -e "app_secret_key=${APP_SECRET_KEY}" \
-                                -e "service_account_src=${SERVICE_ACCOUNT_FILE}" \
-                                -e "nexus_user=${NEXUS_CREDS_USR}" \
-                                -e "nexus_password=${NEXUS_CREDS_PSW}"
-                            """
+                                -e "nexus_registry=$NEXUS_REGISTRY" \
+                                -e "app_version=$APP_VERSION" \
+                                -e "gemini_api_key=$GEMINI_API_KEY" \
+                                -e "app_secret_key=$APP_SECRET_KEY" \
+                                -e "service_account_src=$SERVICE_ACCOUNT_FILE" \
+                                -e "nexus_user=$NEXUS_CREDS_USR" \
+                                -e "nexus_password=$NEXUS_CREDS_PSW"
+                            '''
                         }
                     }
                 }
