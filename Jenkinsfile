@@ -30,17 +30,6 @@ pipeline {
         }
 
         stage('Parallel Checks') {
-            steps {
-                // Початок GitHub Check (IN_PROGRESS)
-                githubChecks(
-                    name: 'CI / Push Checks',
-                    status: 'IN_PROGRESS',
-                    account: 'vitwits',
-                    repo: 'language-AI-tutor',
-                    credentialsId: 'github-notifications-token',
-                    sha: "${env.GIT_COMMIT}"
-                )
-            }
             parallel {
                 stage('Backend Checks') {
                     steps {
