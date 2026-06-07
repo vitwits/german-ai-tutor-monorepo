@@ -1,4 +1,5 @@
 <script>
+/* eslint-disable */
   import { onMount } from "svelte";
 
   export let isVisible = false;

@@ -10,7 +10,6 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
 lib64/
 parts/
 sdist/
@@ -85,3 +84,9 @@ service-account.json
 
 # Docker
 .dockerignore
+
+# Reports and CI artifacts
+backend/flake8_report.txt
+backend/pytest_report.xml
+frontend/eslint_report.xml
+frontend/vitest_report.xml

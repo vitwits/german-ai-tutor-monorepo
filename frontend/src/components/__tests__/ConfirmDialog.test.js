@@ -44,8 +44,7 @@ describe('ConfirmDialog Component', () => {
 
     it('should apply danger style when isDanger is true', () => {
         const { container } = render(ConfirmDialog);
-        const dangerButton = container.querySelector('.btn-danger');
-        // This may or may not exist depending on isDanger state
+        // Verify that the component renders a button
         expect(container.querySelector('button')).toBeTruthy();
     });
 });

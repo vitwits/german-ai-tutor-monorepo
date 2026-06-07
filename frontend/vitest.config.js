@@ -6,6 +6,10 @@ export default defineConfig({
     server: {
         hmr: false,
     },
+    resolve: {
+        // Це критично для Svelte 5: змушує Vitest використовувати браузерні версії бібліотек
+        conditions: ['browser', 'svelte']
+    },
     test: {
         globals: true,
         environment: 'jsdom',

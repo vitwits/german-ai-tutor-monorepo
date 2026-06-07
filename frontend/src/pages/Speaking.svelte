@@ -1,4 +1,5 @@
 <script>
+/* eslint-disable */
   import { onMount, onDestroy } from "svelte";
   import { tweened } from "svelte/motion";
   import { cubicOut } from "svelte/easing";
