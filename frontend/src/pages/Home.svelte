@@ -1,5 +1,5 @@
 <script>
-/* eslint-disable */
+    /* eslint-disable */
     import { user } from "../stores/auth";
     import { confirmModal } from "../stores/confirm";
     import api from "../lib/api";
@@ -31,11 +31,12 @@
     function cleanText(text) {
         // Видалити символи, що не є німецькими, англійськими, цифрами, пунктуацією або пробілами
         // Дозволяємо: a-z, A-Z, 0-9, німецькі умлаути (äöüÄÖÜß), пунктуацію, пробіли
+        const regex = new RegExp(
+            '[^\\w\\säöüÄÖÜß.,!?;:„"«»‚\'„"()\\[\\]{}/\\\\&@#*+=-]',
+            "g",
+        );
         return text
-            .replace(
-                /[^\w\säöüÄÖÜß\-.,!?;:„"«»‚'„"\(\)\[\]\{\}\/\\\&@#*+=/]/g,
-                "",
-            )
+            .replace(regex, "")
             .replace(/\s+/g, " ") // Стискаємо множинні пробіли
             .trim();
     }
@@ -60,13 +61,6 @@
         }
 
         return trimmed;
-    }
-
-    // Функція для обробки змін у текстовому полі
-    // Нормалізує та обрізає текст ТІЛЬКИ на виході (перед відправкою)
-    function onCustomTextInput(event) {
-        // Дозволяємо користувачу писати вільно, включаючи пробіли
-        // Нормалізація виконується тільки при відправці через trimToSentence у handleSubmit
     }
 
     async function handleSubmit() {

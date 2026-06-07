@@ -12,7 +12,7 @@ export function md5(str) {
   // Falls back to a simple hash function if not available
   
   // const encoder = new TextEncoder();
-  // const data = encoder.encode(str);
+
   
   // Use crypto.subtle for MD5 (note: requires HTTPS in production)
   // For now, we'll use a simpler approach with a library or fallback
