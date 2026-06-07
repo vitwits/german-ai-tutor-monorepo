@@ -100,44 +100,29 @@ pipeline {
         }
 
         success {
-            githubChecks(
+            publishChecks(
                 name: 'CI / Push Checks',
-                status: 'COMPLETED',
-                conclusion: 'SUCCESS',
                 summary: 'All checks passed successfully! ✅',
-                detailsURL: "${env.BUILD_URL}",
-                account: 'vitwits',
-                repo: 'language-AI-tutor',
-                credentialsId: 'github-notifications-token',
-                sha: "${env.GIT_COMMIT}"
+                conclusion: 'SUCCESS',
+                detailsURL: "${env.BUILD_URL}"
             )
         }
 
         failure {
-            githubChecks(
+            publishChecks(
                 name: 'CI / Push Checks',
-                status: 'COMPLETED',
-                conclusion: 'FAILURE',
                 summary: 'Some checks failed. Please review the logs.',
-                detailsURL: "${env.BUILD_URL}",
-                account: 'vitwits',
-                repo: 'language-AI-tutor',
-                credentialsId: 'github-notifications-token',
-                sha: "${env.GIT_COMMIT}"
+                conclusion: 'FAILURE',
+                detailsURL: "${env.BUILD_URL}"
             )
         }
 
         aborted {
-            githubChecks(
+            publishChecks(
                 name: 'CI / Push Checks',
-                status: 'COMPLETED',
-                conclusion: 'CANCELLED',
                 summary: 'Pipeline was aborted.',
-                detailsURL: "${env.BUILD_URL}",
-                account: 'vitwits',
-                repo: 'language-AI-tutor',
-                credentialsId: 'github-notifications-token',
-                sha: "${env.GIT_COMMIT}"
+                conclusion: 'CANCELLED',
+                detailsURL: "${env.BUILD_URL}"
             )
         }
     }
