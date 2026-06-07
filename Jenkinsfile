@@ -4,7 +4,7 @@ pipeline {
 
     environment {
         GEMINI_API_KEY = credentials('GEMINI_API_KEY_SECRET')
-        NEXUS_REGISTRY = 'localhost:8083' 
+        NEXUS_REGISTRY = 'nexus.box.com:5000'
         APP_VERSION    = "1.0.${env.BUILD_NUMBER}"
         NEXUS_CREDS    = credentials('NEXUS_CREDENTIALS_ID')
     }
