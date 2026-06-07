@@ -16,7 +16,7 @@ pipeline {
     }
 
     triggers {
-        pollSCM('H * * * *') // Перевірка репозиторію кожну годину з оптимізованим хешем
+        pollSCM('H * * * *') // Перевірка щогодини
     }
 
     stages {
@@ -30,8 +30,8 @@ pipeline {
         }
 
         stage('Parallel Checks') {
-            // Зловить і feature/your-branch, і origin/feature/your-branch
-            when { branch pattern: ".*feature/.*", comparator: "REGEXP" }
+            // ПРОСТО І ЗРОЗУМІЛО: ловить будь-яку гілку, де є /feature/
+            when { branch wildcard: "**/feature/**", comparator: "EQUALS" }
             
             parallel {
                 stage('Backend Checks') {
@@ -95,8 +95,8 @@ pipeline {
         }
 
         stage('Release (Tests + Build + Push)') {
-            // Зловить і main, і origin/main
-            when { branch pattern: ".*main", comparator: "REGEXP" }
+            // ПРОСТО І ЗРОЗУМІЛО: ловить і main, і origin/main
+            when { branch wildcard: "**/main", comparator: "EQUALS" }
             
             stages {
                 stage('Final Validation') {
@@ -128,10 +128,9 @@ pipeline {
                 stage('Build and Push Docker Images') {
                     steps {
                         script {
-                            // Логін в Nexus Docker Registry за допомогою сервісного користувача jenkins-user
                             sh "echo ${NEXUS_CREDS_PSW} | docker login -u ${NEXUS_CREDS_USR} --password-stdin ${NEXUS_REGISTRY}"
                             
-                            // Збірка та завантаження бекенду
+                            // Бекенд
                             dir('backend') {
                                 def backendImage = "${NEXUS_REGISTRY}/german-tutor-backend"
                                 sh "docker build -t ${backendImage}:${APP_VERSION} -t ${backendImage}:latest ."
@@ -139,7 +138,7 @@ pipeline {
                                 sh "docker push ${backendImage}:latest"
                             }
                             
-                            // Збірка та завантаження фронтенду
+                            // Фронтенд
                             dir('frontend') {
                                 def frontendImage = "${NEXUS_REGISTRY}/german-tutor-frontend"
                                 sh "docker build -t ${frontendImage}:${APP_VERSION} -t ${frontendImage}:latest ."
@@ -151,7 +150,6 @@ pipeline {
                     post {
                         always {
                             sh "docker logout ${NEXUS_REGISTRY}"
-                            // Очищення локальних образів на хості Jenkins, щоб не забивати диск
                             sh "docker rmi ${NEXUS_REGISTRY}/german-tutor-backend:${APP_VERSION} ${NEXUS_REGISTRY}/german-tutor-backend:latest || true"
                             sh "docker rmi ${NEXUS_REGISTRY}/german-tutor-frontend:${APP_VERSION} ${NEXUS_REGISTRY}/german-tutor-frontend:latest || true"
                         }
@@ -164,7 +162,6 @@ pipeline {
     post {
         always {
             script {
-                // Прибирання звітів за собою (оскільки працюємо на Host-based агенлі)
                 sh 'rm -f backend/flake8_report.txt backend/pytest_report.xml frontend/eslint_report.xml frontend/vitest_report.xml'
             }
         }
