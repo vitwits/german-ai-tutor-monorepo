@@ -345,7 +345,7 @@ docker compose exec backend env | grep GOOGLE
 
 ## License
 
-[Add your license]
+[Add your license here]
 
 ## Support
 
