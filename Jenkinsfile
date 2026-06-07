@@ -99,7 +99,7 @@ pipeline {
                                  description: 'All checks passed successfully!',
                                  account: 'vitwits',
                                  repo: 'language-AI-tutor',
-                                 credentialsId: 'github-notifications-token',
+                                 credentialsId: 'github-repo-clone-creds',
                                  sha: "${env.GIT_COMMIT}"
                 } catch (Exception e) {
                     echo "Warning: Failed to send GitHub notification: ${e.message}"
@@ -115,7 +115,7 @@ pipeline {
                                  description: 'Pipeline checks failed.',
                                  account: 'vitwits',
                                  repo: 'language-AI-tutor',
-                                 credentialsId: 'github-notifications-token',
+                                 credentialsId: 'github-repo-clone-creds',
                                  sha: "${env.GIT_COMMIT}"
                 } catch (Exception e) {
                     echo "Warning: Failed to send GitHub notification: ${e.message}"
