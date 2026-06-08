@@ -4,6 +4,9 @@
   become: yes
   vars:
     app_dir: "/opt/german_ai_tutor"
+    backend_dir: "{{ app_dir }}/backend"
+    backup_script_dir: "{{ backend_dir }}/scripts"
+    backup_script_path: "{{ backup_script_dir }}/backup_app_db.sh"
     # Defaults (will be assigned via Jenkins -e)
     registry: "{{ nexus_registry | default('localhost:8082') }}"
     version: "{{ app_version | default('latest') }}"
@@ -21,6 +24,7 @@
         - "{{ app_dir }}/backend/data"
         - "{{ app_dir }}/backend/static"
         - "{{ app_dir }}/backend"
+        - "{{ app_dir }}/backend/scripts"
         - "{{ app_dir }}/frontend"
       register: dir_creation
 
@@ -73,3 +77,20 @@
       environment:
         IMAGE_VERSION: "{{ version }}"
         REGISTRY_URL: "{{ registry }}"
+
+    - name: Copy database backup script
+      copy:
+        src: "files/backup_app_db.sh"
+        dest: "{{ backup_script_path }}"
+        owner: jenkins
+        group: docker
+        mode: '0755'
+
+    - name: Add cron job for database backup
+      ansible.builtin.cron:
+        name: "backup app.db every 12 hours"
+        minute: "0" # Run at minute 0
+        hour: "*/12" # Run every 12 hours
+        user: jenkins # Run as the jenkins user
+        job: "{{ backup_script_path }} >> /var/log/app_db_backup.log 2>&1"
+        state: present
