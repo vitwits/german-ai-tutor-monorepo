@@ -24,9 +24,9 @@ async def generate_text_endpoint(
 ):
     # Map: Level -> Size -> Count
     sentence_map = {
-        'A1': {'S': 5, 'M': 9, 'L': 13}, 'A2': {'S': 6, 'M': 10, 'L': 14},
-        'B1': {'S': 7, 'M': 10, 'L': 14}, 'B2': {'S': 6, 'M': 10, 'L': 14},
-        'C1': {'S': 6, 'M': 9, 'L': 11}, 'C2': {'S': 6, 'M': 9, 'L': 11}
+        'A1': {'S': 20, 'M': 35, 'L': 50}, 'A2': {'S': 24, 'M': 40, 'L': 50},
+        'B1': {'S': 28, 'M': 40, 'L': 55}, 'B2': {'S': 24, 'M': 40, 'L': 50},
+        'C1': {'S': 20, 'M': 35, 'L': 45}, 'C2': {'S': 20, 'M': 30, 'L': 40}
     }
     count = sentence_map.get(req.level, sentence_map['A2']).get(req.size, 8)
 
