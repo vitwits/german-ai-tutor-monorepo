@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
 
 from ..database import get_db
-from ..models import User, Lesson, UserLesson, LessonAudio, Vocabulary, QuizResult
+from ..models import User, Lesson, UserLesson, LessonAudio, Vocabulary, ExplainedWord, QuizResult
 from ..schemas import TextGenerateRequest, TextReadSchema, ToggleFavRequest, QuizResultRequest, VocabWordSchema, CreateOwnTextRequest
 from ..dependencies import get_current_user
 from .. import services, cost_calculation
@@ -24,9 +24,9 @@ async def generate_text_endpoint(
 ):
     # Map: Level -> Size -> Count
     sentence_map = {
-        'A1': {'S': 5, 'M': 9, 'L': 13}, 'A2': {'S': 6, 'M': 10, 'L': 14},
-        'B1': {'S': 7, 'M': 10, 'L': 14}, 'B2': {'S': 6, 'M': 10, 'L': 14},
-        'C1': {'S': 6, 'M': 9, 'L': 11}, 'C2': {'S': 6, 'M': 9, 'L': 11}
+        'A1': {'S': 20, 'M': 35, 'L': 50}, 'A2': {'S': 24, 'M': 40, 'L': 50},
+        'B1': {'S': 28, 'M': 40, 'L': 55}, 'B2': {'S': 24, 'M': 40, 'L': 50},
+        'C1': {'S': 20, 'M': 35, 'L': 45}, 'C2': {'S': 20, 'M': 30, 'L': 40}
     }
     count = sentence_map.get(req.level, sentence_map['A2']).get(req.size, 8)
 
@@ -247,7 +247,7 @@ async def get_library(
     # Query: Join UserLesson (user's lessons) with Lesson (lesson content)
     from sqlalchemy import and_
     
-    query = select(Lesson, UserLesson.is_favorite).join(
+    query = select(Lesson, UserLesson).join(
         UserLesson,
         UserLesson.lesson_id == Lesson.id
     ).where(UserLesson.user_id == current_user.id)
@@ -286,25 +286,27 @@ async def get_library(
     rows = result.all()
     
     text_models = []
-    for lesson, is_fav in rows:
+    for lesson, ul in rows:
         # Convert Lesson to TextReadSchema format for backward compatibility
         tm = TextReadSchema(
             id=lesson.id,
-            user_id=current_user.id,  # Anonymous lesson, set to current user
+            user_id=current_user.id,
             title=lesson.title,
             level=lesson.level,
             content_json=lesson.content_json,
             quiz_json=lesson.quiz_json,
-            is_favorite=is_fav
+            is_favorite=ul.is_favorite
         )
         try:
             titles = json.loads(lesson.title) if lesson.title else {}
             lang_key = current_user.interface_language
-            tm.display_title = titles.get('de', lesson.title)
+            tm.display_title = ul.custom_title or titles.get('de', lesson.title)
             tm.trans_title = titles.get(lang_key, '')
+            tm.custom_title = ul.custom_title
         except (json.JSONDecodeError, TypeError):
-            tm.display_title = lesson.title
+            tm.display_title = ul.custom_title or lesson.title
             tm.trans_title = ""
+            tm.custom_title = ul.custom_title
         text_models.append(tm)
 
     return {
@@ -396,6 +398,32 @@ async def toggle_text_fav(
         )
         db.add(new_user_lesson)
     
+    await db.commit()
+    return {"ok": True}
+
+@router.post("/rename_text")
+async def rename_text(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    text_id = payload.get("id")
+    new_title = (payload.get("title") or "").strip()
+    if not new_title:
+        raise HTTPException(status_code=400, detail="Title cannot be empty")
+    if len(new_title) > 60:
+        new_title = new_title[:60]
+
+    ul_result = await db.execute(
+        select(UserLesson).where(
+            and_(UserLesson.user_id == current_user.id, UserLesson.lesson_id == text_id)
+        )
+    )
+    ul = ul_result.scalar_one_or_none()
+    if not ul:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+
+    ul.custom_title = new_title
     await db.commit()
     return {"ok": True}
 
@@ -562,7 +590,8 @@ async def get_text(text_id: str, db: AsyncSession = Depends(get_db), current_use
             level=lesson.level,
             content_json=lesson.content_json,
             quiz_json=lesson.quiz_json,
-            is_favorite=ul.is_favorite
+            is_favorite=ul.is_favorite,
+            custom_title=ul.custom_title
         )
     else:
         raise HTTPException(404, "Lesson not found")
@@ -572,6 +601,31 @@ async def get_text(text_id: str, db: AsyncSession = Depends(get_db), current_use
     vocab = vocab_res.scalars().all()
     
     vocab_models = [VocabWordSchema.model_validate(v) for v in vocab]
+
+    explained_res = await db.execute(
+        select(ExplainedWord).where(
+            ExplainedWord.text_id == text_id,
+            ExplainedWord.user_id == current_user.id,
+        )
+    )
+    explained_rows = explained_res.scalars().all()
+    explained_words = []
+    for row in explained_rows:
+        try:
+            explanation = json.loads(row.explanation_json) if row.explanation_json else {}
+        except Exception:
+            explanation = {}
+
+        explained_words.append(
+            {
+                "id": row.id,
+                "text": row.origin,
+                "sentence_index": row.sentence_index,
+                "start_index": row.start_index,
+                "end_index": row.end_index,
+                "explanation": explanation,
+            }
+        )
 
     # Fetch last quiz result (now can come from either text_id or lesson_id)
     q_res = await db.execute(select(QuizResult).where(
@@ -585,7 +639,12 @@ async def get_text(text_id: str, db: AsyncSession = Depends(get_db), current_use
     if last_result:
         last_result_data = {"score": last_result.score, "total_questions": last_result.total_questions}
     
-    return {"text": text_model, "vocab": vocab_models, "last_quiz_result": last_result_data}
+    return {
+        "text": text_model,
+        "vocab": vocab_models,
+        "explained_words": explained_words,
+        "last_quiz_result": last_result_data,
+    }
 
 @router.post("/save_quiz_result")
 async def save_quiz_result(

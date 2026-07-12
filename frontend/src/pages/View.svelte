@@ -30,6 +30,26 @@
     let vocabPlayingId = null; // ID of vocabulary word currently playing
     let currentVocabPlayId = null; // Track which vocab play session is active (to abort old ones)
 
+    let editingTitle = false;
+    let editTitleValue = "";
+
+    async function saveTitleEdit() {
+        const trimmed = editTitleValue.trim().slice(0, 60);
+        if (!trimmed) return;
+        try {
+            await api.post("/rename_text", { id, title: trimmed });
+            text = { ...text, custom_title: trimmed };
+            editingTitle = false;
+        } catch (e) {
+            console.error(e);
+            addToast(ui.error_generic, "error");
+        }
+    }
+
+    function cancelTitleEdit() {
+        editingTitle = false;
+    }
+
     // Edit State
     let editingId = null;
     let editValue = "";
@@ -65,13 +85,28 @@
     let showLearnedPopup = false;
     let learnedPopupContent = "";
     let learnedPopupStyle = "";
+    let learnedPopupSticky = false;
     let hideTimeout;
+
+    let isSingleWordSelected = false;
+    let explainedWordsMap = {}; // { explainedId: { sentenceIndex, startIndex, endIndex, text, explanation } }
 
     // Grammar Cache
     let grammarCache = {};
 
+    // Sentence button modes: tracks hover state and mode for each sentence
+    let sentenceButtonMode = {}; // { sentenceIndex: 'normal' | 'play' | 'translate' }
+    let sentenceHoverTimers = {}; // { sentenceIndex: timeoutId }
+    let sentenceTranslationDisplay = {}; // { sentenceIndex: true/false }
+    let sentenceTranslationTimers = {}; // { sentenceIndex: timeoutId }
+
     // Reactive UI strings
     $: ui = getUI($user?.interface_language || "ukr");
+    $: isSingleWordSelected =
+        selectedText
+            .trim()
+            .split(/\s+/)
+            .filter((w) => w.length > 0).length === 1;
 
     // Re-load text when id changes (only if user is loaded)
     // ⭐ Залежимо тільки від id, НЕ від $user — інакше user.update() перезавантажує сторінку
@@ -87,8 +122,21 @@
             const res = await api.get(`/texts/${id}`);
             text = res.data.text;
             vocab = res.data.vocab || [];
+            const explainedWords = res.data.explained_words || [];
             lastQuizResult = res.data.last_quiz_result;
             const grammarIndices = res.data.grammar_indices || [];
+
+            explainedWordsMap = {};
+            explainedWords.forEach((w) => {
+                explainedWordsMap[w.id] = {
+                    id: w.id,
+                    sentenceIndex: w.sentence_index,
+                    startIndex: w.start_index,
+                    endIndex: w.end_index,
+                    text: w.text,
+                    explanation: w.explanation,
+                };
+            });
 
             // Build Vocab Map for quick lookup
             vocab.forEach((v) => (vocabMap[v.id] = v));
@@ -159,6 +207,10 @@
                     display_trans: transText,
                 };
             });
+
+            for (let i = 0; i < sentences.length; i++) {
+                refreshSentenceHtml(i);
+            }
         } catch (e) {
             console.error(e);
             addToast("Error loading text", "error");
@@ -382,7 +434,8 @@
         if (
             event.target.closest("button") ||
             event.target.closest("#pop") ||
-            event.target.classList.contains("learned")
+            event.target.classList.contains("learned") ||
+            event.target.classList.contains("explained-word")
         )
             return;
 
@@ -451,7 +504,7 @@
         if (selection.rangeCount > 0) {
             const range = selection.getRangeAt(0);
             const fragment = range.cloneContents();
-            if (fragment.querySelector(".learned")) {
+            if (fragment.querySelector(".learned, .explained-word")) {
                 // Reset if crossing learned word
                 showPopup = false;
                 return;
@@ -499,6 +552,215 @@
             clearTimeout(popupHideTimeout);
             popupHideTimeout = null;
         }
+    }
+
+    function buildSentenceHtml(sentenceIndex) {
+        const sentence = sentences[sentenceIndex];
+        if (!sentence) return "";
+
+        const originalText = sentence.de;
+
+        const markers = [];
+        const sentVocab = vocab.filter(
+            (v) => v.sentence_index === sentenceIndex,
+        );
+        sentVocab.forEach((v) => {
+            const start = v.start_index;
+            const end = v.end_index;
+            if (
+                start !== null &&
+                start !== undefined &&
+                start >= 0 &&
+                end <= originalText.length &&
+                start < end
+            ) {
+                markers.push({
+                    type: "learned",
+                    start,
+                    end,
+                    id: v.id,
+                });
+            }
+        });
+
+        Object.values(explainedWordsMap).forEach((item) => {
+            if (item.sentenceIndex !== sentenceIndex) return;
+            if (
+                item.startIndex >= 0 &&
+                item.endIndex <= originalText.length &&
+                item.startIndex < item.endIndex
+            ) {
+                markers.push({
+                    type: "explained",
+                    start: item.startIndex,
+                    end: item.endIndex,
+                    id: item.id,
+                });
+            }
+        });
+
+        markers.sort((a, b) => b.start - a.start);
+
+        let html = "";
+        let lastIdx = originalText.length;
+
+        markers.forEach((m) => {
+            html = originalText.substring(m.end, lastIdx) + html;
+            const wordVal = originalText.substring(m.start, m.end);
+            if (m.type === "learned") {
+                html =
+                    `<span class="learned" data-wid="${m.id}">${wordVal}</span>` +
+                    html;
+            } else {
+                html =
+                    `<span class="explained-word" data-eid="${m.id}">${wordVal}</span>` +
+                    html;
+            }
+            lastIdx = m.start;
+        });
+
+        html = originalText.substring(0, lastIdx) + html;
+        return html;
+    }
+
+    function refreshSentenceHtml(sentenceIndex) {
+        const sentence = sentences[sentenceIndex];
+        if (!sentence) return;
+        sentences[sentenceIndex] = {
+            ...sentence,
+            de_html: buildSentenceHtml(sentenceIndex),
+        };
+        sentences = sentences;
+    }
+
+    function escapeHtml(value) {
+        return String(value || "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/\"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+    }
+
+    function renderExplainItems(items) {
+        if (!Array.isArray(items) || items.length === 0) return "";
+        const isUkr = $user?.interface_language === "ukr";
+        const rows = items
+            .map((item) => {
+                const w = escapeHtml(item.word);
+                const translation = isUkr
+                    ? escapeHtml(item.translation_uk)
+                    : escapeHtml(item.translation_en);
+                return `<li class="explain-item"><span class="explain-lemma">${w}</span><span class="explain-sep">-</span><span class="explain-translation">${translation}</span></li>`;
+            })
+            .join("");
+        return `<ul class="explain-list">${rows}</ul>`;
+    }
+
+    function formatExplanationPopup(explanation) {
+        if (!explanation || typeof explanation !== "object") {
+            return `<div style="font-weight:500; color:var(--primary);">${escapeHtml(ui.explain_no_data || "No explanation data")}</div>`;
+        }
+
+        const targetWord = escapeHtml(explanation.target_word || "");
+        const derivatives = explanation.derivatives || {};
+
+        let html = `<div style="font-weight:700; color:var(--primary); margin-bottom:8px;">${targetWord}</div>`;
+
+        const nouns = renderExplainItems(derivatives.nouns);
+        const verbs = renderExplainItems(derivatives.verbs);
+        const adjAdv = renderExplainItems(derivatives.adjectives_adverbs);
+        const synonyms = renderExplainItems(explanation.synonyms);
+        const antonyms = renderExplainItems(explanation.antonyms);
+
+        const wrapSection = (cls, title, body) =>
+            `<section class="explain-section ${cls}"><div class="explain-section-title">${title}</div>${body}</section>`;
+
+        html = `<div class="explain-popup">${html}`;
+
+        if (nouns)
+            html += wrapSection(
+                "explain-nouns",
+                escapeHtml(ui.explain_nouns || "Nouns"),
+                nouns,
+            );
+        if (verbs)
+            html += wrapSection(
+                "explain-verbs",
+                escapeHtml(ui.explain_verbs || "Verbs"),
+                verbs,
+            );
+        if (adjAdv)
+            html += wrapSection(
+                "explain-adj-adv",
+                escapeHtml(ui.explain_adj_adv || "Adjectives / Adverbs"),
+                adjAdv,
+            );
+        if (synonyms)
+            html += wrapSection(
+                "explain-synonyms",
+                escapeHtml(ui.explain_synonyms || "Synonyms"),
+                synonyms,
+            );
+        if (antonyms)
+            html += wrapSection(
+                "explain-antonyms",
+                escapeHtml(ui.explain_antonyms || "Antonyms"),
+                antonyms,
+            );
+
+        html += "</div>";
+
+        return html;
+    }
+
+    function clearLearnedPopupTimer() {
+        if (hideTimeout) {
+            clearTimeout(hideTimeout);
+            hideTimeout = null;
+        }
+    }
+
+    function closeLearnedPopup() {
+        clearLearnedPopupTimer();
+        showLearnedPopup = false;
+        learnedPopupSticky = false;
+    }
+
+    function scheduleLearnedPopupHide(delayMs = 2000) {
+        if (learnedPopupSticky) return;
+        clearLearnedPopupTimer();
+        hideTimeout = setTimeout(() => {
+            showLearnedPopup = false;
+        }, delayMs);
+    }
+
+    function onLearnedPopupMouseEnter() {
+        clearLearnedPopupTimer();
+    }
+
+    function onLearnedPopupMouseLeave() {
+        scheduleLearnedPopupHide(1200);
+    }
+
+    function buildLearnedPopupStyle(rect, preferAbove = true) {
+        const margin = 12;
+        const centerX = rect.left + rect.width / 2;
+        const clampedLeft = Math.max(
+            margin,
+            Math.min(window.innerWidth - margin, centerX),
+        );
+
+        const canPlaceAbove = rect.top > 240;
+        if (preferAbove && canPlaceAbove) {
+            return `top: ${rect.top - 8}px; left: ${clampedLeft}px; transform: translate(-50%, -100%); display: block; position: fixed;`;
+        }
+
+        return `top: ${rect.bottom + 10}px; left: ${clampedLeft}px; transform: translateX(-50%); display: block; position: fixed;`;
+    }
+
+    function buildExplainPopupStyle() {
+        return "top: 6vh; left: 50%; transform: translateX(-50%); display: block; position: fixed; width: min(576px, 94vw); max-height: 88vh;";
     }
 
     function onPopupMouseLeave() {
@@ -563,44 +825,7 @@
 
                 // Оновлюємо sentences з новим highlight
                 const sentIdx = selectionSentenceIndex;
-                const s = sentences[sentIdx];
-                const originalText = s.de;
-
-                // Перебудовуємо HTML з новим словом
-                const sentVocab = vocab.filter(
-                    (v) => v.sentence_index === sentIdx,
-                );
-                sentVocab.sort(
-                    (a, b) => (b.start_index || 0) - (a.start_index || 0),
-                );
-
-                let lastIdx = originalText.length;
-                let html = "";
-
-                sentVocab.forEach((v) => {
-                    const start = v.start_index;
-                    const end = v.end_index;
-
-                    if (
-                        start !== null &&
-                        start >= 0 &&
-                        end <= originalText.length &&
-                        start < end
-                    ) {
-                        html = originalText.substring(end, lastIdx) + html;
-                        const wordVal = originalText.substring(start, end);
-                        html =
-                            `<span class="learned" data-wid="${v.id}">${wordVal}</span>` +
-                            html;
-                        lastIdx = start;
-                    }
-                });
-
-                html = originalText.substring(0, lastIdx) + html;
-
-                // Оновлюємо речення
-                sentences[sentIdx] = { ...sentences[sentIdx], de_html: html };
-                sentences = sentences; // Trigger reactivity
+                refreshSentenceHtml(sentIdx);
 
                 // Update energy if returned
                 if (res.data.energy_left !== undefined) {
@@ -634,6 +859,54 @@
         }
     }
 
+    async function onExplainClick() {
+        if (isTranslating) return;
+        if (!isSingleWordSelected) {
+            addToast(ui.explain_single_word_only, "warning");
+            return;
+        }
+
+        isTranslating = true;
+        try {
+            const res = await api.post("/explain_word", {
+                text: selectedText,
+                tid: id,
+                sent_idx: selectionSentenceIndex,
+                start_char_index: selectionStartIndex,
+            });
+
+            if (!res.data?.ok) {
+                addToast(
+                    ui[res.data?.error_key] || ui.explain_failed_msg,
+                    "error",
+                );
+                return;
+            }
+
+            const explained = res.data.explained_word;
+            explainedWordsMap[explained.id] = {
+                id: explained.id,
+                sentenceIndex: explained.sentence_index,
+                startIndex: explained.start_index,
+                endIndex: explained.end_index,
+                text: explained.text,
+                explanation: explained.explanation,
+            };
+            explainedWordsMap = explainedWordsMap;
+
+            refreshSentenceHtml(selectionSentenceIndex);
+
+            showPopup = false;
+            window.getSelection().removeAllRanges();
+            addToast(ui.explain_ready, "success");
+        } catch (e) {
+            console.error(e);
+            addToast(ui.explain_failed_msg, "error");
+        } finally {
+            isTranslating = false;
+        }
+    }
+
     function scrollToWord(wid) {
         const el = document.querySelector(`.learned[data-wid="${wid}"]`);
         if (el) {
@@ -647,29 +920,42 @@
 
     function handleLearnedClick(e) {
         const target = e.target;
+
+        // Ignore clicks inside popup content itself.
+        if (target.closest("#learned-pop")) {
+            return;
+        }
+
         if (target.classList.contains("learned")) {
             const wid = target.dataset.wid;
             const word = vocabMap[wid];
             if (word) {
                 const rect = target.getBoundingClientRect();
-                const scrollTop = window.scrollY;
-                const scrollLeft = window.scrollX;
 
                 const trans =
                     $user.interface_language === "ukr" ? word.ua : word.en;
-                learnedPopupContent = `<div style="font-weight:500; color:var(--primary);">${trans}</div>`;
+                learnedPopupContent = `<div style="font-weight:500; color:var(--bg);">${trans}</div>`;
 
-                learnedPopupStyle = `top: ${rect.top - 8}px; left: ${rect.left + rect.width / 2}px; transform: translate(-50%, -100%); display: block; position: fixed;`;
+                learnedPopupSticky = false;
+                learnedPopupStyle = buildLearnedPopupStyle(rect, true);
                 showLearnedPopup = true;
-
-                if (hideTimeout) clearTimeout(hideTimeout);
-                hideTimeout = setTimeout(
-                    () => (showLearnedPopup = false),
-                    2000,
+                scheduleLearnedPopupHide(2000);
+            }
+        } else if (target.classList.contains("explained-word")) {
+            const eid = target.dataset.eid;
+            const explained = explainedWordsMap[eid];
+            if (explained?.explanation) {
+                learnedPopupContent = formatExplanationPopup(
+                    explained.explanation,
                 );
+
+                learnedPopupSticky = true;
+                clearLearnedPopupTimer();
+                learnedPopupStyle = buildExplainPopupStyle();
+                showLearnedPopup = true;
             }
         } else {
-            showLearnedPopup = false;
+            closeLearnedPopup();
         }
     }
 
@@ -805,6 +1091,62 @@
     }
 
     // --- TABS & NAVIGATION GUARD ---
+
+    // Sentence button hover/translation modes
+    function onSentenceButtonHover(sentenceIndex) {
+        // Clear any existing timer for this sentence
+        if (sentenceHoverTimers[sentenceIndex]) {
+            clearTimeout(sentenceHoverTimers[sentenceIndex]);
+        }
+
+        // Set mode to 'play' immediately
+        sentenceButtonMode[sentenceIndex] = "play";
+        sentenceButtonMode = sentenceButtonMode; // Trigger reactivity
+
+        // Start timer to switch to 'translate' mode after 1 second
+        sentenceHoverTimers[sentenceIndex] = setTimeout(() => {
+            sentenceButtonMode[sentenceIndex] = "translate";
+            sentenceButtonMode = sentenceButtonMode; // Trigger reactivity
+        }, 1000);
+    }
+
+    function onSentenceButtonLeave(sentenceIndex) {
+        // Clear timer
+        if (sentenceHoverTimers[sentenceIndex]) {
+            clearTimeout(sentenceHoverTimers[sentenceIndex]);
+            delete sentenceHoverTimers[sentenceIndex];
+        }
+
+        // Reset mode to normal
+        sentenceButtonMode[sentenceIndex] = "normal";
+        sentenceButtonMode = sentenceButtonMode; // Trigger reactivity
+    }
+
+    function onSentenceButtonClick(sentenceIndex, sentence) {
+        const mode = sentenceButtonMode[sentenceIndex];
+
+        if (mode === "translate" || mode === "normal") {
+            // Show translation for 5 seconds
+            sentenceTranslationDisplay[sentenceIndex] = true;
+            sentenceTranslationDisplay = sentenceTranslationDisplay; // Trigger reactivity
+
+            // Clear previous timer if exists
+            if (sentenceTranslationTimers[sentenceIndex]) {
+                clearTimeout(sentenceTranslationTimers[sentenceIndex]);
+            }
+
+            // Hide translation after 5 seconds
+            sentenceTranslationTimers[sentenceIndex] = setTimeout(() => {
+                sentenceTranslationDisplay[sentenceIndex] = false;
+                sentenceTranslationDisplay = sentenceTranslationDisplay; // Trigger reactivity
+                delete sentenceTranslationTimers[sentenceIndex];
+            }, 5000);
+        } else if (mode === "play") {
+            // Play audio (same as before)
+            userInitiatedPlay = true;
+            playAudio(sentence.de, sentenceIndex);
+        }
+    }
 
     function switchTab(tab) {
         if (activeTab === tab) return;
@@ -953,11 +1295,22 @@
             history.replaceState(null, "", window.location.pathname);
         }
     }
+
     onDestroy(() => {
         window.removeEventListener("beforeunload", handleBeforeUnload);
         if (typeof document !== "undefined")
             document.removeEventListener("click", handleLearnedClick);
         if (currentAudio) currentAudio.pause();
+
+        clearLearnedPopupTimer();
+
+        // Clean up all timers
+        Object.values(sentenceHoverTimers).forEach((timer) =>
+            clearTimeout(timer),
+        );
+        Object.values(sentenceTranslationTimers).forEach((timer) =>
+            clearTimeout(timer),
+        );
     });
 </script>
 
@@ -973,9 +1326,60 @@
         </div>
     {:else if text}
         <div class="card">
-            <h1 style="font-size:1.5rem; margin:0 0 4px 0;">
-                {JSON.parse(text.title).de}
-            </h1>
+            {#if editingTitle}
+                <div
+                    style="display:flex; align-items:center; gap:6px; margin:0 0 4px 0;"
+                >
+                    <input
+                        type="text"
+                        class="edit-input"
+                        bind:value={editTitleValue}
+                        maxlength="60"
+                        style="font-size:1.4rem; font-weight:600; flex:1;"
+                        onkeydown={(e) => {
+                            if (e.key === "Enter") saveTitleEdit();
+                            if (e.key === "Escape") cancelTitleEdit();
+                        }}
+                    />
+                    <button
+                        class="btn-text"
+                        onclick={saveTitleEdit}
+                        style="padding:0; min-width:32px;"
+                    >
+                        <span class="material-symbols-outlined">check</span>
+                    </button>
+                    <button
+                        class="btn-text"
+                        onclick={cancelTitleEdit}
+                        style="padding:0; min-width:32px;"
+                    >
+                        <span class="material-symbols-outlined">close</span>
+                    </button>
+                </div>
+            {:else}
+                <div
+                    style="display:flex; align-items:center; gap:6px; margin:0 0 4px 0;"
+                >
+                    <h1 style="font-size:1.5rem; margin:0; flex:1;">
+                        {text.custom_title || JSON.parse(text.title).de}
+                    </h1>
+                    <button
+                        class="btn-text"
+                        onclick={() => {
+                            editTitleValue =
+                                text.custom_title || JSON.parse(text.title).de;
+                            editingTitle = true;
+                        }}
+                        style="padding:0; min-width:28px; opacity:0.4;"
+                        title="Rename"
+                    >
+                        <span
+                            class="material-symbols-outlined"
+                            style="font-size:18px;">edit</span
+                        >
+                    </button>
+                </div>
+            {/if}
             <h2
                 style="font-size: 1rem; color: var(--on-surface); opacity: 0.6; margin: 0 0 16px 0; font-weight: 400;"
             >
@@ -1031,49 +1435,49 @@
                 </button>
             </div>
 
-            {#each sentences as s, i}
-                <div
-                    class="de-line {playingIndex === i
-                        ? 'highlight-sentence'
-                        : ''}"
-                    id="sent-{i}"
-                    data-index={i}
-                    data-text={s.de}
-                >
-                    <div
-                        style="display:flex; justify-content: space-between; align-items: center;"
+            <div class="text-body">
+                {#each sentences as s, i}<span
+                        class="de-line {playingIndex === i
+                            ? 'highlight-sentence'
+                            : ''}"
+                        id="sent-{i}"
+                        data-index={i}
+                        data-text={s.de}
+                        ><span
+                            class="sent-num-btn {playingIndex === i &&
+                            currentAudio &&
+                            !currentAudio.paused
+                                ? 'playing'
+                                : ''}"
+                            role="button"
+                            tabindex="0"
+                            onmouseenter={() => onSentenceButtonHover(i)}
+                            onmouseleave={() => onSentenceButtonLeave(i)}
+                            onclick={() => onSentenceButtonClick(i, s)}
+                            onkeydown={(e) =>
+                                e.key === "Enter" &&
+                                onSentenceButtonClick(i, s)}
+                            ><span class="sent-num-label">{i + 1}</span><span
+                                class="sent-num-icon material-symbols-outlined"
+                                >{sentenceButtonMode[i] === "translate" &&
+                                !showTrans
+                                    ? "translate"
+                                    : playingIndex === i &&
+                                        currentAudio &&
+                                        !currentAudio.paused
+                                      ? "pause"
+                                      : "play_arrow"}</span
+                            ></span
+                        ><span class="de-text">{@html s.de_html}</span
+                        >{#if showTrans}
+                            <span class="trans-row">{s.display_trans}</span
+                            >{/if}{#if sentenceTranslationDisplay[i]}
+                            <span class="sentence-translation-popup"
+                                >{s.display_trans}</span
+                            >{/if}</span
                     >
-                        <div
-                            style="display:flex; align-items:center; gap:12px; flex: 1;"
-                        >
-                            <button
-                                class="btn-text"
-                                onclick={() => {
-                                    userInitiatedPlay = true;
-                                    playAudio(s.de, i);
-                                }}
-                                style="height:32px; width:32px; padding:0; min-width:32px;"
-                            >
-                                <span
-                                    class="material-symbols-outlined"
-                                    style="font-size:20px; color:var(--primary)"
-                                >
-                                    {playingIndex === i &&
-                                    currentAudio &&
-                                    !currentAudio.paused
-                                        ? "pause"
-                                        : "volume_up"}
-                                </span>
-                            </button>
-                            <span class="de-text">{@html s.de_html}</span>
-                        </div>
-                    </div>
-
-                    {#if showTrans}
-                        <div class="trans-row">{s.display_trans}</div>
-                    {/if}
-                </div>
-            {/each}
+                {/each}
+            </div>
         </div>
 
         <!-- TABS -->
@@ -1105,6 +1509,10 @@
                         tabindex="0"
                         onclick={() => {
                             if (!editingId) toggleVocabFav(v.id);
+                        }}
+                        onkeydown={(e) => {
+                            if (e.key === "Enter" && !editingId)
+                                toggleVocabFav(v.id);
                         }}
                     >
                         <div
@@ -1387,29 +1795,67 @@
 
     <!-- POPUPS -->
     {#if showPopup}
-        <button
-            type="button"
+        <div
             id="pop"
             style={popupStyle}
-            onclick={(e) => {
-                e.stopPropagation();
-                quickTranslate();
-            }}
-            disabled={isTranslating}
             onmouseenter={onPopupMouseEnter}
             onmouseleave={onPopupMouseLeave}
         >
-            {#if isTranslating}
-                <span class="loader-spinner"></span>
-            {:else}
-                {ui.add_translation}
+            <button
+                type="button"
+                class="pop-option"
+                onclick={(e) => {
+                    e.stopPropagation();
+                    quickTranslate();
+                }}
+                disabled={isTranslating}
+            >
+                {#if isTranslating}
+                    <span class="loader-spinner"></span>
+                {:else}
+                    {ui.add_translation}
+                {/if}
+            </button>
+            {#if isSingleWordSelected}
+                <span class="pop-separator">|</span>
+                <button
+                    type="button"
+                    class="pop-option"
+                    onclick={(e) => {
+                        e.stopPropagation();
+                        onExplainClick();
+                    }}
+                    disabled={isTranslating}
+                >
+                    {ui.explain_selection}
+                </button>
             {/if}
-        </button>
+        </div>
     {/if}
 
     {#if showLearnedPopup}
-        <div id="learned-pop" style={learnedPopupStyle}>
-            {@html learnedPopupContent}
+        <div
+            id="learned-pop"
+            class:sticky={learnedPopupSticky}
+            style={learnedPopupStyle}
+            onmouseenter={onLearnedPopupMouseEnter}
+            onmouseleave={onLearnedPopupMouseLeave}
+        >
+            {#if learnedPopupSticky}
+                <button
+                    type="button"
+                    class="popup-close"
+                    onclick={(e) => {
+                        e.stopPropagation();
+                        closeLearnedPopup();
+                    }}
+                >
+                    ×
+                </button>
+            {/if}
+            <div class="learned-popup-content">
+                {@html learnedPopupContent}
+            </div>
         </div>
     {/if}
 
@@ -1465,6 +1911,10 @@
         position: relative;
     }
 
+    .view-container .card {
+        padding: 40px;
+    }
+
     .toolbar {
         display: flex;
         align-items: center;
@@ -1473,15 +1923,65 @@
         flex-wrap: wrap;
     }
 
+    .text-body {
+        text-align: justify;
+        line-height: 2.4;
+        margin-bottom: 16px;
+    }
     .de-line {
-        padding: 8px 0;
-        border-bottom: 1px solid var(--border);
+        display: inline;
         transition: background-color 0.3s;
     }
+    .de-line::after {
+        content: " ";
+    }
+    .sent-num-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #e91e8c;
+        color: white;
+        font-size: 0.65rem;
+        font-weight: 700;
+        border-radius: 4px;
+        margin-right: 5px;
+        vertical-align: 3px;
+        font-family: var(--font-interface);
+        line-height: 1;
+        width: 22px;
+        height: 16px;
+        cursor: pointer;
+        transition: background-color 0.15s;
+        flex-shrink: 0;
+        user-select: none;
+    }
+    .sent-num-btn:hover {
+        background: #e91e8c;
+        vertical-align: 0px;
+    }
+    .sent-num-label {
+        display: inline;
+    }
+    .sent-num-icon {
+        display: none;
+        font-size: 13px;
+        line-height: 1;
+    }
+    .sent-num-btn:hover .sent-num-label,
+    .sent-num-btn.playing .sent-num-label {
+        display: none;
+    }
+    .sent-num-btn:hover .sent-num-icon,
+    .sent-num-btn.playing .sent-num-icon {
+        display: flex;
+        align-items: center;
+        height: 100%;
+        vertical-align: 0px;
+    }
     .de-text {
+        display: inline;
         font-size: 1.1rem;
         font-weight: 400;
-        line-height: 1.6;
         font-family: var(--font-text);
     }
     .highlight-sentence {
@@ -1490,10 +1990,29 @@
     }
 
     .trans-row {
+        display: inline;
         color: var(--primary);
-        padding-left: 44px;
-        font-size: 1rem;
-        margin-top: 4px;
+        font-size: 1.1rem;
+        margin-left: 6px;
+    }
+
+    .sentence-translation-popup {
+        display: inline;
+        color: var(--primary);
+        font-size: 1.1rem;
+        margin-left: 6px;
+        animation: fadeInOut 5s ease-in-out;
+    }
+
+    @keyframes fadeInOut {
+        0%,
+        100% {
+            opacity: 0;
+        }
+        10%,
+        90% {
+            opacity: 1;
+        }
     }
 
     .grammar-box {
@@ -1760,7 +2279,9 @@
         padding: 8px 16px;
         border-radius: 4px;
         z-index: 2000;
-        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
         border: none;
         font-family: inherit;
         height: auto;
@@ -1769,17 +2290,164 @@
         font-size: 0.8rem;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
     }
+    .pop-option {
+        background: transparent;
+        color: inherit;
+        border: none;
+        padding: 0;
+        height: auto;
+        min-width: 0;
+        font: inherit;
+        text-transform: none;
+        cursor: pointer;
+    }
+    .pop-option:disabled {
+        cursor: not-allowed;
+        opacity: 0.7;
+    }
+    .pop-separator {
+        opacity: 0.7;
+        user-select: none;
+    }
     #learned-pop {
         position: absolute;
-        background: var(--surface);
-        color: var(--on-surface);
+        background: var(--on-surface);
+        color: var(--bg);
         padding: 8px 12px;
         border-radius: 4px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-        z-index: 101;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        z-index: 2100;
+        border: none;
+        min-width: 0;
+        width: fit-content;
+        max-width: min(320px, 92vw);
+        max-height: 82vh;
+        overflow-y: auto;
+        font-family: var(--font-text);
+        line-height: 1.45;
+        position: relative;
+        word-break: break-word;
+    }
+    .learned-popup-content {
+        padding-right: 0;
+    }
+    #learned-pop.sticky {
+        background: var(--surface);
+        color: var(--on-surface);
+        min-width: min(576px, 94vw);
+        width: min(576px, 94vw);
+        max-width: 94vw;
+        max-height: 88vh;
+        padding: 18px 18px 16px 18px;
         border: 1px solid var(--border);
-        min-width: auto;
-        max-width: 250px;
+    }
+    #learned-pop.sticky .learned-popup-content {
+        padding-right: 10px;
+        margin-top: 10px;
+    }
+    .popup-close {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        border: none;
+        background: transparent;
+        color: var(--on-surface);
+        font-size: 1rem;
+        cursor: pointer;
+        width: 24px;
+        height: 24px;
+        padding: 0;
+        line-height: 1;
+        min-width: 24px;
+    }
+    #learned-pop.sticky .popup-close {
+        top: 10px;
+        right: 10px;
+        width: 30px;
+        height: 30px;
+        min-width: 30px;
+        font-size: 1.3rem;
+        border-radius: 6px;
+        background: rgba(0, 0, 0, 0.06);
+    }
+
+    :global(.explain-popup) {
+        border-radius: 10px;
+        padding: 12px;
+    }
+    :global(.explain-popup > div:first-child) {
+        font-size: 1.15rem;
+        line-height: 1.2;
+    }
+    :global(.explain-section) {
+        margin-top: 10px;
+        padding: 9px 10px;
+        border-radius: 8px;
+        border: 1px solid transparent;
+    }
+    :global(.explain-section-title) {
+        font-weight: 700;
+        margin-bottom: 6px;
+        font-family: var(--font-interface);
+        font-size: 0.78rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+    :global(.explain-nouns) {
+        background: rgba(30, 136, 229, 0.08);
+        border-color: rgba(30, 136, 229, 0.28);
+    }
+    :global(.explain-nouns .explain-section-title) {
+        color: #1565c0;
+    }
+    :global(.explain-verbs) {
+        background: rgba(67, 160, 71, 0.1);
+        border-color: rgba(67, 160, 71, 0.3);
+    }
+    :global(.explain-verbs .explain-section-title) {
+        color: #2e7d32;
+    }
+    :global(.explain-adj-adv) {
+        background: rgba(123, 31, 162, 0.09);
+        border-color: rgba(123, 31, 162, 0.26);
+    }
+    :global(.explain-adj-adv .explain-section-title) {
+        color: #6a1b9a;
+    }
+    :global(.explain-synonyms) {
+        background: rgba(251, 140, 0, 0.12);
+        border-color: rgba(251, 140, 0, 0.28);
+    }
+    :global(.explain-synonyms .explain-section-title) {
+        color: #ef6c00;
+    }
+    :global(.explain-antonyms) {
+        background: rgba(229, 57, 53, 0.11);
+        border-color: rgba(229, 57, 53, 0.28);
+    }
+    :global(.explain-antonyms .explain-section-title) {
+        color: #c62828;
+    }
+    :global(.explain-list) {
+        margin: 0;
+        padding-left: 16px;
+        display: grid;
+        gap: 5px;
+    }
+    :global(.explain-item) {
+        line-height: 1.35;
+    }
+    :global(.explain-lemma) {
+        color: #212121;
+        font-weight: 700;
+    }
+    :global(.explain-sep) {
+        margin: 0 6px;
+        opacity: 0.6;
+    }
+    :global(.explain-translation) {
+        color: #455a64;
+        font-style: italic;
     }
 
     /* Global styles for dynamic content */
@@ -1793,6 +2461,17 @@
     :global(body.dark-mode .learned) {
         background-color: rgba(144, 202, 249, 0.2);
         border-bottom-color: #90caf9;
+    }
+    :global(.explained-word) {
+        background-color: rgba(255, 214, 10, 0.32);
+        border-bottom: 2px solid #f4b400;
+        cursor: pointer;
+        border-radius: 3px;
+        padding: 0 1px;
+    }
+    :global(body.dark-mode .explained-word) {
+        background-color: rgba(255, 214, 10, 0.42);
+        border-bottom-color: #ffd54f;
     }
 
     .btn-danger {

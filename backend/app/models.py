@@ -48,6 +48,7 @@ class UserLesson(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
     lesson_id: Mapped[str] = mapped_column(ForeignKey("lessons.id"), nullable=False)
     is_favorite: Mapped[int] = mapped_column(Integer, default=0)
+    custom_title: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     added_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
 
 class LessonAudio(Base):
@@ -92,6 +93,21 @@ class Vocabulary(Base):
     study_view_count: Mapped[int] = mapped_column(Integer, default=0)
     
     # Timestamps
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class ExplainedWord(Base):
+    __tablename__ = "explained_words"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    text_id: Mapped[str] = mapped_column(String, nullable=False)
+    origin: Mapped[str] = mapped_column(String, nullable=False)
+    sentence_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    start_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    end_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    explanation_json: Mapped[str] = mapped_column(DBText, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
 

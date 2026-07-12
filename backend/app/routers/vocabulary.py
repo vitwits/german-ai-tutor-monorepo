@@ -1,14 +1,15 @@
 import uuid
 import re
 import math
+import json
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, update, delete
 
 from ..database import get_db
-from ..models import User, Vocabulary, UserFavoriteSentence, Sentence, ReportedLesson, UserBilling
-from ..schemas import VocabUpdateRequest, VocabRemoveRequest, ToggleFavRequest, VocabProgressRequest, QuickTranslateRequest, AddCustomWordRequest, VocabWordSchema
+from ..models import User, Vocabulary, ExplainedWord, UserFavoriteSentence, Sentence, ReportedLesson, UserBilling
+from ..schemas import VocabUpdateRequest, VocabRemoveRequest, ToggleFavRequest, VocabProgressRequest, QuickTranslateRequest, ExplainWordRequest, AddCustomWordRequest, VocabWordSchema
 from ..dependencies import get_current_user
 from .. import services
 from ..cost_calculation import record_translation_cost
@@ -432,6 +433,72 @@ async def quick_translate(
         "energy_left": user_billing.energy_left if user_billing else 0,
         "daily_spending": user_billing.daily_spending if user_billing else 0
     }
+
+
+@router.post("/explain_word")
+async def explain_word(
+    req: ExplainWordRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    word = req.text.strip()
+    if not word:
+        return {"ok": False, "error_key": "explain_failed"}
+
+    # Explain only one word; this endpoint is intentionally context-free.
+    if len(word.split()) != 1:
+        return {"ok": False, "error_key": "explain_single_word_only"}
+
+    try:
+        start_index = max(0, req.start_char_index)
+        end_index = start_index + len(word)
+
+        data = await services.explain_word(word, db=db)
+
+        existing_res = await db.execute(
+            select(ExplainedWord).where(
+                ExplainedWord.user_id == current_user.id,
+                ExplainedWord.text_id == req.tid,
+                ExplainedWord.sentence_index == req.sent_idx,
+                ExplainedWord.start_index == start_index,
+                ExplainedWord.end_index == end_index,
+            )
+        )
+        existing = existing_res.scalar_one_or_none()
+
+        if existing:
+            existing.origin = word
+            existing.explanation_json = json.dumps(data, ensure_ascii=False)
+            explained = existing
+        else:
+            explained = ExplainedWord(
+                id=str(uuid.uuid4()),
+                user_id=current_user.id,
+                text_id=req.tid,
+                origin=word,
+                sentence_index=req.sent_idx,
+                start_index=start_index,
+                end_index=end_index,
+                explanation_json=json.dumps(data, ensure_ascii=False),
+            )
+            db.add(explained)
+
+        await db.commit()
+
+        return {
+            "ok": True,
+            "explained_word": {
+                "id": explained.id,
+                "text": explained.origin,
+                "sentence_index": explained.sentence_index,
+                "start_index": explained.start_index,
+                "end_index": explained.end_index,
+                "explanation": data,
+            },
+        }
+    except Exception as e:
+        print(f"Explain word error: {e}")
+        return {"ok": False, "error_key": "explain_failed"}
 
 @router.post("/update_word")
 async def update_word(
