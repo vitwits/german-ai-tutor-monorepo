@@ -117,6 +117,12 @@ class QuickTranslateRequest(BaseModel):
     sent_idx: int
     start_char_index: int
 
+class ExplainWordRequest(BaseModel):
+    text: str
+    tid: str
+    sent_idx: int
+    start_char_index: int
+
 class AddCustomWordRequest(BaseModel):
     text: str
 

@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
 
 from ..database import get_db
-from ..models import User, Lesson, UserLesson, LessonAudio, Vocabulary, QuizResult
+from ..models import User, Lesson, UserLesson, LessonAudio, Vocabulary, ExplainedWord, QuizResult
 from ..schemas import TextGenerateRequest, TextReadSchema, ToggleFavRequest, QuizResultRequest, VocabWordSchema, CreateOwnTextRequest
 from ..dependencies import get_current_user
 from .. import services, cost_calculation
@@ -602,6 +602,31 @@ async def get_text(text_id: str, db: AsyncSession = Depends(get_db), current_use
     
     vocab_models = [VocabWordSchema.model_validate(v) for v in vocab]
 
+    explained_res = await db.execute(
+        select(ExplainedWord).where(
+            ExplainedWord.text_id == text_id,
+            ExplainedWord.user_id == current_user.id,
+        )
+    )
+    explained_rows = explained_res.scalars().all()
+    explained_words = []
+    for row in explained_rows:
+        try:
+            explanation = json.loads(row.explanation_json) if row.explanation_json else {}
+        except Exception:
+            explanation = {}
+
+        explained_words.append(
+            {
+                "id": row.id,
+                "text": row.origin,
+                "sentence_index": row.sentence_index,
+                "start_index": row.start_index,
+                "end_index": row.end_index,
+                "explanation": explanation,
+            }
+        )
+
     # Fetch last quiz result (now can come from either text_id or lesson_id)
     q_res = await db.execute(select(QuizResult).where(
         QuizResult.user_id == current_user.id
@@ -614,7 +639,12 @@ async def get_text(text_id: str, db: AsyncSession = Depends(get_db), current_use
     if last_result:
         last_result_data = {"score": last_result.score, "total_questions": last_result.total_questions}
     
-    return {"text": text_model, "vocab": vocab_models, "last_quiz_result": last_result_data}
+    return {
+        "text": text_model,
+        "vocab": vocab_models,
+        "explained_words": explained_words,
+        "last_quiz_result": last_result_data,
+    }
 
 @router.post("/save_quiz_result")
 async def save_quiz_result(

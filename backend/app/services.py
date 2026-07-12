@@ -710,6 +710,70 @@ async def translate_word(text, ctx, db: AsyncSession = None, user_id: str = None
             await asyncio.sleep(1)
 
 
+async def explain_word(text: str, db: AsyncSession = None):
+    """
+    Build lexical explanation for one German word.
+    Uses the same LLM job settings as quick_translate (translate_vocabulary),
+    but with a dedicated explain_word_prompt template from model_prompts.
+    """
+    model_id = await get_llm_model_for_job("translate_vocabulary", db)
+
+    from .models import ModelPrompt
+
+    result = await db.execute(
+        select(ModelPrompt.prompt).where(ModelPrompt.name == "explain_word_prompt")
+    )
+    prompt_template = result.scalar_one_or_none()
+
+    if not prompt_template:
+        prompt_template = (
+            "Act as an expert lexicographer and language tutor.\n\n"
+            "Task:\n"
+            "Analyze the given target word and provide its derivatives (across different parts of speech), synonyms, and antonyms.\n\n"
+            "Input word: {word}\n\n"
+            "Requirements:\n"
+            "1. Provide translations for all words into both Ukrainian (UK) and English (EN).\n"
+            "2. Do not hallucinate or force data. If a word doesn't have common derivatives, synonyms, or antonyms, leave that section empty or omit it. Quality over quantity.\n"
+            "3. Keep it structured, concise, and focused on highly usable words.\n"
+            "4. Return the output strictly as a valid JSON object. Do not include any conversational filler, markdown formatting, or explanations outside the JSON.\n\n"
+            "JSON Schema:\n"
+            "{\n"
+            '  "target_word": "string",\n'
+            '  "derivatives": {\n'
+            '    "nouns": [\n'
+            '      { "word": "string", "translation_uk": "string", "translation_en": "string" }\n'
+            "    ],\n"
+            '    "verbs": [\n'
+            '      { "word": "string", "translation_uk": "string", "translation_en": "string" }\n'
+            "    ],\n"
+            '    "adjectives_adverbs": [\n'
+            '      { "word": "string", "translation_uk": "string", "translation_en": "string" }\n'
+            "    ]\n"
+            "  },\n"
+            '  "synonyms": [\n'
+            '    { "word": "string", "translation_uk": "string", "translation_en": "string" }\n'
+            "  ],\n"
+            '  "antonyms": [\n'
+            '    { "word": "string", "translation_uk": "string", "translation_en": "string" }\n'
+            "  ]\n"
+            "}"
+        )
+
+    prompt = prompt_template.replace("{word}", text).replace("{text}", text)
+
+    response = client.models.generate_content(
+        model=model_id,
+        contents=prompt,
+        config=types.GenerateContentConfig(response_mime_type="application/json"),
+    )
+
+    data = json.loads(clean_json_response(response.text))
+    if isinstance(data, list):
+        data = data[0] if data else {}
+
+    return data
+
+
 async def translate_custom_word_async(text: str, user_id: str = None, db: AsyncSession = None):
     """
     Translate custom word/phrase without lesson context.
