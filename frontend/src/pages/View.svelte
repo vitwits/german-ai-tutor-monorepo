@@ -653,6 +653,9 @@
                     settled = true;
                     currentAudio = null;
                     if (!isPlayingAll) playingIndex = -1;
+                    if (idx === dictationCurrentSentenceIndex) {
+                        dictationPlaying = false;
+                    }
                     userInitiatedPlay = false;
                     lastPlayedIdx = -1;
                     resolve();
@@ -665,7 +668,6 @@
                 currentAudio.onpause = () => {
                     if (preserveOnPause) {
                         if (settled) return;
-                        settled = true;
                         resolve();
                         return;
                     }
