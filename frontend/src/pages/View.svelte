@@ -29,6 +29,21 @@
     let userInitiatedPlay = false; // true if user clicked Play (vs Play All calling playAudio)
     let vocabPlayingId = null; // ID of vocabulary word currently playing
     let currentVocabPlayId = null; // Track which vocab play session is active (to abort old ones)
+    let showDictation = false;
+    let dictationOrder = [];
+    let dictationCursor = 0;
+    let dictationInput = "";
+    let dictationResult = null;
+    let dictationChecking = false;
+    let dictationPlaying = false;
+    let dictationPlaybackRate = 0.8;
+    let dictationCurrentSentenceIndex = -1;
+    let dictationCurrentSentence = null;
+    let dictationHasNext = false;
+    let dictationPassedCurrentSentence = false;
+    let dictationCompletedOnce = false;
+    let showDictationSplash = false;
+    const DICTATION_PASS_SCORE = 95;
 
     let editingTitle = false;
     let editTitleValue = "";
@@ -114,6 +129,7 @@
     $: if (id && id !== prevId && $user) {
         prevId = id;
         loadText();
+        loadDictationCompletion();
     }
 
     async function loadText() {
@@ -227,7 +243,228 @@
     // Track which audio is currently being played to detect duplicate calls
     let lastPlayedIdx = -1;
 
-    async function playAudio(txt, idx = -1) {
+    $: dictationCurrentSentenceIndex =
+        dictationOrder.length > 0 && dictationCursor >= 0
+            ? dictationOrder[dictationCursor]
+            : -1;
+    $: dictationCurrentSentence =
+        dictationCurrentSentenceIndex >= 0
+            ? sentences[dictationCurrentSentenceIndex]
+            : null;
+    $: dictationHasNext = dictationCursor < dictationOrder.length - 1;
+    $: dictationPassedCurrentSentence =
+        !!dictationResult &&
+        Number(dictationResult.similarity_score || 0) >= DICTATION_PASS_SCORE;
+
+    function getDictationCompletionKey() {
+        return `dictation_completed:${$user?.id || "anon"}:${id}`;
+    }
+
+    function loadDictationCompletion() {
+        try {
+            if (typeof window === "undefined" || !id) return;
+            dictationCompletedOnce =
+                localStorage.getItem(getDictationCompletionKey()) === "1";
+        } catch (e) {
+            dictationCompletedOnce = false;
+        }
+    }
+
+    function markDictationCompleted() {
+        dictationCompletedOnce = true;
+        try {
+            if (typeof window === "undefined") return;
+            localStorage.setItem(getDictationCompletionKey(), "1");
+        } catch (e) {}
+    }
+
+    function stopCurrentPlayback() {
+        isPlayingAll = false;
+        if (currentAudio) {
+            currentAudio.pause();
+            currentAudio = null;
+        }
+        playingIndex = -1;
+        userInitiatedPlay = false;
+        lastPlayedIdx = -1;
+        vocabPlayingId = null;
+        currentVocabPlayId = null;
+    }
+
+    function shuffledIndices(len) {
+        const arr = Array.from({ length: len }, (_, i) => i);
+        for (let i = arr.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        return arr;
+    }
+
+    function openDictation() {
+        if (!sentences.length) return;
+        stopCurrentPlayback();
+        dictationOrder = shuffledIndices(sentences.length);
+        dictationCursor = 0;
+        dictationInput = "";
+        dictationResult = null;
+        dictationChecking = false;
+        dictationPlaying = false;
+        dictationPlaybackRate = 0.8;
+        showDictationSplash = false;
+        showDictation = true;
+    }
+
+    function closeDictation() {
+        showDictation = false;
+        dictationPlaying = false;
+        dictationChecking = false;
+        dictationResult = null;
+        dictationInput = "";
+        stopCurrentPlayback();
+    }
+
+    async function playDictationSentence() {
+        if (!dictationCurrentSentence || dictationPlaying) return;
+        dictationPlaying = true;
+        try {
+            await playAudio(
+                dictationCurrentSentence.de,
+                dictationCurrentSentenceIndex,
+                dictationPlaybackRate,
+                true,
+            );
+        } finally {
+            dictationPlaying = false;
+        }
+    }
+
+    function stopDictationSentence() {
+        if (currentAudio && playingIndex === dictationCurrentSentenceIndex) {
+            currentAudio.pause();
+            dictationPlaying = false;
+        }
+    }
+
+    async function toggleDictationPlayback() {
+        if (
+            currentAudio &&
+            currentAudio.paused &&
+            playingIndex === dictationCurrentSentenceIndex
+        ) {
+            currentAudio.playbackRate = dictationPlaybackRate;
+            dictationPlaying = true;
+            currentAudio.play().catch(() => {
+                dictationPlaying = false;
+            });
+            return;
+        }
+
+        if (dictationPlaying) {
+            stopDictationSentence();
+            return;
+        }
+        await playDictationSentence();
+    }
+
+    function restartDictationSentence() {
+        if (!dictationCurrentSentence) return;
+
+        if (currentAudio && playingIndex === dictationCurrentSentenceIndex) {
+            currentAudio.currentTime = 0;
+            currentAudio.playbackRate = dictationPlaybackRate;
+            currentAudio.play().catch(() => {});
+            dictationPlaying = true;
+            return;
+        }
+
+        playDictationSentence();
+    }
+
+    function updateDictationSpeed(delta) {
+        const nextRate = Math.min(
+            1,
+            Math.max(
+                0.4,
+                Math.round((dictationPlaybackRate + delta) * 10) / 10,
+            ),
+        );
+        dictationPlaybackRate = nextRate;
+        if (currentAudio && playingIndex === dictationCurrentSentenceIndex) {
+            currentAudio.playbackRate = dictationPlaybackRate;
+        }
+    }
+
+    async function nextDictationSentence() {
+        if (!dictationPassedCurrentSentence) {
+            addToast(ui.dictation_need_repeat, "info");
+            return;
+        }
+
+        if (!dictationHasNext) {
+            showDictation = false;
+            showDictationSplash = true;
+            markDictationCompleted();
+            setTimeout(() => launchConfettiInto("dictation-splash"), 250);
+            return;
+        }
+
+        dictationCursor += 1;
+        dictationInput = "";
+        dictationResult = null;
+        await tick();
+        await playDictationSentence();
+    }
+
+    async function retryDictationSentence() {
+        dictationInput = "";
+        dictationResult = null;
+        await tick();
+        await playDictationSentence();
+    }
+
+    function closeDictationSplash() {
+        showDictationSplash = false;
+        const container = document.getElementById("dictation-splash");
+        if (container) {
+            const particles = container.querySelectorAll(".confetti");
+            particles.forEach((p) => p.remove());
+        }
+    }
+
+    function restartDictationExam() {
+        closeDictationSplash();
+        openDictation();
+    }
+
+    async function checkDictation() {
+        if (
+            !dictationCurrentSentence ||
+            !dictationInput.trim() ||
+            dictationChecking
+        )
+            return;
+
+        dictationChecking = true;
+        try {
+            const res = await api.post(`/texts/${id}/dictation_check`, {
+                sentence_index: dictationCurrentSentenceIndex,
+                user_text: dictationInput,
+            });
+            dictationResult = res.data;
+        } catch (e) {
+            console.error(e);
+            addToast(ui.error_generic, "error");
+        } finally {
+            dictationChecking = false;
+        }
+    }
+
+    async function playAudio(
+        txt,
+        idx = -1,
+        playbackRate = 1,
+        preserveOnPause = false,
+    ) {
         // If user clicks the same sentence while it's playing, pause it
         if (
             userInitiatedPlay &&
@@ -277,26 +514,32 @@
             }
 
             return new Promise((resolve) => {
-                currentAudio = new Audio(audioUrl);
-                currentAudio.onended = () => {
+                let settled = false;
+                const finish = () => {
+                    if (settled) return;
+                    settled = true;
                     currentAudio = null;
                     if (!isPlayingAll) playingIndex = -1;
                     userInitiatedPlay = false;
                     lastPlayedIdx = -1;
                     resolve();
                 };
-                currentAudio.onerror = () => {
-                    currentAudio = null;
-                    if (!isPlayingAll) playingIndex = -1;
-                    userInitiatedPlay = false;
-                    lastPlayedIdx = -1;
-                    resolve();
+
+                currentAudio = new Audio(audioUrl);
+                currentAudio.playbackRate = playbackRate;
+                currentAudio.onended = finish;
+                currentAudio.onerror = finish;
+                currentAudio.onpause = () => {
+                    if (preserveOnPause) {
+                        if (settled) return;
+                        settled = true;
+                        resolve();
+                        return;
+                    }
+                    finish();
                 };
                 currentAudio.play().catch((e) => {
-                    if (!isPlayingAll) playingIndex = -1;
-                    userInitiatedPlay = false;
-                    lastPlayedIdx = -1;
-                    resolve();
+                    finish();
                 });
             });
         } catch (e) {
@@ -1075,8 +1318,12 @@
     }
 
     function launchConfetti() {
+        launchConfettiInto("quiz-splash");
+    }
+
+    function launchConfettiInto(containerId) {
         const colors = ["#FFC107", "#2196F3", "#4CAF50", "#F44336", "#9C27B0"];
-        const container = document.getElementById("quiz-splash");
+        const container = document.getElementById(containerId);
         if (!container) return;
 
         for (let i = 0; i < 50; i++) {
@@ -1188,6 +1435,47 @@
         }
     }
 
+    function handleViewKeydown(e) {
+        if (showDictationSplash) {
+            if (e.key === "Escape") {
+                e.preventDefault();
+                closeDictationSplash();
+            }
+            return;
+        }
+
+        if (!showDictation) return;
+
+        if (e.key === "1") {
+            e.preventDefault();
+            toggleDictationPlayback();
+            return;
+        }
+
+        if (e.key === "2") {
+            e.preventDefault();
+            restartDictationSentence();
+            return;
+        }
+
+        if (e.key === "3") {
+            e.preventDefault();
+            updateDictationSpeed(-0.1);
+            return;
+        }
+
+        if (e.key === "4") {
+            e.preventDefault();
+            updateDictationSpeed(0.1);
+            return;
+        }
+
+        if (e.key === "Escape") {
+            e.preventDefault();
+            closeDictation();
+        }
+    }
+
     // --- ACTIONS ---
 
     async function toggleTextFav() {
@@ -1278,6 +1566,8 @@
     onMount(() => {
         window.addEventListener("beforeunload", handleBeforeUnload);
         document.addEventListener("click", handleLearnedClick);
+        window.addEventListener("keydown", handleViewKeydown);
+        loadDictationCompletion();
     });
 
     // Підсвічування речення при переході з Vocab (через URL hash #sent-N)
@@ -1300,6 +1590,7 @@
         window.removeEventListener("beforeunload", handleBeforeUnload);
         if (typeof document !== "undefined")
             document.removeEventListener("click", handleLearnedClick);
+        window.removeEventListener("keydown", handleViewKeydown);
         if (currentAudio) currentAudio.pause();
 
         clearLearnedPopupTimer();
@@ -1424,10 +1715,25 @@
                 </button>
 
                 <button
-                    class="btn-contained"
-                    onclick={playAll}
+                    class="badge-btn dictation-launch-btn"
+                    onclick={openDictation}
                     style="margin-left: auto;"
+                    title={ui.dictation}
                 >
+                    <span class="material-symbols-outlined">stylus_note</span>
+                    {#if dictationCompletedOnce}
+                        <span
+                            class="dictation-done-badge"
+                            title={ui.dictation_completed_badge || "Completed"}
+                        >
+                            <span class="material-symbols-outlined"
+                                >check_circle</span
+                            >
+                        </span>
+                    {/if}
+                </button>
+
+                <button class="btn-contained" onclick={playAll}>
                     <span class="material-symbols-outlined"
                         >{isPlayingAll ? "pause" : "play_arrow"}</span
                     >
@@ -1479,6 +1785,186 @@
                 {/each}
             </div>
         </div>
+
+        {#if showDictation}
+            <div class="dictation-overlay" role="dialog" aria-modal="true">
+                <button
+                    class="dictation-close-btn"
+                    onclick={closeDictation}
+                    aria-label="Close"
+                >
+                    <span class="material-symbols-outlined">close</span>
+                    <div class="dictation-close-hint">Esc</div>
+                </button>
+
+                <div class="dictation-container">
+                    <div class="fc-progress-wrapper">
+                        <div class="fc-progress-track">
+                            <div
+                                class="fc-progress-fill"
+                                style="width: {(dictationCursor /
+                                    Math.max(dictationOrder.length, 1)) *
+                                    100}%"
+                            ></div>
+                        </div>
+                        <div class="fc-progress-text">
+                            {Math.min(
+                                dictationCursor + 1,
+                                dictationOrder.length,
+                            )} / {dictationOrder.length}
+                        </div>
+                    </div>
+
+                    <div class="dictation-main-actions">
+                        <button
+                            class="dictation-play-btn"
+                            onclick={toggleDictationPlayback}
+                            disabled={!dictationCurrentSentence}
+                        >
+                            <span class="material-symbols-outlined"
+                                >{dictationPlaying
+                                    ? "pause"
+                                    : "play_arrow"}</span
+                            >
+                        </button>
+                        <div class="dictation-play-caption">
+                            {ui.dictation_play_btn ||
+                                (($user?.interface_language || "ukr") === "eng"
+                                    ? "Play"
+                                    : "Грати")}
+                        </div>
+                        <div class="dictation-play-hotkey">
+                            {ui.dictation_hotkeys_hint ||
+                                (($user?.interface_language || "ukr") === "eng"
+                                    ? "1 Play/Stop - 2 Restart - 3 Slower - 4 Faster"
+                                    : "1 Грати/Пауза - 2 Спочатку - 3 Повільніше - 4 Швидше")}
+                        </div>
+                    </div>
+
+                    {#if !dictationResult}
+                        <textarea
+                            class="dictation-input"
+                            bind:value={dictationInput}
+                            placeholder={ui.dictation_input_placeholder}
+                            rows="4"
+                        ></textarea>
+                    {/if}
+
+                    <div class="dictation-actions">
+                        {#if !dictationResult}
+                            <button
+                                class="btn-contained"
+                                onclick={checkDictation}
+                                disabled={!dictationInput.trim() ||
+                                    dictationChecking}
+                            >
+                                {ui.dictation_check_btn}
+                            </button>
+                        {:else}
+                            <button
+                                class="btn-contained"
+                                onclick={retryDictationSentence}
+                            >
+                                {ui.retry_btn}
+                            </button>
+                            <button
+                                class="btn-contained dictation-next-btn"
+                                onclick={nextDictationSentence}
+                                disabled={!dictationPassedCurrentSentence ||
+                                    dictationPlaying}
+                            >
+                                {dictationHasNext
+                                    ? ui.dictation_next_btn
+                                    : ui.dictation_finish_btn || ui.done_btn}
+                            </button>
+                        {/if}
+                    </div>
+
+                    {#if dictationResult}
+                        <div class="dictation-result-card">
+                            <div class="dictation-score">
+                                {ui.dictation_similarity}:
+                                <strong
+                                    >{Number(
+                                        dictationResult.similarity_score,
+                                    ).toFixed(2)}%</strong
+                                >
+                            </div>
+
+                            {#if !dictationPassedCurrentSentence}
+                                <div class="dictation-repeat-warning">
+                                    {ui.dictation_need_repeat}
+                                </div>
+                            {/if}
+
+                            <div class="dictation-diff-block">
+                                <div class="dictation-diff-label">
+                                    {ui.dictation_original}
+                                </div>
+                                <div class="dictation-diff-line expected">
+                                    {#each dictationResult.segments as seg}
+                                        {#if seg.expected}
+                                            <span class="diff-chip {seg.type}">
+                                                {seg.expected}
+                                            </span>
+                                        {/if}
+                                    {/each}
+                                </div>
+                            </div>
+
+                            <div class="dictation-diff-block">
+                                <div class="dictation-diff-label">
+                                    {ui.dictation_your_text}
+                                </div>
+                                <div class="dictation-diff-line actual">
+                                    {#each dictationResult.segments as seg}
+                                        {#if seg.actual}
+                                            <span class="diff-chip {seg.type}">
+                                                {seg.actual}
+                                            </span>
+                                        {:else if seg.type === "delete"}
+                                            <span
+                                                class="diff-chip diff-missing"
+                                            >
+                                                [missing]
+                                            </span>
+                                        {/if}
+                                    {/each}
+                                </div>
+                            </div>
+                        </div>
+                    {/if}
+                </div>
+            </div>
+        {/if}
+
+        {#if showDictationSplash}
+            <div id="dictation-splash" transition:fade={{ duration: 300 }}>
+                <h2 style="margin-bottom: 20px;">
+                    {ui.dictation_completed_title || ui.quiz_completed}
+                </h2>
+                <div
+                    style="font-size: 1.05rem; margin-bottom: 34px; opacity: 0.85; text-align: center;"
+                >
+                    {ui.dictation_completed_subtitle || ui.dictation_done}
+                </div>
+                <div style="display: flex; gap: 20px;">
+                    <button
+                        class="btn-contained"
+                        style="background: white; color: black;"
+                        onclick={closeDictationSplash}
+                    >
+                        {ui.dictation_finish_btn || ui.done_btn}
+                    </button>
+                    <button
+                        class="btn-contained"
+                        onclick={restartDictationExam}
+                    >
+                        {ui.dictation_repeat_btn || ui.retry_btn}
+                    </button>
+                </div>
+            </div>
+        {/if}
 
         <!-- TABS -->
         <div class="tabs-container">
@@ -2044,6 +2530,318 @@
         opacity: 0.7;
     }
 
+    .dictation-launch-btn {
+        width: 36px;
+        height: 36px;
+        min-width: 36px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        position: relative;
+    }
+
+    .dictation-done-badge {
+        position: absolute;
+        right: -7px;
+        top: -7px;
+        width: 18px;
+        height: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #2e7d32;
+        background: var(--bg);
+        border-radius: 50%;
+    }
+
+    .dictation-done-badge .material-symbols-outlined {
+        font-size: 18px;
+    }
+
+    .dictation-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: var(--bg);
+        z-index: 2000;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+        scrollbar-gutter: stable;
+        overflow-x: hidden;
+    }
+
+    .dictation-overlay :global(*) {
+        outline: none !important;
+    }
+
+    .dictation-close-btn {
+        position: absolute;
+        top: 24px;
+        right: 24px;
+        z-index: 2005;
+        background: none;
+        border: none;
+        color: var(--on-surface);
+        cursor: pointer;
+        padding: 8px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+    }
+
+    .dictation-close-btn .material-symbols-outlined {
+        font-size: 30px;
+    }
+
+    .dictation-close-hint {
+        font-size: 0.75rem;
+        font-weight: 600;
+        opacity: 0.85;
+    }
+
+    .dictation-container {
+        width: 100%;
+        max-width: 600px;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        gap: 26px;
+        background: transparent;
+        padding: 66px 20px 34px;
+        box-sizing: border-box;
+        overflow-y: auto;
+        overflow-x: hidden;
+    }
+
+    .fc-progress-wrapper {
+        padding: 0 24px;
+        margin-bottom: 0;
+        text-align: center;
+    }
+
+    .fc-progress-track {
+        height: 12px;
+        background: rgba(0, 0, 0, 0.1);
+        border-radius: 6px;
+        overflow: hidden;
+        margin-bottom: 4px;
+    }
+
+    .fc-progress-fill {
+        height: 100%;
+        background: var(--primary);
+        width: 0%;
+        transition: width 0.3s;
+    }
+
+    .fc-progress-text {
+        font-size: 0.8rem;
+        opacity: 0.6;
+    }
+
+    .dictation-main-actions {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 0;
+    }
+
+    .dictation-play-btn {
+        width: 120px;
+        height: 120px;
+        border-radius: 50%;
+        background: var(--primary);
+        color: white;
+        border: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 8px 20px rgba(25, 118, 210, 0.4);
+        transition: transform 0.2s;
+    }
+
+    .dictation-play-btn:active {
+        transform: scale(0.95);
+    }
+
+    .dictation-play-btn .material-symbols-outlined {
+        font-size: 64px;
+    }
+
+    .dictation-play-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+    }
+
+    .dictation-play-caption {
+        margin-top: 14px;
+        margin-bottom: 14px;
+        opacity: 0.8;
+        font-weight: 500;
+        font-size: 1.2rem;
+    }
+
+    .dictation-play-hotkey {
+        margin-top: 4px;
+        opacity: 0.65;
+        font-weight: 500;
+        font-size: 0.85rem;
+    }
+
+    .dictation-input {
+        width: 100%;
+        min-height: 250px;
+        resize: vertical;
+        border: 2px solid var(--border);
+        border-radius: 16px;
+        padding: 18px 20px;
+        box-sizing: border-box;
+        font-size: 1.4rem;
+        line-height: 1.5;
+        font-family: var(--font-text);
+        color: var(--on-surface);
+        background: rgba(0, 0, 0, 0.02);
+        margin-bottom: 0;
+    }
+
+    .dictation-input:focus {
+        outline: none;
+        border-color: var(--primary);
+        background: rgba(25, 118, 210, 0.04);
+    }
+
+    .dictation-actions {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 0;
+        justify-content: space-between;
+    }
+
+    .dictation-actions .btn-contained {
+        min-width: 130px;
+    }
+
+    .dictation-next-btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+    }
+
+    .dictation-repeat-warning {
+        color: #b26a00;
+        font-size: 0.95rem;
+        font-weight: 600;
+        margin-bottom: 2px;
+    }
+
+    .dictation-result-card {
+        border: none;
+        border-radius: 0;
+        padding: 0;
+        background: transparent;
+        display: grid;
+        gap: 12px;
+    }
+
+    .dictation-score {
+        font-size: 1.1rem;
+    }
+
+    .dictation-diff-label {
+        font-size: 0.9rem;
+        opacity: 0.65;
+        margin-bottom: 4px;
+        font-weight: 600;
+    }
+
+    .dictation-diff-line {
+        white-space: pre-wrap;
+        line-height: 1.6;
+        font-size: 1.08rem;
+        border-radius: 0;
+        padding: 0;
+        background: transparent;
+    }
+
+    .diff-chip.equal {
+        background: transparent;
+    }
+
+    .diff-chip.replace {
+        background: rgba(255, 152, 0, 0.22);
+        border-radius: 4px;
+    }
+
+    .diff-chip.delete {
+        background: rgba(244, 67, 54, 0.2);
+        border-radius: 4px;
+    }
+
+    .diff-chip.insert {
+        background: rgba(33, 150, 243, 0.2);
+        border-radius: 4px;
+    }
+
+    .diff-chip.diff-missing {
+        background: rgba(244, 67, 54, 0.2);
+        border-radius: 4px;
+        font-style: italic;
+        padding: 0 4px;
+    }
+
+    @media (max-width: 768px) {
+        .dictation-container {
+            padding: 72px 20px 24px;
+            gap: 16px;
+            max-width: 100%;
+            height: 100%;
+        }
+
+        .dictation-play-btn {
+            width: 108px;
+            height: 108px;
+        }
+
+        .dictation-play-btn .material-symbols-outlined {
+            font-size: 54px;
+        }
+
+        .dictation-play-caption {
+            margin-top: 10px;
+            font-size: 1rem;
+        }
+
+        .dictation-play-hotkey {
+            font-size: 0.8rem;
+        }
+
+        .dictation-input {
+            min-height: 140px;
+            font-size: 1.1rem;
+        }
+
+        .dictation-actions {
+            flex-direction: column;
+        }
+
+        .dictation-actions .btn-contained {
+            width: 100%;
+        }
+
+        .dictation-close-btn {
+            right: 12px;
+            top: 12px;
+        }
+    }
+
     .report-btn {
         padding: 4px 12px;
         border-radius: 4px;
@@ -2240,6 +3038,21 @@
 
     /* Splash Screen */
     #quiz-splash {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.85);
+        backdrop-filter: blur(8px);
+        z-index: 10000;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: white;
+    }
+    #dictation-splash {
         position: fixed;
         top: 0;
         left: 0;

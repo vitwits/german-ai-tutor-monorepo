@@ -2,13 +2,14 @@ import json
 import uuid
 import math
 import asyncio
+import difflib
 from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
 
 from ..database import get_db
 from ..models import User, Lesson, UserLesson, LessonAudio, Vocabulary, ExplainedWord, QuizResult
-from ..schemas import TextGenerateRequest, TextReadSchema, ToggleFavRequest, QuizResultRequest, VocabWordSchema, CreateOwnTextRequest
+from ..schemas import TextGenerateRequest, TextReadSchema, ToggleFavRequest, QuizResultRequest, VocabWordSchema, CreateOwnTextRequest, DictationCheckRequest
 from ..dependencies import get_current_user
 from .. import services, cost_calculation
 from ..services import deduct_user_energy
@@ -564,6 +565,62 @@ async def generate_sentence_audio(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error generating audio: {str(e)}")
+
+
+@router.post("/texts/{lesson_id}/dictation_check")
+async def dictation_check(
+    lesson_id: str,
+    req: DictationCheckRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    lesson_result = await db.execute(select(Lesson).where(Lesson.id == lesson_id))
+    lesson = lesson_result.scalar_one_or_none()
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+
+    user_lesson_result = await db.execute(
+        select(UserLesson).where(
+            and_(UserLesson.user_id == current_user.id, UserLesson.lesson_id == lesson_id)
+        )
+    )
+    if not user_lesson_result.scalar_one_or_none():
+        raise HTTPException(status_code=403, detail="No access to this lesson")
+
+    try:
+        lesson_sentences = json.loads(lesson.content_json or "[]")
+    except Exception:
+        lesson_sentences = []
+
+    if req.sentence_index < 0 or req.sentence_index >= len(lesson_sentences):
+        raise HTTPException(status_code=400, detail="Invalid sentence index")
+
+    sentence_data = lesson_sentences[req.sentence_index]
+    expected_text = sentence_data.get("de", "") if isinstance(sentence_data, dict) else str(sentence_data)
+
+    expected_norm = " ".join((expected_text or "").strip().split())
+    user_norm = " ".join((req.user_text or "").strip().split())
+
+    matcher = difflib.SequenceMatcher(a=expected_norm, b=user_norm, autojunk=False)
+    similarity_score = round(matcher.ratio() * 100, 2)
+
+    segments = []
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        segments.append(
+            {
+                "type": tag,
+                "expected": expected_norm[i1:i2],
+                "actual": user_norm[j1:j2],
+            }
+        )
+
+    return {
+        "ok": True,
+        "similarity_score": similarity_score,
+        "segments": segments,
+        "expected_text": expected_text,
+        "typed_text": req.user_text,
+    }
 
 @router.get("/texts/{text_id}")
 async def get_text(text_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
