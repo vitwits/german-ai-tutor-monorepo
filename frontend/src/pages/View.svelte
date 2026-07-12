@@ -90,6 +90,12 @@
     // Grammar Cache
     let grammarCache = {};
 
+    // Sentence button modes: tracks hover state and mode for each sentence
+    let sentenceButtonMode = {}; // { sentenceIndex: 'normal' | 'play' | 'translate' }
+    let sentenceHoverTimers = {}; // { sentenceIndex: timeoutId }
+    let sentenceTranslationDisplay = {}; // { sentenceIndex: true/false }
+    let sentenceTranslationTimers = {}; // { sentenceIndex: timeoutId }
+
     // Reactive UI strings
     $: ui = getUI($user?.interface_language || "ukr");
 
@@ -826,6 +832,62 @@
 
     // --- TABS & NAVIGATION GUARD ---
 
+    // Sentence button hover/translation modes
+    function onSentenceButtonHover(sentenceIndex) {
+        // Clear any existing timer for this sentence
+        if (sentenceHoverTimers[sentenceIndex]) {
+            clearTimeout(sentenceHoverTimers[sentenceIndex]);
+        }
+
+        // Set mode to 'play' immediately
+        sentenceButtonMode[sentenceIndex] = "play";
+        sentenceButtonMode = sentenceButtonMode; // Trigger reactivity
+
+        // Start timer to switch to 'translate' mode after 2 seconds
+        sentenceHoverTimers[sentenceIndex] = setTimeout(() => {
+            sentenceButtonMode[sentenceIndex] = "translate";
+            sentenceButtonMode = sentenceButtonMode; // Trigger reactivity
+        }, 2000);
+    }
+
+    function onSentenceButtonLeave(sentenceIndex) {
+        // Clear timer
+        if (sentenceHoverTimers[sentenceIndex]) {
+            clearTimeout(sentenceHoverTimers[sentenceIndex]);
+            delete sentenceHoverTimers[sentenceIndex];
+        }
+
+        // Reset mode to normal
+        sentenceButtonMode[sentenceIndex] = "normal";
+        sentenceButtonMode = sentenceButtonMode; // Trigger reactivity
+    }
+
+    function onSentenceButtonClick(sentenceIndex, sentence) {
+        const mode = sentenceButtonMode[sentenceIndex];
+
+        if (mode === "translate" || mode === "normal") {
+            // Show translation for 5 seconds
+            sentenceTranslationDisplay[sentenceIndex] = true;
+            sentenceTranslationDisplay = sentenceTranslationDisplay; // Trigger reactivity
+
+            // Clear previous timer if exists
+            if (sentenceTranslationTimers[sentenceIndex]) {
+                clearTimeout(sentenceTranslationTimers[sentenceIndex]);
+            }
+
+            // Hide translation after 5 seconds
+            sentenceTranslationTimers[sentenceIndex] = setTimeout(() => {
+                sentenceTranslationDisplay[sentenceIndex] = false;
+                sentenceTranslationDisplay = sentenceTranslationDisplay; // Trigger reactivity
+                delete sentenceTranslationTimers[sentenceIndex];
+            }, 5000);
+        } else if (mode === "play") {
+            // Play audio (same as before)
+            userInitiatedPlay = true;
+            playAudio(sentence.de, sentenceIndex);
+        }
+    }
+
     function switchTab(tab) {
         if (activeTab === tab) return;
 
@@ -978,6 +1040,14 @@
         if (typeof document !== "undefined")
             document.removeEventListener("click", handleLearnedClick);
         if (currentAudio) currentAudio.pause();
+
+        // Clean up all timers
+        Object.values(sentenceHoverTimers).forEach((timer) =>
+            clearTimeout(timer),
+        );
+        Object.values(sentenceTranslationTimers).forEach((timer) =>
+            clearTimeout(timer),
+        );
     });
 </script>
 
@@ -1118,25 +1188,29 @@
                                 : ''}"
                             role="button"
                             tabindex="0"
-                            onclick={() => {
-                                userInitiatedPlay = true;
-                                playAudio(s.de, i);
-                            }}
+                            onmouseenter={() => onSentenceButtonHover(i)}
+                            onmouseleave={() => onSentenceButtonLeave(i)}
+                            onclick={() => onSentenceButtonClick(i, s)}
                             onkeydown={(e) =>
                                 e.key === "Enter" &&
-                                ((userInitiatedPlay = true),
-                                playAudio(s.de, i))}
+                                onSentenceButtonClick(i, s)}
                             ><span class="sent-num-label">{i + 1}</span><span
                                 class="sent-num-icon material-symbols-outlined"
-                                >{playingIndex === i &&
-                                currentAudio &&
-                                !currentAudio.paused
-                                    ? "pause"
-                                    : "play_arrow"}</span
+                                >{sentenceButtonMode[i] === "translate" &&
+                                !showTrans
+                                    ? "translate"
+                                    : playingIndex === i &&
+                                        currentAudio &&
+                                        !currentAudio.paused
+                                      ? "pause"
+                                      : "play_arrow"}</span
                             ></span
                         ><span class="de-text">{@html s.de_html}</span
                         >{#if showTrans}
                             <span class="trans-row">{s.display_trans}</span
+                            >{/if}{#if sentenceTranslationDisplay[i]}
+                            <span class="sentence-translation-popup"
+                                >{s.display_trans}</span
                             >{/if}</span
                     >
                 {/each}
@@ -1536,6 +1610,10 @@
         position: relative;
     }
 
+    .view-container .card {
+        padding: 40px;
+    }
+
     .toolbar {
         display: flex;
         align-items: center;
@@ -1615,6 +1693,25 @@
         color: var(--primary);
         font-size: 1.1rem;
         margin-left: 6px;
+    }
+
+    .sentence-translation-popup {
+        display: inline;
+        color: var(--primary);
+        font-size: 1.1rem;
+        margin-left: 6px;
+        animation: fadeInOut 5s ease-in-out;
+    }
+
+    @keyframes fadeInOut {
+        0%,
+        100% {
+            opacity: 0;
+        }
+        10%,
+        90% {
+            opacity: 1;
+        }
     }
 
     .grammar-box {
