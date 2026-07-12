@@ -174,6 +174,17 @@ class DictationCheckRequest(BaseModel):
     sentence_index: int
     user_text: str
 
+
+class DictationProgressSaveRequest(BaseModel):
+    order: List[int]
+    cursor: int
+    passed_indices: List[int]
+    playback_rate: float = 0.8
+
+
+class DictationProgressClearRequest(BaseModel):
+    keep_completed: bool = True
+
 class UserSettingsUpdate(BaseModel):
     interface_language: Optional[str] = None
     vocab_session_size: Optional[int] = None

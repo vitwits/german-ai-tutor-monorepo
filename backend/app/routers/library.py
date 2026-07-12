@@ -8,8 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
 
 from ..database import get_db
-from ..models import User, Lesson, UserLesson, LessonAudio, Vocabulary, ExplainedWord, QuizResult
-from ..schemas import TextGenerateRequest, TextReadSchema, ToggleFavRequest, QuizResultRequest, VocabWordSchema, CreateOwnTextRequest, DictationCheckRequest
+from ..models import User, Lesson, UserLesson, LessonAudio, Vocabulary, ExplainedWord, QuizResult, DictationProgress
+from ..schemas import TextGenerateRequest, TextReadSchema, ToggleFavRequest, QuizResultRequest, VocabWordSchema, CreateOwnTextRequest, DictationCheckRequest, DictationProgressSaveRequest, DictationProgressClearRequest
 from ..dependencies import get_current_user
 from .. import services, cost_calculation
 from ..services import deduct_user_energy
@@ -621,6 +621,172 @@ async def dictation_check(
         "expected_text": expected_text,
         "typed_text": req.user_text,
     }
+
+
+async def _ensure_lesson_access(
+    lesson_id: str,
+    db: AsyncSession,
+    current_user: User,
+):
+    lesson_result = await db.execute(select(Lesson).where(Lesson.id == lesson_id))
+    lesson = lesson_result.scalar_one_or_none()
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+
+    user_lesson_result = await db.execute(
+        select(UserLesson).where(
+            and_(UserLesson.user_id == current_user.id, UserLesson.lesson_id == lesson_id)
+        )
+    )
+    if not user_lesson_result.scalar_one_or_none():
+        raise HTTPException(status_code=403, detail="No access to this lesson")
+
+    return lesson
+
+
+@router.get("/texts/{lesson_id}/dictation_progress")
+async def get_dictation_progress(
+    lesson_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    await _ensure_lesson_access(lesson_id, db, current_user)
+
+    result = await db.execute(
+        select(DictationProgress).where(
+            DictationProgress.user_id == current_user.id,
+            DictationProgress.lesson_id == lesson_id,
+        )
+    )
+    state = result.scalar_one_or_none()
+
+    if not state:
+        return {
+            "completed_once": False,
+            "progress": None,
+        }
+
+    progress = None
+    try:
+        order = json.loads(state.order_json) if state.order_json else None
+        passed_indices = json.loads(state.passed_indices_json) if state.passed_indices_json else None
+        if isinstance(order, list) and isinstance(passed_indices, list) and len(passed_indices) > 0:
+            progress = {
+                "order": order,
+                "cursor": state.cursor or 0,
+                "passed_indices": passed_indices,
+                "playback_rate": state.playback_rate or 0.8,
+            }
+    except Exception:
+        progress = None
+
+    return {
+        "completed_once": bool(state.completed_once),
+        "progress": progress,
+    }
+
+
+@router.post("/texts/{lesson_id}/dictation_progress/save")
+async def save_dictation_progress(
+    lesson_id: str,
+    req: DictationProgressSaveRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    await _ensure_lesson_access(lesson_id, db, current_user)
+
+    if not req.passed_indices:
+        return {"ok": False, "error": "No passed indices"}
+
+    result = await db.execute(
+        select(DictationProgress).where(
+            DictationProgress.user_id == current_user.id,
+            DictationProgress.lesson_id == lesson_id,
+        )
+    )
+    state = result.scalar_one_or_none()
+
+    if not state:
+        state = DictationProgress(
+            user_id=current_user.id,
+            lesson_id=lesson_id,
+        )
+        db.add(state)
+
+    state.order_json = json.dumps(req.order, ensure_ascii=False)
+    state.passed_indices_json = json.dumps(req.passed_indices, ensure_ascii=False)
+    state.cursor = max(0, req.cursor)
+    state.playback_rate = max(0.4, min(1.0, req.playback_rate))
+    state.updated_at = func.now()
+
+    await db.commit()
+    return {"ok": True}
+
+
+@router.post("/texts/{lesson_id}/dictation_progress/clear")
+async def clear_dictation_progress(
+    lesson_id: str,
+    req: DictationProgressClearRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    await _ensure_lesson_access(lesson_id, db, current_user)
+
+    result = await db.execute(
+        select(DictationProgress).where(
+            DictationProgress.user_id == current_user.id,
+            DictationProgress.lesson_id == lesson_id,
+        )
+    )
+    state = result.scalar_one_or_none()
+
+    if not state:
+        return {"ok": True}
+
+    state.order_json = None
+    state.passed_indices_json = None
+    state.cursor = 0
+    state.playback_rate = 0.8
+    if not req.keep_completed:
+        state.completed_once = False
+    state.updated_at = func.now()
+
+    await db.commit()
+    return {"ok": True}
+
+
+@router.post("/texts/{lesson_id}/dictation_progress/complete")
+async def complete_dictation_progress(
+    lesson_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    await _ensure_lesson_access(lesson_id, db, current_user)
+
+    result = await db.execute(
+        select(DictationProgress).where(
+            DictationProgress.user_id == current_user.id,
+            DictationProgress.lesson_id == lesson_id,
+        )
+    )
+    state = result.scalar_one_or_none()
+
+    if not state:
+        state = DictationProgress(
+            user_id=current_user.id,
+            lesson_id=lesson_id,
+        )
+        db.add(state)
+
+    state.completed_once = True
+    state.order_json = None
+    state.passed_indices_json = None
+    state.cursor = 0
+    state.playback_rate = 0.8
+    state.updated_at = func.now()
+
+    await db.commit()
+    return {"ok": True}
 
 @router.get("/texts/{text_id}")
 async def get_text(text_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):

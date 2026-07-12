@@ -40,6 +40,9 @@
     let dictationCurrentSentenceIndex = -1;
     let dictationCurrentSentence = null;
     let dictationHasNext = false;
+    let showDictationResumePrompt = false;
+    let pendingDictationProgress = null;
+    let dictationPassedMap = {};
     let dictationPassedCurrentSentence = false;
     let dictationCompletedOnce = false;
     let showDictationSplash = false;
@@ -129,7 +132,7 @@
     $: if (id && id !== prevId && $user) {
         prevId = id;
         loadText();
-        loadDictationCompletion();
+        fetchDictationState();
     }
 
     async function loadText() {
@@ -256,25 +259,56 @@
         !!dictationResult &&
         Number(dictationResult.similarity_score || 0) >= DICTATION_PASS_SCORE;
 
-    function getDictationCompletionKey() {
-        return `dictation_completed:${$user?.id || "anon"}:${id}`;
-    }
+    $: dictationPassedCount = Object.keys(dictationPassedMap).length;
 
-    function loadDictationCompletion() {
+    async function fetchDictationState() {
+        if (!id) return { completed_once: false, progress: null };
         try {
-            if (typeof window === "undefined" || !id) return;
-            dictationCompletedOnce =
-                localStorage.getItem(getDictationCompletionKey()) === "1";
+            const res = await api.get(`/texts/${id}/dictation_progress`);
+            dictationCompletedOnce = !!res.data?.completed_once;
+            return res.data || { completed_once: false, progress: null };
         } catch (e) {
             dictationCompletedOnce = false;
+            return { completed_once: false, progress: null };
         }
     }
 
-    function markDictationCompleted() {
+    async function clearDictationProgressOnServer(keepCompleted = true) {
+        if (!id) return;
+        try {
+            await api.post(`/texts/${id}/dictation_progress/clear`, {
+                keep_completed: keepCompleted,
+            });
+            if (!keepCompleted) dictationCompletedOnce = false;
+        } catch (e) {}
+    }
+
+    async function saveDictationProgressToServer() {
+        if (!id) return;
+        const passedIndices = Object.keys(dictationPassedMap).map((v) =>
+            Number(v),
+        );
+
+        if (!passedIndices.length) {
+            await clearDictationProgressOnServer(true);
+            return;
+        }
+
+        try {
+            await api.post(`/texts/${id}/dictation_progress/save`, {
+                order: dictationOrder,
+                cursor: dictationCursor,
+                passed_indices: passedIndices,
+                playback_rate: dictationPlaybackRate,
+            });
+        } catch (e) {}
+    }
+
+    async function markDictationCompletedOnServer() {
+        if (!id) return;
         dictationCompletedOnce = true;
         try {
-            if (typeof window === "undefined") return;
-            localStorage.setItem(getDictationCompletionKey(), "1");
+            await api.post(`/texts/${id}/dictation_progress/complete`, {});
         } catch (e) {}
     }
 
@@ -300,9 +334,30 @@
         return arr;
     }
 
-    function openDictation() {
+    async function openDictation() {
         if (!sentences.length) return;
         stopCurrentPlayback();
+        const state = await fetchDictationState();
+        const savedProgress = state?.progress || null;
+
+        if (
+            savedProgress &&
+            savedProgress.order.length === sentences.length &&
+            savedProgress.passed_indices.length > 0
+        ) {
+            pendingDictationProgress = savedProgress;
+            showDictationResumePrompt = true;
+            showDictation = true;
+            return;
+        }
+
+        await startDictationFromScratch();
+    }
+
+    async function startDictationFromScratch() {
+        await clearDictationProgressOnServer(true);
+        pendingDictationProgress = null;
+        showDictationResumePrompt = false;
         dictationOrder = shuffledIndices(sentences.length);
         dictationCursor = 0;
         dictationInput = "";
@@ -310,16 +365,78 @@
         dictationChecking = false;
         dictationPlaying = false;
         dictationPlaybackRate = 0.8;
+        dictationPassedMap = {};
         showDictationSplash = false;
         showDictation = true;
     }
 
-    function closeDictation() {
+    async function continueDictationProgress() {
+        const saved = pendingDictationProgress;
+        if (!saved || !Array.isArray(saved.order)) {
+            await startDictationFromScratch();
+            return;
+        }
+
+        const passedMap = {};
+        saved.passed_indices.forEach((idx) => {
+            if (Number.isInteger(idx) && idx >= 0 && idx < sentences.length) {
+                passedMap[idx] = true;
+            }
+        });
+
+        const savedOrder = saved.order.filter(
+            (idx) =>
+                Number.isInteger(idx) && idx >= 0 && idx < sentences.length,
+        );
+        if (savedOrder.length !== sentences.length) {
+            await startDictationFromScratch();
+            return;
+        }
+
+        let restoredCursor = Math.max(
+            0,
+            Math.min(saved.cursor || 0, savedOrder.length - 1),
+        );
+        while (
+            restoredCursor < savedOrder.length &&
+            passedMap[savedOrder[restoredCursor]]
+        ) {
+            restoredCursor += 1;
+        }
+        if (restoredCursor >= savedOrder.length) {
+            restoredCursor = savedOrder.length - 1;
+        }
+
+        dictationOrder = savedOrder;
+        dictationCursor = restoredCursor;
+        dictationInput = "";
+        dictationResult = null;
+        dictationChecking = false;
+        dictationPlaying = false;
+        dictationPlaybackRate = Math.min(
+            1,
+            Math.max(0.4, Number(saved.playback_rate || 0.8)),
+        );
+        dictationPassedMap = passedMap;
+        showDictationResumePrompt = false;
+        pendingDictationProgress = null;
+        showDictationSplash = false;
+        showDictation = true;
+    }
+
+    async function closeDictation() {
         showDictation = false;
+        showDictationResumePrompt = false;
+        pendingDictationProgress = null;
         dictationPlaying = false;
         dictationChecking = false;
         dictationResult = null;
         dictationInput = "";
+        if (dictationPassedCount > 0) {
+            await saveDictationProgressToServer();
+        } else {
+            await clearDictationProgressOnServer(true);
+        }
         stopCurrentPlayback();
     }
 
@@ -400,10 +517,20 @@
             return;
         }
 
+        if (dictationCurrentSentenceIndex >= 0) {
+            dictationPassedMap = {
+                ...dictationPassedMap,
+                [dictationCurrentSentenceIndex]: true,
+            };
+            await saveDictationProgressToServer();
+        }
+
         if (!dictationHasNext) {
             showDictation = false;
+            showDictationResumePrompt = false;
             showDictationSplash = true;
-            markDictationCompleted();
+            await markDictationCompletedOnServer();
+            await clearDictationProgressOnServer(true);
             setTimeout(() => launchConfettiInto("dictation-splash"), 250);
             return;
         }
@@ -411,6 +538,7 @@
         dictationCursor += 1;
         dictationInput = "";
         dictationResult = null;
+        await saveDictationProgressToServer();
         await tick();
         await playDictationSentence();
     }
@@ -433,7 +561,7 @@
 
     function restartDictationExam() {
         closeDictationSplash();
-        openDictation();
+        startDictationFromScratch();
     }
 
     async function checkDictation() {
@@ -443,6 +571,11 @@
             dictationChecking
         )
             return;
+
+        if (currentAudio && playingIndex === dictationCurrentSentenceIndex) {
+            currentAudio.pause();
+            dictationPlaying = false;
+        }
 
         dictationChecking = true;
         try {
@@ -1567,7 +1700,7 @@
         window.addEventListener("beforeunload", handleBeforeUnload);
         document.addEventListener("click", handleLearnedClick);
         window.addEventListener("keydown", handleViewKeydown);
-        loadDictationCompletion();
+        fetchDictationState();
     });
 
     // Підсвічування речення при переході з Vocab (через URL hash #sent-N)
@@ -1788,151 +1921,177 @@
 
         {#if showDictation}
             <div class="dictation-overlay" role="dialog" aria-modal="true">
-                <button
-                    class="dictation-close-btn"
-                    onclick={closeDictation}
-                    aria-label="Close"
-                >
-                    <span class="material-symbols-outlined">close</span>
-                    <div class="dictation-close-hint">Esc</div>
-                </button>
+                {#if !showDictationResumePrompt}
+                    <button
+                        class="dictation-close-btn"
+                        onclick={closeDictation}
+                        aria-label="Close"
+                    >
+                        <span class="material-symbols-outlined">close</span>
+                        <div class="dictation-close-hint">Esc</div>
+                    </button>
+                {/if}
 
                 <div class="dictation-container">
-                    <div class="fc-progress-wrapper">
-                        <div class="fc-progress-track">
-                            <div
-                                class="fc-progress-fill"
-                                style="width: {(dictationCursor /
-                                    Math.max(dictationOrder.length, 1)) *
-                                    100}%"
-                            ></div>
-                        </div>
-                        <div class="fc-progress-text">
-                            {Math.min(
-                                dictationCursor + 1,
-                                dictationOrder.length,
-                            )} / {dictationOrder.length}
-                        </div>
-                    </div>
-
-                    <div class="dictation-main-actions">
-                        <button
-                            class="dictation-play-btn"
-                            onclick={toggleDictationPlayback}
-                            disabled={!dictationCurrentSentence}
-                        >
-                            <span class="material-symbols-outlined"
-                                >{dictationPlaying
-                                    ? "pause"
-                                    : "play_arrow"}</span
-                            >
-                        </button>
-                        <div class="dictation-play-caption">
-                            {ui.dictation_play_btn ||
-                                (($user?.interface_language || "ukr") === "eng"
-                                    ? "Play"
-                                    : "Грати")}
-                        </div>
-                        <div class="dictation-play-hotkey">
-                            {ui.dictation_hotkeys_hint ||
-                                (($user?.interface_language || "ukr") === "eng"
-                                    ? "1 Play/Stop - 2 Restart - 3 Slower - 4 Faster"
-                                    : "1 Грати/Пауза - 2 Спочатку - 3 Повільніше - 4 Швидше")}
-                        </div>
-                    </div>
-
-                    {#if !dictationResult}
-                        <textarea
-                            class="dictation-input"
-                            bind:value={dictationInput}
-                            placeholder={ui.dictation_input_placeholder}
-                            rows="4"
-                        ></textarea>
-                    {/if}
-
-                    <div class="dictation-actions">
-                        {#if !dictationResult}
+                    {#if showDictationResumePrompt}
+                        <div class="dictation-resume-actions">
                             <button
                                 class="btn-contained"
-                                onclick={checkDictation}
-                                disabled={!dictationInput.trim() ||
-                                    dictationChecking}
+                                onclick={startDictationFromScratch}
                             >
-                                {ui.dictation_check_btn}
+                                {ui.dictation_restart_btn || ui.restart_btn}
                             </button>
-                        {:else}
                             <button
                                 class="btn-contained"
-                                onclick={retryDictationSentence}
+                                onclick={continueDictationProgress}
                             >
-                                {ui.retry_btn}
+                                {ui.dictation_continue_btn || ui.continue_btn}
                             </button>
-                            <button
-                                class="btn-contained dictation-next-btn"
-                                onclick={nextDictationSentence}
-                                disabled={!dictationPassedCurrentSentence ||
-                                    dictationPlaying}
-                            >
-                                {dictationHasNext
-                                    ? ui.dictation_next_btn
-                                    : ui.dictation_finish_btn || ui.done_btn}
-                            </button>
-                        {/if}
-                    </div>
+                        </div>
+                    {:else}
+                        <div class="fc-progress-wrapper">
+                            <div class="fc-progress-track">
+                                <div
+                                    class="fc-progress-fill"
+                                    style="width: {(dictationCursor /
+                                        Math.max(dictationOrder.length, 1)) *
+                                        100}%"
+                                ></div>
+                            </div>
+                            <div class="fc-progress-text">
+                                {Math.min(
+                                    dictationCursor + 1,
+                                    dictationOrder.length,
+                                )} / {dictationOrder.length}
+                            </div>
+                        </div>
 
-                    {#if dictationResult}
-                        <div class="dictation-result-card">
-                            <div class="dictation-score">
-                                {ui.dictation_similarity}:
-                                <strong
-                                    >{Number(
-                                        dictationResult.similarity_score,
-                                    ).toFixed(2)}%</strong
+                        <div class="dictation-main-actions">
+                            <button
+                                class="dictation-play-btn"
+                                onclick={toggleDictationPlayback}
+                                disabled={!dictationCurrentSentence}
+                            >
+                                <span class="material-symbols-outlined"
+                                    >{dictationPlaying
+                                        ? "pause"
+                                        : "play_arrow"}</span
                                 >
+                            </button>
+                            <div class="dictation-play-caption">
+                                {ui.dictation_play_btn ||
+                                    (($user?.interface_language || "ukr") ===
+                                    "eng"
+                                        ? "Play"
+                                        : "Грати")}
                             </div>
-
-                            {#if !dictationPassedCurrentSentence}
-                                <div class="dictation-repeat-warning">
-                                    {ui.dictation_need_repeat}
-                                </div>
-                            {/if}
-
-                            <div class="dictation-diff-block">
-                                <div class="dictation-diff-label">
-                                    {ui.dictation_original}
-                                </div>
-                                <div class="dictation-diff-line expected">
-                                    {#each dictationResult.segments as seg}
-                                        {#if seg.expected}
-                                            <span class="diff-chip {seg.type}">
-                                                {seg.expected}
-                                            </span>
-                                        {/if}
-                                    {/each}
-                                </div>
-                            </div>
-
-                            <div class="dictation-diff-block">
-                                <div class="dictation-diff-label">
-                                    {ui.dictation_your_text}
-                                </div>
-                                <div class="dictation-diff-line actual">
-                                    {#each dictationResult.segments as seg}
-                                        {#if seg.actual}
-                                            <span class="diff-chip {seg.type}">
-                                                {seg.actual}
-                                            </span>
-                                        {:else if seg.type === "delete"}
-                                            <span
-                                                class="diff-chip diff-missing"
-                                            >
-                                                [missing]
-                                            </span>
-                                        {/if}
-                                    {/each}
-                                </div>
+                            <div class="dictation-play-hotkey">
+                                {ui.dictation_hotkeys_hint ||
+                                    (($user?.interface_language || "ukr") ===
+                                    "eng"
+                                        ? "1 Play/Stop - 2 Restart - 3 Slower - 4 Faster"
+                                        : "1 Грати/Пауза - 2 Спочатку - 3 Повільніше - 4 Швидше")}
                             </div>
                         </div>
+
+                        {#if !dictationResult}
+                            <textarea
+                                class="dictation-input"
+                                bind:value={dictationInput}
+                                placeholder={ui.dictation_input_placeholder}
+                                rows="4"
+                            ></textarea>
+                        {/if}
+
+                        <div class="dictation-actions">
+                            {#if !dictationResult}
+                                <button
+                                    class="btn-contained"
+                                    onclick={checkDictation}
+                                    disabled={!dictationInput.trim() ||
+                                        dictationChecking}
+                                >
+                                    {ui.dictation_check_btn}
+                                </button>
+                            {:else}
+                                <button
+                                    class="btn-contained"
+                                    onclick={retryDictationSentence}
+                                >
+                                    {ui.retry_btn}
+                                </button>
+                                <button
+                                    class="btn-contained dictation-next-btn"
+                                    onclick={nextDictationSentence}
+                                    disabled={!dictationPassedCurrentSentence ||
+                                        dictationPlaying}
+                                >
+                                    {dictationHasNext
+                                        ? ui.dictation_next_btn
+                                        : ui.dictation_finish_btn ||
+                                          ui.done_btn}
+                                </button>
+                            {/if}
+                        </div>
+
+                        {#if dictationResult}
+                            <div class="dictation-result-card">
+                                <div class="dictation-score">
+                                    {ui.dictation_similarity}:
+                                    <strong
+                                        >{Number(
+                                            dictationResult.similarity_score,
+                                        ).toFixed(2)}%</strong
+                                    >
+                                </div>
+
+                                {#if !dictationPassedCurrentSentence}
+                                    <div class="dictation-repeat-warning">
+                                        {ui.dictation_need_repeat}
+                                    </div>
+                                {/if}
+
+                                <div class="dictation-diff-block">
+                                    <div class="dictation-diff-label">
+                                        {ui.dictation_original}
+                                    </div>
+                                    <div class="dictation-diff-line expected">
+                                        {#each dictationResult.segments as seg}
+                                            {#if seg.expected}
+                                                <span
+                                                    class="diff-chip {seg.type}"
+                                                >
+                                                    {seg.expected}
+                                                </span>
+                                            {/if}
+                                        {/each}
+                                    </div>
+                                </div>
+
+                                <div class="dictation-diff-block">
+                                    <div class="dictation-diff-label">
+                                        {ui.dictation_your_text}
+                                    </div>
+                                    <div class="dictation-diff-line actual">
+                                        {#each dictationResult.segments as seg}
+                                            {#if seg.actual}
+                                                <span
+                                                    class="diff-chip {seg.type}"
+                                                >
+                                                    {seg.actual}
+                                                </span>
+                                            {:else if seg.type === "delete"}
+                                                <span
+                                                    class="diff-chip diff-missing"
+                                                >
+                                                    [missing]
+                                                </span>
+                                            {/if}
+                                        {/each}
+                                    </div>
+                                </div>
+                            </div>
+                        {/if}
                     {/if}
                 </div>
             </div>
@@ -2617,6 +2776,18 @@
         box-sizing: border-box;
         overflow-y: auto;
         overflow-x: hidden;
+    }
+
+    .dictation-resume-actions {
+        display: flex;
+        justify-content: center;
+        gap: 50px;
+        margin: auto 0;
+    }
+
+    .dictation-resume-actions .btn-contained {
+        width: 100%;
+        min-width: 240px;
     }
 
     .fc-progress-wrapper {
