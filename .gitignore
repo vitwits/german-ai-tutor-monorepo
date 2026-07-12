@@ -88,5 +88,7 @@ service-account.json
 # Reports and CI artifacts
 backend/flake8_report.txt
 backend/pytest_report.xml
+backend/static/audio/vocabulary/*
+backend/static/audio/texts/*
 frontend/eslint_report.xml
 frontend/vitest_report.xml
