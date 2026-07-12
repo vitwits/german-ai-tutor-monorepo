@@ -247,7 +247,7 @@ async def get_library(
     # Query: Join UserLesson (user's lessons) with Lesson (lesson content)
     from sqlalchemy import and_
     
-    query = select(Lesson, UserLesson.is_favorite).join(
+    query = select(Lesson, UserLesson).join(
         UserLesson,
         UserLesson.lesson_id == Lesson.id
     ).where(UserLesson.user_id == current_user.id)
@@ -286,25 +286,27 @@ async def get_library(
     rows = result.all()
     
     text_models = []
-    for lesson, is_fav in rows:
+    for lesson, ul in rows:
         # Convert Lesson to TextReadSchema format for backward compatibility
         tm = TextReadSchema(
             id=lesson.id,
-            user_id=current_user.id,  # Anonymous lesson, set to current user
+            user_id=current_user.id,
             title=lesson.title,
             level=lesson.level,
             content_json=lesson.content_json,
             quiz_json=lesson.quiz_json,
-            is_favorite=is_fav
+            is_favorite=ul.is_favorite
         )
         try:
             titles = json.loads(lesson.title) if lesson.title else {}
             lang_key = current_user.interface_language
-            tm.display_title = titles.get('de', lesson.title)
+            tm.display_title = ul.custom_title or titles.get('de', lesson.title)
             tm.trans_title = titles.get(lang_key, '')
+            tm.custom_title = ul.custom_title
         except (json.JSONDecodeError, TypeError):
-            tm.display_title = lesson.title
+            tm.display_title = ul.custom_title or lesson.title
             tm.trans_title = ""
+            tm.custom_title = ul.custom_title
         text_models.append(tm)
 
     return {
@@ -396,6 +398,32 @@ async def toggle_text_fav(
         )
         db.add(new_user_lesson)
     
+    await db.commit()
+    return {"ok": True}
+
+@router.post("/rename_text")
+async def rename_text(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    text_id = payload.get("id")
+    new_title = (payload.get("title") or "").strip()
+    if not new_title:
+        raise HTTPException(status_code=400, detail="Title cannot be empty")
+    if len(new_title) > 60:
+        new_title = new_title[:60]
+
+    ul_result = await db.execute(
+        select(UserLesson).where(
+            and_(UserLesson.user_id == current_user.id, UserLesson.lesson_id == text_id)
+        )
+    )
+    ul = ul_result.scalar_one_or_none()
+    if not ul:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+
+    ul.custom_title = new_title
     await db.commit()
     return {"ok": True}
 
@@ -562,7 +590,8 @@ async def get_text(text_id: str, db: AsyncSession = Depends(get_db), current_use
             level=lesson.level,
             content_json=lesson.content_json,
             quiz_json=lesson.quiz_json,
-            is_favorite=ul.is_favorite
+            is_favorite=ul.is_favorite,
+            custom_title=ul.custom_title
         )
     else:
         raise HTTPException(404, "Lesson not found")

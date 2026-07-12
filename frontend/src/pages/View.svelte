@@ -30,6 +30,26 @@
     let vocabPlayingId = null; // ID of vocabulary word currently playing
     let currentVocabPlayId = null; // Track which vocab play session is active (to abort old ones)
 
+    let editingTitle = false;
+    let editTitleValue = "";
+
+    async function saveTitleEdit() {
+        const trimmed = editTitleValue.trim().slice(0, 60);
+        if (!trimmed) return;
+        try {
+            await api.post("/rename_text", { id, title: trimmed });
+            text = { ...text, custom_title: trimmed };
+            editingTitle = false;
+        } catch (e) {
+            console.error(e);
+            addToast(ui.error_generic, "error");
+        }
+    }
+
+    function cancelTitleEdit() {
+        editingTitle = false;
+    }
+
     // Edit State
     let editingId = null;
     let editValue = "";
@@ -973,9 +993,60 @@
         </div>
     {:else if text}
         <div class="card">
-            <h1 style="font-size:1.5rem; margin:0 0 4px 0;">
-                {JSON.parse(text.title).de}
-            </h1>
+            {#if editingTitle}
+                <div
+                    style="display:flex; align-items:center; gap:6px; margin:0 0 4px 0;"
+                >
+                    <input
+                        type="text"
+                        class="edit-input"
+                        bind:value={editTitleValue}
+                        maxlength="60"
+                        style="font-size:1.4rem; font-weight:600; flex:1;"
+                        onkeydown={(e) => {
+                            if (e.key === "Enter") saveTitleEdit();
+                            if (e.key === "Escape") cancelTitleEdit();
+                        }}
+                    />
+                    <button
+                        class="btn-text"
+                        onclick={saveTitleEdit}
+                        style="padding:0; min-width:32px;"
+                    >
+                        <span class="material-symbols-outlined">check</span>
+                    </button>
+                    <button
+                        class="btn-text"
+                        onclick={cancelTitleEdit}
+                        style="padding:0; min-width:32px;"
+                    >
+                        <span class="material-symbols-outlined">close</span>
+                    </button>
+                </div>
+            {:else}
+                <div
+                    style="display:flex; align-items:center; gap:6px; margin:0 0 4px 0;"
+                >
+                    <h1 style="font-size:1.5rem; margin:0; flex:1;">
+                        {text.custom_title || JSON.parse(text.title).de}
+                    </h1>
+                    <button
+                        class="btn-text"
+                        onclick={() => {
+                            editTitleValue =
+                                text.custom_title || JSON.parse(text.title).de;
+                            editingTitle = true;
+                        }}
+                        style="padding:0; min-width:28px; opacity:0.4;"
+                        title="Rename"
+                    >
+                        <span
+                            class="material-symbols-outlined"
+                            style="font-size:18px;">edit</span
+                        >
+                    </button>
+                </div>
+            {/if}
             <h2
                 style="font-size: 1rem; color: var(--on-surface); opacity: 0.6; margin: 0 0 16px 0; font-weight: 400;"
             >
@@ -1031,49 +1102,45 @@
                 </button>
             </div>
 
-            {#each sentences as s, i}
-                <div
-                    class="de-line {playingIndex === i
-                        ? 'highlight-sentence'
-                        : ''}"
-                    id="sent-{i}"
-                    data-index={i}
-                    data-text={s.de}
-                >
-                    <div
-                        style="display:flex; justify-content: space-between; align-items: center;"
+            <div class="text-body">
+                {#each sentences as s, i}<span
+                        class="de-line {playingIndex === i
+                            ? 'highlight-sentence'
+                            : ''}"
+                        id="sent-{i}"
+                        data-index={i}
+                        data-text={s.de}
+                        ><span
+                            class="sent-num-btn {playingIndex === i &&
+                            currentAudio &&
+                            !currentAudio.paused
+                                ? 'playing'
+                                : ''}"
+                            role="button"
+                            tabindex="0"
+                            onclick={() => {
+                                userInitiatedPlay = true;
+                                playAudio(s.de, i);
+                            }}
+                            onkeydown={(e) =>
+                                e.key === "Enter" &&
+                                ((userInitiatedPlay = true),
+                                playAudio(s.de, i))}
+                            ><span class="sent-num-label">{i + 1}</span><span
+                                class="sent-num-icon material-symbols-outlined"
+                                >{playingIndex === i &&
+                                currentAudio &&
+                                !currentAudio.paused
+                                    ? "pause"
+                                    : "play_arrow"}</span
+                            ></span
+                        ><span class="de-text">{@html s.de_html}</span
+                        >{#if showTrans}
+                            <span class="trans-row">{s.display_trans}</span
+                            >{/if}</span
                     >
-                        <div
-                            style="display:flex; align-items:center; gap:12px; flex: 1;"
-                        >
-                            <button
-                                class="btn-text"
-                                onclick={() => {
-                                    userInitiatedPlay = true;
-                                    playAudio(s.de, i);
-                                }}
-                                style="height:32px; width:32px; padding:0; min-width:32px;"
-                            >
-                                <span
-                                    class="material-symbols-outlined"
-                                    style="font-size:20px; color:var(--primary)"
-                                >
-                                    {playingIndex === i &&
-                                    currentAudio &&
-                                    !currentAudio.paused
-                                        ? "pause"
-                                        : "volume_up"}
-                                </span>
-                            </button>
-                            <span class="de-text">{@html s.de_html}</span>
-                        </div>
-                    </div>
-
-                    {#if showTrans}
-                        <div class="trans-row">{s.display_trans}</div>
-                    {/if}
-                </div>
-            {/each}
+                {/each}
+            </div>
         </div>
 
         <!-- TABS -->
@@ -1105,6 +1172,10 @@
                         tabindex="0"
                         onclick={() => {
                             if (!editingId) toggleVocabFav(v.id);
+                        }}
+                        onkeydown={(e) => {
+                            if (e.key === "Enter" && !editingId)
+                                toggleVocabFav(v.id);
                         }}
                     >
                         <div
@@ -1473,15 +1544,65 @@
         flex-wrap: wrap;
     }
 
+    .text-body {
+        text-align: justify;
+        line-height: 2.4;
+        margin-bottom: 16px;
+    }
     .de-line {
-        padding: 8px 0;
-        border-bottom: 1px solid var(--border);
+        display: inline;
         transition: background-color 0.3s;
     }
+    .de-line::after {
+        content: " ";
+    }
+    .sent-num-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #e91e8c;
+        color: white;
+        font-size: 0.65rem;
+        font-weight: 700;
+        border-radius: 4px;
+        margin-right: 5px;
+        vertical-align: 3px;
+        font-family: var(--font-interface);
+        line-height: 1;
+        width: 22px;
+        height: 16px;
+        cursor: pointer;
+        transition: background-color 0.15s;
+        flex-shrink: 0;
+        user-select: none;
+    }
+    .sent-num-btn:hover {
+        background: #e91e8c;
+        vertical-align: 0px;
+    }
+    .sent-num-label {
+        display: inline;
+    }
+    .sent-num-icon {
+        display: none;
+        font-size: 13px;
+        line-height: 1;
+    }
+    .sent-num-btn:hover .sent-num-label,
+    .sent-num-btn.playing .sent-num-label {
+        display: none;
+    }
+    .sent-num-btn:hover .sent-num-icon,
+    .sent-num-btn.playing .sent-num-icon {
+        display: flex;
+        align-items: center;
+        height: 100%;
+        vertical-align: 0px;
+    }
     .de-text {
+        display: inline;
         font-size: 1.1rem;
         font-weight: 400;
-        line-height: 1.6;
         font-family: var(--font-text);
     }
     .highlight-sentence {
@@ -1490,10 +1611,10 @@
     }
 
     .trans-row {
+        display: inline;
         color: var(--primary);
-        padding-left: 44px;
-        font-size: 1rem;
-        margin-top: 4px;
+        font-size: 1.1rem;
+        margin-left: 6px;
     }
 
     .grammar-box {

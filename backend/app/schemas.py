@@ -77,6 +77,7 @@ class TextReadSchema(BaseModel):
     quiz_json: Optional[str]
     display_title: Optional[str] = None
     trans_title: Optional[str] = None
+    custom_title: Optional[str] = None
 
     class Config:
         from_attributes = True

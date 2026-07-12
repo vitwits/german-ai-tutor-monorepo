@@ -460,9 +460,16 @@ async def get_tts_audio(text, lang='de', db: AsyncSession = None, job_name='gene
     # Витягуємо language_code з voice_name (перші 5 символів: de-DE, uk-UA, en-US)
     language_code = voice_name[:5]
 
-    # Wrap text in SSML root element for proper SSML processing
-    ssml_text = f'<speak>{text}</speak>'
-    s_input = texttospeech.SynthesisInput(ssml=ssml_text)
+    # Chirp HD (non-Chirp3) and Journey voices do NOT support SSML synthesis.
+    # Only use SSML when text actually contains markup AND the voice supports it.
+    has_ssml_markup = '<' in text
+    voice_supports_ssml = '-Chirp-HD-' not in voice_name and '-Journey-' not in voice_name
+    if has_ssml_markup and voice_supports_ssml:
+        ssml_text = f'<speak>{text}</speak>'
+        s_input = texttospeech.SynthesisInput(ssml=ssml_text)
+    else:
+        plain_text = re.sub(r'<[^>]+>', '', text) if has_ssml_markup else text
+        s_input = texttospeech.SynthesisInput(text=plain_text)
     voice = texttospeech.VoiceSelectionParams(language_code=language_code, name=voice_name)
     audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.OGG_OPUS)
     

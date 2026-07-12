@@ -5,6 +5,7 @@ import { svelte } from '@sveltejs/vite-plugin-svelte'
 export default defineConfig({
   plugins: [svelte()],
   server: {
+    allowedHosts: ['german.vicolores.com'],
     proxy: {
       '/api': {
         // У Docker мережі звертаємось до сервісу за іменем 'backend'

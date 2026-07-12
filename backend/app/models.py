@@ -48,6 +48,7 @@ class UserLesson(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
     lesson_id: Mapped[str] = mapped_column(ForeignKey("lessons.id"), nullable=False)
     is_favorite: Mapped[int] = mapped_column(Integer, default=0)
+    custom_title: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     added_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
 
 class LessonAudio(Base):
