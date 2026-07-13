@@ -2081,26 +2081,20 @@
                     </button>
                 </div>
             {:else}
-                <div
-                    style="display:flex; align-items:center; gap:6px; margin:0 0 4px 0;"
-                >
-                    <h1 style="font-size:1.5rem; margin:0; flex:1;">
+                <div class="title-row">
+                    <h1 class="title-main">
                         {text.custom_title || JSON.parse(text.title).de}
                     </h1>
                     <button
-                        class="btn-text"
+                        class="btn-text title-edit-btn"
                         onclick={() => {
                             editTitleValue =
                                 text.custom_title || JSON.parse(text.title).de;
                             editingTitle = true;
                         }}
-                        style="padding:0; min-width:28px; opacity:0.4;"
                         title="Rename"
                     >
-                        <span
-                            class="material-symbols-outlined"
-                            style="font-size:18px;">edit</span
-                        >
+                        <span class="material-symbols-outlined">edit</span>
                     </button>
                 </div>
             {/if}
@@ -2167,11 +2161,13 @@
                 </button>
 
                 <button
-                    class="badge-btn dictation-launch-btn"
+                    class="badge-btn translation-launch-btn"
                     onclick={openSentenceTranslationTest}
                     title={ui.sentence_translation_test}
                 >
-                    <span class="material-symbols-outlined">g_translate</span>
+                    <span class="material-symbols-outlined"
+                        >record_voice_over</span
+                    >
                     {#if sentenceTranslationCompletedOnce}
                         <span
                             class="dictation-done-badge"
@@ -3063,7 +3059,45 @@
     }
 
     .view-container .card {
-        padding: 40px;
+        padding: 60px;
+    }
+
+    .title-row {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin: 0 0 4px 0;
+    }
+
+    .title-main {
+        font-size: 1.5rem;
+        margin: 0;
+    }
+
+    .title-edit-btn {
+        padding: 0;
+        min-width: 28px;
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+        color: #7c3a2b;
+        transition: opacity 0.18s ease;
+    }
+
+    .title-edit-btn .material-symbols-outlined {
+        font-size: 18px;
+        font-variation-settings:
+            "FILL" 0,
+            "wght" 650,
+            "GRAD" 0,
+            "opsz" 20;
+    }
+
+    .title-row:hover .title-edit-btn,
+    .title-row:focus-within .title-edit-btn {
+        opacity: 0.88;
+        visibility: visible;
+        pointer-events: auto;
     }
 
     .toolbar {
@@ -3090,13 +3124,14 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
+        position: relative;
         background: #e91e8c;
         color: white;
         font-size: 0.65rem;
         font-weight: 700;
         border-radius: 4px;
         margin-right: 5px;
-        vertical-align: 3px;
+        vertical-align: middle;
         font-family: var(--font-interface);
         line-height: 1;
         width: 22px;
@@ -3105,29 +3140,44 @@
         transition: background-color 0.15s;
         flex-shrink: 0;
         user-select: none;
+        top: -2px;
     }
     .sent-num-btn:hover {
         background: #e91e8c;
-        vertical-align: 0px;
     }
     .sent-num-label {
-        display: inline;
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: opacity 0.12s ease;
     }
     .sent-num-icon {
-        display: none;
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
         font-size: 13px;
         line-height: 1;
+        width: 100%;
+        height: 100%;
+        opacity: 0;
+        transition: opacity 0.12s ease;
+        font-variation-settings:
+            "FILL" 0,
+            "wght" 500,
+            "GRAD" 0,
+            "opsz" 20;
     }
     .sent-num-btn:hover .sent-num-label,
     .sent-num-btn.playing .sent-num-label {
-        display: none;
+        opacity: 0;
     }
     .sent-num-btn:hover .sent-num-icon,
     .sent-num-btn.playing .sent-num-icon {
-        display: flex;
-        align-items: center;
-        height: 100%;
-        vertical-align: 0px;
+        opacity: 1;
     }
     .de-text {
         display: inline;
@@ -3199,9 +3249,34 @@
         width: 36px;
         height: 36px;
         min-width: 36px;
-        border: 1px solid var(--border);
+        border: 1px solid #fdba74;
         border-radius: 8px;
         position: relative;
+        background: #fff7ed;
+        color: #9a3412;
+    }
+
+    .translation-launch-btn {
+        width: 36px;
+        height: 36px;
+        min-width: 36px;
+        border: 1px solid #86efac;
+        border-radius: 8px;
+        position: relative;
+        background: #f0fdf4;
+        color: #166534;
+    }
+
+    .dictation-launch-btn:hover {
+        background: #ffedd5;
+        color: #7c2d12;
+        opacity: 1;
+    }
+
+    .translation-launch-btn:hover {
+        background: #dcfce7;
+        color: #14532d;
+        opacity: 1;
     }
 
     .dictation-done-badge {
