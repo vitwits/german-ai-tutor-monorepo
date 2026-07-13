@@ -4,7 +4,7 @@
   --bg: #F5F5F5; --surface: #FFFFFF; --on-surface: #212121;
   --primary: #1976D2; --on-primary: #FFFFFF;
   --secondary: #FFC107; --border: #E0E0E0;
-  --shadow: 0 2px 4px rgba(0,0,0,0.1); --radius: 10px;
+  --shadow: 0 2px 4px rgba(0,0,0,0.1); --radius: 8px;
   
   /* Font variables for testing */
   --font-interface: 'Roboto', sans-serif;

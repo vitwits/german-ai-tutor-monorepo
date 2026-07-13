@@ -2,13 +2,14 @@ import json
 import uuid
 import math
 import asyncio
+import difflib
 from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
 
 from ..database import get_db
-from ..models import User, Lesson, UserLesson, LessonAudio, Vocabulary, ExplainedWord, QuizResult
-from ..schemas import TextGenerateRequest, TextReadSchema, ToggleFavRequest, QuizResultRequest, VocabWordSchema, CreateOwnTextRequest
+from ..models import User, Lesson, UserLesson, LessonAudio, Vocabulary, ExplainedWord, QuizResult, DictationProgress
+from ..schemas import TextGenerateRequest, TextReadSchema, ToggleFavRequest, QuizResultRequest, VocabWordSchema, CreateOwnTextRequest, DictationCheckRequest, DictationProgressSaveRequest, DictationProgressClearRequest
 from ..dependencies import get_current_user
 from .. import services, cost_calculation
 from ..services import deduct_user_energy
@@ -564,6 +565,228 @@ async def generate_sentence_audio(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error generating audio: {str(e)}")
+
+
+@router.post("/texts/{lesson_id}/dictation_check")
+async def dictation_check(
+    lesson_id: str,
+    req: DictationCheckRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    lesson_result = await db.execute(select(Lesson).where(Lesson.id == lesson_id))
+    lesson = lesson_result.scalar_one_or_none()
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+
+    user_lesson_result = await db.execute(
+        select(UserLesson).where(
+            and_(UserLesson.user_id == current_user.id, UserLesson.lesson_id == lesson_id)
+        )
+    )
+    if not user_lesson_result.scalar_one_or_none():
+        raise HTTPException(status_code=403, detail="No access to this lesson")
+
+    try:
+        lesson_sentences = json.loads(lesson.content_json or "[]")
+    except Exception:
+        lesson_sentences = []
+
+    if req.sentence_index < 0 or req.sentence_index >= len(lesson_sentences):
+        raise HTTPException(status_code=400, detail="Invalid sentence index")
+
+    sentence_data = lesson_sentences[req.sentence_index]
+    expected_text = sentence_data.get("de", "") if isinstance(sentence_data, dict) else str(sentence_data)
+
+    expected_norm = " ".join((expected_text or "").strip().split())
+    user_norm = " ".join((req.user_text or "").strip().split())
+
+    matcher = difflib.SequenceMatcher(a=expected_norm, b=user_norm, autojunk=False)
+    similarity_score = round(matcher.ratio() * 100, 2)
+
+    segments = []
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        segments.append(
+            {
+                "type": tag,
+                "expected": expected_norm[i1:i2],
+                "actual": user_norm[j1:j2],
+            }
+        )
+
+    return {
+        "ok": True,
+        "similarity_score": similarity_score,
+        "segments": segments,
+        "expected_text": expected_text,
+        "typed_text": req.user_text,
+    }
+
+
+async def _ensure_lesson_access(
+    lesson_id: str,
+    db: AsyncSession,
+    current_user: User,
+):
+    lesson_result = await db.execute(select(Lesson).where(Lesson.id == lesson_id))
+    lesson = lesson_result.scalar_one_or_none()
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+
+    user_lesson_result = await db.execute(
+        select(UserLesson).where(
+            and_(UserLesson.user_id == current_user.id, UserLesson.lesson_id == lesson_id)
+        )
+    )
+    if not user_lesson_result.scalar_one_or_none():
+        raise HTTPException(status_code=403, detail="No access to this lesson")
+
+    return lesson
+
+
+@router.get("/texts/{lesson_id}/dictation_progress")
+async def get_dictation_progress(
+    lesson_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    await _ensure_lesson_access(lesson_id, db, current_user)
+
+    result = await db.execute(
+        select(DictationProgress).where(
+            DictationProgress.user_id == current_user.id,
+            DictationProgress.lesson_id == lesson_id,
+        )
+    )
+    state = result.scalar_one_or_none()
+
+    if not state:
+        return {
+            "completed_once": False,
+            "progress": None,
+        }
+
+    progress = None
+    try:
+        order = json.loads(state.order_json) if state.order_json else None
+        passed_indices = json.loads(state.passed_indices_json) if state.passed_indices_json else None
+        if isinstance(order, list) and isinstance(passed_indices, list) and len(passed_indices) > 0:
+            progress = {
+                "order": order,
+                "cursor": state.cursor or 0,
+                "passed_indices": passed_indices,
+                "playback_rate": state.playback_rate or 0.8,
+            }
+    except Exception:
+        progress = None
+
+    return {
+        "completed_once": bool(state.completed_once),
+        "progress": progress,
+    }
+
+
+@router.post("/texts/{lesson_id}/dictation_progress/save")
+async def save_dictation_progress(
+    lesson_id: str,
+    req: DictationProgressSaveRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    await _ensure_lesson_access(lesson_id, db, current_user)
+
+    if not req.passed_indices:
+        return {"ok": False, "error": "No passed indices"}
+
+    result = await db.execute(
+        select(DictationProgress).where(
+            DictationProgress.user_id == current_user.id,
+            DictationProgress.lesson_id == lesson_id,
+        )
+    )
+    state = result.scalar_one_or_none()
+
+    if not state:
+        state = DictationProgress(
+            user_id=current_user.id,
+            lesson_id=lesson_id,
+        )
+        db.add(state)
+
+    state.order_json = json.dumps(req.order, ensure_ascii=False)
+    state.passed_indices_json = json.dumps(req.passed_indices, ensure_ascii=False)
+    state.cursor = max(0, req.cursor)
+    state.playback_rate = max(0.4, min(1.0, req.playback_rate))
+    state.updated_at = func.now()
+
+    await db.commit()
+    return {"ok": True}
+
+
+@router.post("/texts/{lesson_id}/dictation_progress/clear")
+async def clear_dictation_progress(
+    lesson_id: str,
+    req: DictationProgressClearRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    await _ensure_lesson_access(lesson_id, db, current_user)
+
+    result = await db.execute(
+        select(DictationProgress).where(
+            DictationProgress.user_id == current_user.id,
+            DictationProgress.lesson_id == lesson_id,
+        )
+    )
+    state = result.scalar_one_or_none()
+
+    if not state:
+        return {"ok": True}
+
+    state.order_json = None
+    state.passed_indices_json = None
+    state.cursor = 0
+    state.playback_rate = 0.8
+    if not req.keep_completed:
+        state.completed_once = False
+    state.updated_at = func.now()
+
+    await db.commit()
+    return {"ok": True}
+
+
+@router.post("/texts/{lesson_id}/dictation_progress/complete")
+async def complete_dictation_progress(
+    lesson_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    await _ensure_lesson_access(lesson_id, db, current_user)
+
+    result = await db.execute(
+        select(DictationProgress).where(
+            DictationProgress.user_id == current_user.id,
+            DictationProgress.lesson_id == lesson_id,
+        )
+    )
+    state = result.scalar_one_or_none()
+
+    if not state:
+        state = DictationProgress(
+            user_id=current_user.id,
+            lesson_id=lesson_id,
+        )
+        db.add(state)
+
+    state.completed_once = True
+    state.order_json = None
+    state.passed_indices_json = None
+    state.cursor = 0
+    state.playback_rate = 0.8
+    state.updated_at = func.now()
+
+    await db.commit()
+    return {"ok": True}
 
 @router.get("/texts/{text_id}")
 async def get_text(text_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):

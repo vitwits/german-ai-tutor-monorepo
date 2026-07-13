@@ -151,6 +151,23 @@ class QuizResult(Base):
     total_questions: Mapped[Optional[int]] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
 
+
+class DictationProgress(Base):
+    __tablename__ = "dictation_progress"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    lesson_id: Mapped[str] = mapped_column(ForeignKey("lessons.id"), nullable=False)
+
+    order_json: Mapped[Optional[str]] = mapped_column(DBText, nullable=True)
+    passed_indices_json: Mapped[Optional[str]] = mapped_column(DBText, nullable=True)
+    cursor: Mapped[int] = mapped_column(Integer, default=0)
+    playback_rate: Mapped[float] = mapped_column(Float, default=0.8)
+    completed_once: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
+
 class Feedback(Base):
     __tablename__ = "feedback"
     
