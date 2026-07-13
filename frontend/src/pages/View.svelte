@@ -46,7 +46,23 @@
     let dictationPassedCurrentSentence = false;
     let dictationCompletedOnce = false;
     let showDictationSplash = false;
+    let showSentenceTranslationTest = false;
+    let sentenceTranslationOrder = [];
+    let sentenceTranslationCursor = 0;
+    let sentenceTranslationInput = "";
+    let sentenceTranslationResult = null;
+    let sentenceTranslationChecking = false;
+    let sentenceTranslationCurrentSentenceIndex = -1;
+    let sentenceTranslationCurrentSentence = null;
+    let sentenceTranslationHasNext = false;
+    let showSentenceTranslationResumePrompt = false;
+    let pendingSentenceTranslationProgress = null;
+    let sentenceTranslationPassedMap = {};
+    let sentenceTranslationPassedCurrentSentence = false;
+    let sentenceTranslationCompletedOnce = false;
+    let showSentenceTranslationSplash = false;
     const DICTATION_PASS_SCORE = 95;
+    const SENTENCE_TRANSLATION_PASS_SCORE = 95;
 
     let editingTitle = false;
     let editTitleValue = "";
@@ -133,6 +149,7 @@
         prevId = id;
         loadText();
         fetchDictationState();
+        fetchSentenceTranslationState();
     }
 
     async function loadText() {
@@ -261,6 +278,26 @@
 
     $: dictationPassedCount = Object.keys(dictationPassedMap).length;
 
+    $: sentenceTranslationCurrentSentenceIndex =
+        sentenceTranslationOrder.length > 0 && sentenceTranslationCursor >= 0
+            ? sentenceTranslationOrder[sentenceTranslationCursor]
+            : -1;
+    $: sentenceTranslationCurrentSentence =
+        sentenceTranslationCurrentSentenceIndex >= 0
+            ? sentences[sentenceTranslationCurrentSentenceIndex]
+            : null;
+    $: sentenceTranslationHasNext =
+        sentenceTranslationCursor < sentenceTranslationOrder.length - 1;
+    $: sentenceTranslationPassedCurrentSentence =
+        !!sentenceTranslationResult &&
+        !!sentenceTranslationResult.is_correct &&
+        Number(sentenceTranslationResult.accuracy_score || 0) >=
+            SENTENCE_TRANSLATION_PASS_SCORE;
+
+    $: sentenceTranslationPassedCount = Object.keys(
+        sentenceTranslationPassedMap,
+    ).length;
+
     async function fetchDictationState() {
         if (!id) return { completed_once: false, progress: null };
         try {
@@ -312,6 +349,249 @@
         } catch (e) {}
     }
 
+    async function fetchSentenceTranslationState() {
+        if (!id) return { completed_once: false, progress: null };
+        try {
+            const res = await api.get(
+                `/texts/${id}/sentence_translation_test/progress`,
+            );
+            sentenceTranslationCompletedOnce = !!res.data?.completed_once;
+            return res.data || { completed_once: false, progress: null };
+        } catch (e) {
+            sentenceTranslationCompletedOnce = false;
+            return { completed_once: false, progress: null };
+        }
+    }
+
+    async function clearSentenceTranslationProgressOnServer(
+        keepCompleted = true,
+    ) {
+        if (!id) return;
+        try {
+            await api.post(
+                `/texts/${id}/sentence_translation_test/progress/clear`,
+                {
+                    keep_completed: keepCompleted,
+                },
+            );
+            if (!keepCompleted) sentenceTranslationCompletedOnce = false;
+        } catch (e) {}
+    }
+
+    async function saveSentenceTranslationProgressToServer() {
+        if (!id) return;
+        const passedIndices = Object.keys(sentenceTranslationPassedMap).map(
+            (v) => Number(v),
+        );
+
+        if (!passedIndices.length) {
+            await clearSentenceTranslationProgressOnServer(true);
+            return;
+        }
+
+        try {
+            await api.post(
+                `/texts/${id}/sentence_translation_test/progress/save`,
+                {
+                    order: sentenceTranslationOrder,
+                    cursor: sentenceTranslationCursor,
+                    passed_indices: passedIndices,
+                },
+            );
+        } catch (e) {}
+    }
+
+    async function markSentenceTranslationCompletedOnServer() {
+        if (!id) return;
+        sentenceTranslationCompletedOnce = true;
+        try {
+            await api.post(
+                `/texts/${id}/sentence_translation_test/progress/complete`,
+                {},
+            );
+        } catch (e) {}
+    }
+
+    async function openSentenceTranslationTest() {
+        if (!sentences.length) return;
+        showDictation = false;
+        stopCurrentPlayback();
+        const state = await fetchSentenceTranslationState();
+        const savedProgress = state?.progress || null;
+
+        if (
+            savedProgress &&
+            savedProgress.order.length === sentences.length &&
+            savedProgress.passed_indices.length > 0
+        ) {
+            pendingSentenceTranslationProgress = savedProgress;
+            showSentenceTranslationResumePrompt = true;
+            showSentenceTranslationTest = true;
+            return;
+        }
+
+        await startSentenceTranslationFromScratch();
+    }
+
+    async function startSentenceTranslationFromScratch() {
+        await clearSentenceTranslationProgressOnServer(true);
+        pendingSentenceTranslationProgress = null;
+        showSentenceTranslationResumePrompt = false;
+        sentenceTranslationOrder = shuffledIndices(sentences.length);
+        sentenceTranslationCursor = 0;
+        sentenceTranslationInput = "";
+        sentenceTranslationResult = null;
+        sentenceTranslationChecking = false;
+        sentenceTranslationPassedMap = {};
+        showSentenceTranslationSplash = false;
+        showSentenceTranslationTest = true;
+    }
+
+    async function continueSentenceTranslationProgress() {
+        const saved = pendingSentenceTranslationProgress;
+        if (!saved || !Array.isArray(saved.order)) {
+            await startSentenceTranslationFromScratch();
+            return;
+        }
+
+        const passedMap = {};
+        saved.passed_indices.forEach((idx) => {
+            if (Number.isInteger(idx) && idx >= 0 && idx < sentences.length) {
+                passedMap[idx] = true;
+            }
+        });
+
+        const savedOrder = saved.order.filter(
+            (idx) =>
+                Number.isInteger(idx) && idx >= 0 && idx < sentences.length,
+        );
+        if (savedOrder.length !== sentences.length) {
+            await startSentenceTranslationFromScratch();
+            return;
+        }
+
+        let restoredCursor = Math.max(
+            0,
+            Math.min(saved.cursor || 0, savedOrder.length - 1),
+        );
+        while (
+            restoredCursor < savedOrder.length &&
+            passedMap[savedOrder[restoredCursor]]
+        ) {
+            restoredCursor += 1;
+        }
+        if (restoredCursor >= savedOrder.length) {
+            restoredCursor = savedOrder.length - 1;
+        }
+
+        sentenceTranslationOrder = savedOrder;
+        sentenceTranslationCursor = restoredCursor;
+        sentenceTranslationInput = "";
+        sentenceTranslationResult = null;
+        sentenceTranslationChecking = false;
+        sentenceTranslationPassedMap = passedMap;
+        showSentenceTranslationResumePrompt = false;
+        pendingSentenceTranslationProgress = null;
+        showSentenceTranslationSplash = false;
+        showSentenceTranslationTest = true;
+    }
+
+    async function closeSentenceTranslationTest() {
+        showSentenceTranslationTest = false;
+        showSentenceTranslationResumePrompt = false;
+        pendingSentenceTranslationProgress = null;
+        sentenceTranslationChecking = false;
+        sentenceTranslationResult = null;
+        sentenceTranslationInput = "";
+        if (sentenceTranslationPassedCount > 0) {
+            await saveSentenceTranslationProgressToServer();
+        } else {
+            await clearSentenceTranslationProgressOnServer(true);
+        }
+    }
+
+    async function checkSentenceTranslation() {
+        if (
+            !sentenceTranslationCurrentSentence ||
+            !sentenceTranslationInput.trim() ||
+            sentenceTranslationChecking
+        ) {
+            return;
+        }
+
+        sentenceTranslationChecking = true;
+        try {
+            const res = await api.post(
+                `/texts/${id}/sentence_translation_test/check`,
+                {
+                    sentence_index: sentenceTranslationCurrentSentenceIndex,
+                    user_text: sentenceTranslationInput,
+                    source_text:
+                        sentenceTranslationCurrentSentence.display_trans,
+                },
+            );
+            sentenceTranslationResult = res.data;
+        } catch (e) {
+            console.error(e);
+            addToast(ui.error_generic, "error");
+        } finally {
+            sentenceTranslationChecking = false;
+        }
+    }
+
+    async function nextSentenceTranslationSentence() {
+        if (!sentenceTranslationPassedCurrentSentence) {
+            addToast(ui.sentence_translation_need_repeat, "info");
+            return;
+        }
+
+        if (sentenceTranslationCurrentSentenceIndex >= 0) {
+            sentenceTranslationPassedMap = {
+                ...sentenceTranslationPassedMap,
+                [sentenceTranslationCurrentSentenceIndex]: true,
+            };
+            await saveSentenceTranslationProgressToServer();
+        }
+
+        if (!sentenceTranslationHasNext) {
+            showSentenceTranslationTest = false;
+            showSentenceTranslationResumePrompt = false;
+            showSentenceTranslationSplash = true;
+            await markSentenceTranslationCompletedOnServer();
+            await clearSentenceTranslationProgressOnServer(true);
+            setTimeout(
+                () => launchConfettiInto("sentence-translation-splash"),
+                250,
+            );
+            return;
+        }
+
+        sentenceTranslationCursor += 1;
+        sentenceTranslationInput = "";
+        sentenceTranslationResult = null;
+        await saveSentenceTranslationProgressToServer();
+    }
+
+    async function retrySentenceTranslationSentence() {
+        await checkSentenceTranslation();
+    }
+
+    function closeSentenceTranslationSplash() {
+        showSentenceTranslationSplash = false;
+        const container = document.getElementById(
+            "sentence-translation-splash",
+        );
+        if (container) {
+            const particles = container.querySelectorAll(".confetti");
+            particles.forEach((p) => p.remove());
+        }
+    }
+
+    function restartSentenceTranslationExam() {
+        closeSentenceTranslationSplash();
+        startSentenceTranslationFromScratch();
+    }
+
     function stopCurrentPlayback() {
         isPlayingAll = false;
         if (currentAudio) {
@@ -336,6 +616,7 @@
 
     async function openDictation() {
         if (!sentences.length) return;
+        showSentenceTranslationTest = false;
         stopCurrentPlayback();
         const state = await fetchDictationState();
         const savedProgress = state?.progress || null;
@@ -1571,6 +1852,22 @@
     }
 
     function handleViewKeydown(e) {
+        if (showSentenceTranslationSplash) {
+            if (e.key === "Escape") {
+                e.preventDefault();
+                closeSentenceTranslationSplash();
+            }
+            return;
+        }
+
+        if (showSentenceTranslationTest) {
+            if (e.key === "Escape") {
+                e.preventDefault();
+                closeSentenceTranslationTest();
+            }
+            return;
+        }
+
         if (showDictationSplash) {
             if (e.key === "Escape") {
                 e.preventDefault();
@@ -1703,6 +2000,7 @@
         document.addEventListener("click", handleLearnedClick);
         window.addEventListener("keydown", handleViewKeydown);
         fetchDictationState();
+        fetchSentenceTranslationState();
     });
 
     // Підсвічування речення при переході з Vocab (через URL hash #sent-N)
@@ -1860,6 +2158,25 @@
                         <span
                             class="dictation-done-badge"
                             title={ui.dictation_completed_badge || "Completed"}
+                        >
+                            <span class="material-symbols-outlined"
+                                >check_circle</span
+                            >
+                        </span>
+                    {/if}
+                </button>
+
+                <button
+                    class="badge-btn dictation-launch-btn"
+                    onclick={openSentenceTranslationTest}
+                    title={ui.sentence_translation_test}
+                >
+                    <span class="material-symbols-outlined">g_translate</span>
+                    {#if sentenceTranslationCompletedOnce}
+                        <span
+                            class="dictation-done-badge"
+                            title={ui.sentence_translation_completed_badge ||
+                                "Completed"}
                         >
                             <span class="material-symbols-outlined"
                                 >check_circle</span
@@ -2099,6 +2416,160 @@
             </div>
         {/if}
 
+        {#if showSentenceTranslationTest}
+            <div class="dictation-overlay" role="dialog" aria-modal="true">
+                {#if !showSentenceTranslationResumePrompt}
+                    <button
+                        class="dictation-close-btn"
+                        onclick={closeSentenceTranslationTest}
+                        aria-label="Close"
+                    >
+                        <span class="material-symbols-outlined">close</span>
+                        <div class="dictation-close-hint">Esc</div>
+                    </button>
+                {/if}
+
+                <div class="dictation-container translation-test-container">
+                    {#if showSentenceTranslationResumePrompt}
+                        <div class="dictation-resume-actions">
+                            <button
+                                class="btn-contained"
+                                onclick={startSentenceTranslationFromScratch}
+                            >
+                                {ui.dictation_restart_btn || ui.restart_btn}
+                            </button>
+                            <button
+                                class="btn-contained"
+                                onclick={continueSentenceTranslationProgress}
+                            >
+                                {ui.dictation_continue_btn || ui.continue_btn}
+                            </button>
+                        </div>
+                    {:else}
+                        <div class="fc-progress-wrapper">
+                            <div class="fc-progress-track">
+                                <div
+                                    class="fc-progress-fill"
+                                    style="width: {(sentenceTranslationCursor /
+                                        Math.max(
+                                            sentenceTranslationOrder.length,
+                                            1,
+                                        )) *
+                                        100}%"
+                                ></div>
+                            </div>
+                            <div class="fc-progress-text">
+                                {Math.min(
+                                    sentenceTranslationCursor + 1,
+                                    sentenceTranslationOrder.length,
+                                )} / {sentenceTranslationOrder.length}
+                            </div>
+                        </div>
+
+                        <div class="translation-source-card">
+                            <div class="translation-source-label">
+                                {ui.sentence_translation_source_label}
+                            </div>
+                            <div class="translation-source-text">
+                                {sentenceTranslationCurrentSentence?.display_trans ||
+                                    ""}
+                            </div>
+                        </div>
+
+                        <textarea
+                            class="dictation-input"
+                            bind:value={sentenceTranslationInput}
+                            placeholder={ui.sentence_translation_input_placeholder}
+                            rows="4"
+                            disabled={sentenceTranslationChecking}
+                        ></textarea>
+
+                        <div class="dictation-actions">
+                            {#if !sentenceTranslationResult}
+                                <button
+                                    class="btn-contained"
+                                    onclick={checkSentenceTranslation}
+                                    disabled={!sentenceTranslationInput.trim() ||
+                                        sentenceTranslationChecking}
+                                >
+                                    {#if sentenceTranslationChecking}
+                                        <span class="loader-spinner"></span>
+                                        {ui.loading}
+                                    {:else}
+                                        {ui.sentence_translation_check_btn}
+                                    {/if}
+                                </button>
+                            {:else}
+                                <button
+                                    class="btn-contained"
+                                    onclick={retrySentenceTranslationSentence}
+                                    disabled={!sentenceTranslationInput.trim() ||
+                                        sentenceTranslationChecking}
+                                >
+                                    {#if sentenceTranslationChecking}
+                                        <span class="loader-spinner"></span>
+                                        {ui.loading}
+                                    {:else}
+                                        {ui.retry_btn}
+                                    {/if}
+                                </button>
+                                <button
+                                    class="btn-contained dictation-next-btn"
+                                    onclick={nextSentenceTranslationSentence}
+                                    disabled={!sentenceTranslationPassedCurrentSentence}
+                                >
+                                    {sentenceTranslationHasNext
+                                        ? ui.sentence_translation_next_btn
+                                        : ui.sentence_translation_finish_btn}
+                                </button>
+                            {/if}
+                        </div>
+
+                        {#if sentenceTranslationResult}
+                            <div class="dictation-result-card">
+                                <div class="dictation-score">
+                                    {ui.sentence_translation_accuracy}:
+                                    <strong
+                                        >{Number(
+                                            sentenceTranslationResult.accuracy_score,
+                                        ).toFixed(2)}%</strong
+                                    >
+                                </div>
+
+                                {#if !sentenceTranslationPassedCurrentSentence}
+                                    <div class="dictation-repeat-warning">
+                                        {ui.sentence_translation_need_repeat}
+                                    </div>
+                                {/if}
+
+                                <div class="dictation-diff-block">
+                                    <div class="dictation-diff-label">
+                                        {ui.sentence_translation_hint}
+                                    </div>
+                                    <div class="dictation-diff-line">
+                                        {sentenceTranslationResult.feedback}
+                                    </div>
+                                </div>
+
+                                {#if sentenceTranslationPassedCurrentSentence && sentenceTranslationResult.expected_text}
+                                    <div class="dictation-diff-block">
+                                        <div class="dictation-diff-label">
+                                            {ui.dictation_original}
+                                        </div>
+                                        <div
+                                            class="dictation-diff-line sentence-translation-correct"
+                                        >
+                                            {sentenceTranslationResult.expected_text}
+                                        </div>
+                                    </div>
+                                {/if}
+                            </div>
+                        {/if}
+                    {/if}
+                </div>
+            </div>
+        {/if}
+
         {#if showDictationSplash}
             <div id="dictation-splash" transition:fade={{ duration: 300 }}>
                 <h2 style="margin-bottom: 20px;">
@@ -2120,6 +2591,39 @@
                     <button
                         class="btn-contained"
                         onclick={restartDictationExam}
+                    >
+                        {ui.dictation_repeat_btn || ui.retry_btn}
+                    </button>
+                </div>
+            </div>
+        {/if}
+
+        {#if showSentenceTranslationSplash}
+            <div
+                id="sentence-translation-splash"
+                transition:fade={{ duration: 300 }}
+            >
+                <h2 style="margin-bottom: 20px;">
+                    {ui.sentence_translation_completed_title ||
+                        ui.dictation_completed_title}
+                </h2>
+                <div
+                    style="font-size: 1.05rem; margin-bottom: 34px; opacity: 0.85; text-align: center;"
+                >
+                    {ui.sentence_translation_completed_subtitle ||
+                        ui.dictation_completed_subtitle}
+                </div>
+                <div style="display: flex; gap: 20px;">
+                    <button
+                        class="btn-contained"
+                        style="background: white; color: black;"
+                        onclick={closeSentenceTranslationSplash}
+                    >
+                        {ui.sentence_translation_finish_btn || ui.done_btn}
+                    </button>
+                    <button
+                        class="btn-contained"
+                        onclick={restartSentenceTranslationExam}
                     >
                         {ui.dictation_repeat_btn || ui.retry_btn}
                     </button>
@@ -2872,7 +3376,7 @@
 
     .dictation-input {
         width: 100%;
-        min-height: 250px;
+        min-height: 200px;
         resize: vertical;
         border: 2px solid var(--border);
         border-radius: 16px;
@@ -2890,6 +3394,31 @@
         outline: none;
         border-color: var(--primary);
         background: rgba(25, 118, 210, 0.04);
+    }
+
+    .translation-source-card {
+        border: 2px solid var(--border);
+        border-radius: 16px;
+        padding: 16px 18px;
+        background: rgba(25, 118, 210, 0.04);
+    }
+
+    .translation-source-label {
+        font-size: 0.85rem;
+        opacity: 0.7;
+        font-weight: 600;
+        margin-bottom: 8px;
+    }
+
+    .translation-source-text {
+        font-size: 1.15rem;
+        line-height: 1.45;
+        font-family: var(--font-text);
+    }
+
+    .sentence-translation-correct {
+        color: #2e7d32;
+        font-weight: 600;
     }
 
     .dictation-actions {
@@ -3225,7 +3754,8 @@
         justify-content: center;
         color: white;
     }
-    #dictation-splash {
+    #dictation-splash,
+    #sentence-translation-splash {
         position: fixed;
         top: 0;
         left: 0;

@@ -168,6 +168,22 @@ class DictationProgress(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
 
+
+class SentenceTranslationTestProgress(Base):
+    __tablename__ = "sentence_translation_test_progress"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    lesson_id: Mapped[str] = mapped_column(ForeignKey("lessons.id"), nullable=False)
+
+    order_json: Mapped[Optional[str]] = mapped_column(DBText, nullable=True)
+    passed_indices_json: Mapped[Optional[str]] = mapped_column(DBText, nullable=True)
+    cursor: Mapped[int] = mapped_column(Integer, default=0)
+    completed_once: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
+
 class Feedback(Base):
     __tablename__ = "feedback"
     
