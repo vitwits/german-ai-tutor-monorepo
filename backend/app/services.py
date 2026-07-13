@@ -774,6 +774,179 @@ async def explain_word(text: str, db: AsyncSession = None):
     return data
 
 
+async def evaluate_sentence_translation_test(
+    source_text: str,
+    expected_german: str,
+    user_german: str,
+    interface_language: str,
+    db: AsyncSession = None,
+):
+    """
+    Evaluate user's German translation against expected German sentence via LLM.
+    Uses ai_preferences job='sentence_translation_test' and prompt name
+    'sentence_translation_test_prompt'.
+    """
+
+    model_id = await get_llm_model_for_job("sentence_translation_test", db)
+
+    from .models import ModelPrompt
+
+    result = await db.execute(
+        select(ModelPrompt.prompt).where(
+            ModelPrompt.name == "sentence_translation_test_prompt"
+        )
+    )
+    prompt_template = result.scalar_one_or_none()
+
+    if not prompt_template:
+        prompt_template = (
+            "You are evaluating a German translation attempt.\\n"
+            "Compare the user's German sentence to the expected German sentence and consider meaning first, then grammar and wording.\\n"
+            "Input source sentence (UI language): {source_text}\\n"
+            "Expected German: {expected_de}\\n"
+            "User German: {user_de}\\n\\n"
+            "Return strict JSON with keys: accuracy_score (0-100 number), is_correct (boolean), feedback_uk (short hint in Ukrainian), feedback_en (short hint in English).\\n"
+            "Set is_correct=true only when accuracy_score >= 95 and the meaning is fully preserved.\\n"
+            "Keep hints short and non-revealing."
+        )
+
+    prompt = (
+        prompt_template.replace("{source_text}", source_text or "")
+        .replace("{expected_de}", expected_german or "")
+        .replace("{user_de}", user_german or "")
+    )
+
+    try:
+        response = client.models.generate_content(
+            model=model_id,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                temperature=0.0,
+            ),
+        )
+
+        data = json.loads(clean_json_response(response.text))
+        if isinstance(data, list):
+            data = data[0] if data else {}
+
+        accuracy_raw = data.get("accuracy_score", 0)
+        try:
+            accuracy = max(0.0, min(100.0, float(accuracy_raw)))
+        except Exception:
+            accuracy = 0.0
+
+        is_correct = bool(data.get("is_correct", False))
+        if accuracy >= 95:
+            is_correct = True
+
+        feedback_uk = str(data.get("feedback_uk") or "")
+        feedback_en = str(data.get("feedback_en") or "")
+        feedback = feedback_uk if interface_language in ["uk", "ukr"] else feedback_en
+        if not feedback.strip():
+            feedback = (
+                "Близько, спробуйте точніше відтворити зміст і форму."
+                if interface_language in ["uk", "ukr"]
+                else "Close. Try to match the meaning and form more precisely."
+            )
+
+        feedback = _sanitize_translation_feedback(
+            feedback=feedback,
+            expected_german=expected_german,
+            user_german=user_german,
+            interface_language=interface_language,
+        )
+
+        return {
+            "accuracy_score": round(accuracy, 2),
+            "is_correct": is_correct,
+            "feedback": feedback.strip(),
+        }
+    except Exception as e:
+        print(f"evaluate_sentence_translation_test error: {e}")
+        return {
+            "accuracy_score": 0.0,
+            "is_correct": False,
+            "feedback": (
+                "Не вдалося перевірити переклад. Спробуйте ще раз."
+                if interface_language in ["uk", "ukr"]
+                else "Could not check translation. Please try again."
+            ),
+        }
+
+
+def _normalize_hint_text(value: str) -> str:
+    cleaned = (value or "").lower().strip()
+    cleaned = cleaned.replace("...", " ")
+    cleaned = re.sub(r"[\"'«»“”„.,!?;:()\[\]{}]", " ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned
+
+
+def _extract_start_phrase(feedback: str) -> str:
+    if not feedback:
+        return ""
+    quote_match = re.search(r'["«“](.+?)["»”]', feedback)
+    if quote_match:
+        return quote_match.group(1)
+    return ""
+
+
+def _remove_leading_start_hint(feedback: str, interface_language: str) -> str:
+    if interface_language in ["uk", "ukr"]:
+        pattern = r"^\s*Почніть\s+з:\s*[\"«“].+?[\"»”]\.?\s*"
+    else:
+        pattern = r"^\s*Start\s+with:\s*[\"«“].+?[\"»”]\.?\s*"
+    return re.sub(pattern, "", feedback or "", count=1).strip()
+
+
+def _sanitize_translation_feedback(
+    feedback: str,
+    expected_german: str,
+    user_german: str,
+    interface_language: str,
+) -> str:
+    feedback = (feedback or "").strip()
+    if not feedback:
+        return feedback
+
+    if (
+        "Почніть з:" not in feedback
+        and "Start with:" not in feedback
+    ):
+        return feedback
+
+    start_phrase = _extract_start_phrase(feedback)
+    if not start_phrase:
+        return feedback
+
+    user_norm = _normalize_hint_text(user_german)
+    start_norm = _normalize_hint_text(start_phrase)
+    expected_norm = _normalize_hint_text(expected_german)
+
+    if not start_norm:
+        return feedback
+
+    # Remove redundant start hint when user already starts with that phrase
+    # or when start hint equals the expected sentence prefix and user matches it.
+    is_redundant = user_norm.startswith(start_norm)
+    if not is_redundant and expected_norm.startswith(start_norm):
+        is_redundant = user_norm.startswith(start_norm)
+
+    if not is_redundant:
+        return feedback
+
+    trimmed = _remove_leading_start_hint(feedback, interface_language)
+    if trimmed:
+        return trimmed
+
+    return (
+        "Перевірте порядок слів і керування після прийменника."
+        if interface_language in ["uk", "ukr"]
+        else "Check word order and government after the preposition."
+    )
+
+
 async def translate_custom_word_async(text: str, user_id: str = None, db: AsyncSession = None):
     """
     Translate custom word/phrase without lesson context.

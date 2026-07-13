@@ -8,8 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
 
 from ..database import get_db
-from ..models import User, Lesson, UserLesson, LessonAudio, Vocabulary, ExplainedWord, QuizResult, DictationProgress
-from ..schemas import TextGenerateRequest, TextReadSchema, ToggleFavRequest, QuizResultRequest, VocabWordSchema, CreateOwnTextRequest, DictationCheckRequest, DictationProgressSaveRequest, DictationProgressClearRequest
+from ..models import User, Lesson, UserLesson, LessonAudio, Vocabulary, ExplainedWord, QuizResult, DictationProgress, SentenceTranslationTestProgress
+from ..schemas import TextGenerateRequest, TextReadSchema, ToggleFavRequest, QuizResultRequest, VocabWordSchema, CreateOwnTextRequest, DictationCheckRequest, DictationProgressSaveRequest, DictationProgressClearRequest, SentenceTranslationTestCheckRequest, SentenceTranslationTestProgressSaveRequest, SentenceTranslationTestProgressClearRequest
 from ..dependencies import get_current_user
 from .. import services, cost_calculation
 from ..services import deduct_user_energy
@@ -644,6 +644,45 @@ async def _ensure_lesson_access(
     return lesson
 
 
+@router.post("/texts/{lesson_id}/sentence_translation_test/check")
+async def sentence_translation_test_check(
+    lesson_id: str,
+    req: SentenceTranslationTestCheckRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    lesson = await _ensure_lesson_access(lesson_id, db, current_user)
+
+    try:
+        lesson_sentences = json.loads(lesson.content_json or "[]")
+    except Exception:
+        lesson_sentences = []
+
+    if req.sentence_index < 0 or req.sentence_index >= len(lesson_sentences):
+        raise HTTPException(status_code=400, detail="Invalid sentence index")
+
+    sentence_data = lesson_sentences[req.sentence_index]
+    expected_text = sentence_data.get("de", "") if isinstance(sentence_data, dict) else str(sentence_data)
+
+    evaluation = await services.evaluate_sentence_translation_test(
+        source_text=req.source_text,
+        expected_german=expected_text,
+        user_german=req.user_text,
+        interface_language=current_user.interface_language,
+        db=db,
+    )
+
+    return {
+        "ok": True,
+        "accuracy_score": evaluation.get("accuracy_score", 0),
+        "is_correct": evaluation.get("is_correct", False),
+        "feedback": evaluation.get("feedback", ""),
+        "expected_text": expected_text,
+        "typed_text": req.user_text,
+        "pass_threshold": 95,
+    }
+
+
 @router.get("/texts/{lesson_id}/dictation_progress")
 async def get_dictation_progress(
     lesson_id: str,
@@ -676,6 +715,47 @@ async def get_dictation_progress(
                 "cursor": state.cursor or 0,
                 "passed_indices": passed_indices,
                 "playback_rate": state.playback_rate or 0.8,
+            }
+    except Exception:
+        progress = None
+
+    return {
+        "completed_once": bool(state.completed_once),
+        "progress": progress,
+    }
+
+
+@router.get("/texts/{lesson_id}/sentence_translation_test/progress")
+async def get_sentence_translation_test_progress(
+    lesson_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    await _ensure_lesson_access(lesson_id, db, current_user)
+
+    result = await db.execute(
+        select(SentenceTranslationTestProgress).where(
+            SentenceTranslationTestProgress.user_id == current_user.id,
+            SentenceTranslationTestProgress.lesson_id == lesson_id,
+        )
+    )
+    state = result.scalar_one_or_none()
+
+    if not state:
+        return {
+            "completed_once": False,
+            "progress": None,
+        }
+
+    progress = None
+    try:
+        order = json.loads(state.order_json) if state.order_json else None
+        passed_indices = json.loads(state.passed_indices_json) if state.passed_indices_json else None
+        if isinstance(order, list) and isinstance(passed_indices, list) and len(passed_indices) > 0:
+            progress = {
+                "order": order,
+                "cursor": state.cursor or 0,
+                "passed_indices": passed_indices,
             }
     except Exception:
         progress = None
@@ -723,6 +803,42 @@ async def save_dictation_progress(
     return {"ok": True}
 
 
+@router.post("/texts/{lesson_id}/sentence_translation_test/progress/save")
+async def save_sentence_translation_test_progress(
+    lesson_id: str,
+    req: SentenceTranslationTestProgressSaveRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    await _ensure_lesson_access(lesson_id, db, current_user)
+
+    if not req.passed_indices:
+        return {"ok": False, "error": "No passed indices"}
+
+    result = await db.execute(
+        select(SentenceTranslationTestProgress).where(
+            SentenceTranslationTestProgress.user_id == current_user.id,
+            SentenceTranslationTestProgress.lesson_id == lesson_id,
+        )
+    )
+    state = result.scalar_one_or_none()
+
+    if not state:
+        state = SentenceTranslationTestProgress(
+            user_id=current_user.id,
+            lesson_id=lesson_id,
+        )
+        db.add(state)
+
+    state.order_json = json.dumps(req.order, ensure_ascii=False)
+    state.passed_indices_json = json.dumps(req.passed_indices, ensure_ascii=False)
+    state.cursor = max(0, req.cursor)
+    state.updated_at = func.now()
+
+    await db.commit()
+    return {"ok": True}
+
+
 @router.post("/texts/{lesson_id}/dictation_progress/clear")
 async def clear_dictation_progress(
     lesson_id: str,
@@ -747,6 +863,37 @@ async def clear_dictation_progress(
     state.passed_indices_json = None
     state.cursor = 0
     state.playback_rate = 0.8
+    if not req.keep_completed:
+        state.completed_once = False
+    state.updated_at = func.now()
+
+    await db.commit()
+    return {"ok": True}
+
+
+@router.post("/texts/{lesson_id}/sentence_translation_test/progress/clear")
+async def clear_sentence_translation_test_progress(
+    lesson_id: str,
+    req: SentenceTranslationTestProgressClearRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    await _ensure_lesson_access(lesson_id, db, current_user)
+
+    result = await db.execute(
+        select(SentenceTranslationTestProgress).where(
+            SentenceTranslationTestProgress.user_id == current_user.id,
+            SentenceTranslationTestProgress.lesson_id == lesson_id,
+        )
+    )
+    state = result.scalar_one_or_none()
+
+    if not state:
+        return {"ok": True}
+
+    state.order_json = None
+    state.passed_indices_json = None
+    state.cursor = 0
     if not req.keep_completed:
         state.completed_once = False
     state.updated_at = func.now()
@@ -783,6 +930,39 @@ async def complete_dictation_progress(
     state.passed_indices_json = None
     state.cursor = 0
     state.playback_rate = 0.8
+    state.updated_at = func.now()
+
+    await db.commit()
+    return {"ok": True}
+
+
+@router.post("/texts/{lesson_id}/sentence_translation_test/progress/complete")
+async def complete_sentence_translation_test_progress(
+    lesson_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    await _ensure_lesson_access(lesson_id, db, current_user)
+
+    result = await db.execute(
+        select(SentenceTranslationTestProgress).where(
+            SentenceTranslationTestProgress.user_id == current_user.id,
+            SentenceTranslationTestProgress.lesson_id == lesson_id,
+        )
+    )
+    state = result.scalar_one_or_none()
+
+    if not state:
+        state = SentenceTranslationTestProgress(
+            user_id=current_user.id,
+            lesson_id=lesson_id,
+        )
+        db.add(state)
+
+    state.completed_once = True
+    state.order_json = None
+    state.passed_indices_json = None
+    state.cursor = 0
     state.updated_at = func.now()
 
     await db.commit()
