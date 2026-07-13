@@ -1,21 +1,42 @@
 @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Inter:wght@400;500;600;700&family=Montserrat:wght@400;500;600;700&family=Roboto+Flex:wght@400;500;600;700&family=Merriweather:wght@400;700&family=Fira+Code:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Manrope:wght@400;500;600;700&family=PT+Sans:wght@400;700&family=Exo+2:wght@400;500;600;700&family=Lora:wght@400;600;700&family=Intel+One+Mono:wght@400;500;700&family=Cascadia+Code:wght@400;500;600;700&family=Ubuntu+Mono:wght@400;700&display=swap');
 
 :root {
-  --bg: #F5F5F5; --surface: #FFFFFF; --on-surface: #212121;
-  --primary: #1976D2; --on-primary: #FFFFFF;
-  --secondary: #FFC107; --border: #E0E0E0;
-  --shadow: 0 2px 4px rgba(0,0,0,0.1); --radius: 8px;
-  
+  --bg: #F5F5F5;
+  --surface: #FFFFFF;
+  --on-surface: #212121;
+  --primary: #1976D2;
+  --on-primary: #FFFFFF;
+  --secondary: #FFC107;
+  --border: #E0E0E0;
+  --shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  --radius: 8px;
+
   /* Font variables for testing */
   --font-interface: 'Roboto', sans-serif;
   --font-text: 'Merriweather', serif;
-  
+
   font-family: var(--font-interface);
 }
 
 body.dark-mode {
-  --bg: #121212; --surface: #1E1E1E; --on-surface: #E0E0E0;
-  --primary: #90CAF9; --on-primary: #000000; --border: #333333;
+  --bg: #121212;
+  --surface: #1E1E1E;
+  --on-surface: #E0E0E0;
+  --primary: #90CAF9;
+  --on-primary: #000000;
+  --border: #333333;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  /* Prevent any accidental horizontal scroll on small (mobile) viewports */
+  overflow-x: hidden;
+  width: 100%;
 }
 
 body {
@@ -24,7 +45,10 @@ body {
   margin: 0;
   line-height: 1.5;
   font-family: var(--font-interface);
-  overflow-y: scroll; /* Завжди показувати скролбар, щоб уникнути зсуву макету */
+  overflow-y: scroll;
+  overflow-x: hidden;
+  /* Завжди показувати скролбар, щоб уникнути зсуву макету */
+  width: 100%;
 }
 
 /* Global Layout Classes */
@@ -38,15 +62,110 @@ body {
   display: flex;
   flex: 1;
   width: 100%;
-  padding-top: 57px; /* Height of fixed header */
+  padding-top: 57px;
+  /* Height of fixed header */
 }
 
-.container { 
-  max-width: 1160px; 
-  margin: 0 auto; 
-  padding: 20px; 
-  padding-bottom: 80px; /* Space for bottom nav on mobile */
+.container {
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 20px;
+  padding-bottom: 80px;
+  /* Space for bottom nav on mobile */
   width: 100%;
+}
+
+/*
+ * Mobile breakpoint: anything below 1024px (tablet + phone) uses the
+ * bottom navigation bar layout. The minimum supported size we design/test
+ * against is the iPhone X viewport: 375 x 812 CSS px.
+ * Everything at >=1024px (below) is untouched to preserve the desktop UI.
+ */
+@media (max-width: 1023px) {
+  .content-wrapper {
+    padding-top: 52px;
+    /* matches shrunk mobile header height */
+    /* Stack (instead of the flex row default) so main/.container is never
+       treated as a shrinkable flex item - this was letting wide intrinsic
+       content (e.g. the library grid) blow out past the viewport width. */
+    flex-direction: column;
+  }
+
+  main {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .container {
+    padding: 12px;
+    padding-bottom: calc(76px + env(safe-area-inset-bottom));
+    min-width: 0;
+  }
+
+  .nav-mobile {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    z-index: 998;
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    justify-content: space-around;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.06);
+    padding: 8px 2px calc(4px + env(safe-area-inset-bottom));
+  }
+
+  .nav-logo {
+    display: none;
+  }
+
+  .nav-mobile .nav-item {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    background: none;
+    border: none;
+    padding: 8px 2px;
+    font-size: 12px;
+    line-height: 1.15;
+    color: var(--on-surface);
+    opacity: 0.6;
+    cursor: pointer;
+    outline: none;
+    -webkit-tap-highlight-color: transparent;
+    border-radius: 0;
+  }
+
+  .nav-mobile .nav-item .material-symbols-outlined {
+    font-size: 27px;
+  }
+
+  .nav-mobile .nav-item span:last-child {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .nav-mobile .nav-item.active {
+    opacity: 1;
+    color: var(--primary);
+    font-weight: 500;
+  }
+
+  /* Form text was sized for desktop density; bump it up a bit for
+     comfortable mobile reading/tapping. */
+  .form-label {
+    font-size: 0.95rem;
+  }
 }
 
 /* Desktop: nav on left, main on right */
@@ -66,7 +185,7 @@ body {
     padding: 0 !important;
     border-top: none !important;
     border-right: 1px solid var(--border);
-    box-shadow: 2px 0 10px rgba(0,0,0,0.05);
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.05);
     flex-direction: column;
     justify-content: flex-start;
     z-index: 100;
@@ -74,7 +193,7 @@ body {
     overflow-y: auto;
   }
 
-  .nav-mobile .nav-item { 
+  .nav-mobile .nav-item {
     width: 100%;
     padding: 32px 16px;
     font-size: 18px;
@@ -140,27 +259,59 @@ body {
   }
 }
 
-.card { background: var(--surface); padding: 20px; border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 20px; }
+.card {
+  background: var(--surface);
+  padding: 20px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  margin-bottom: 20px;
+}
 
 /* Buttons & Links */
-button, a.btn-contained, a.btn-text, .btn-contained, .btn-text { 
-  border-radius: var(--radius); font-family: var(--font-interface); 
-  font-size: 0.875rem; font-weight: 500; text-transform: uppercase; 
-  cursor: pointer; border: none; padding: 0 16px; height: 36px; 
-  display: inline-flex; align-items: center; gap: 8px; text-decoration: none; 
+button,
+a.btn-contained,
+a.btn-text,
+.btn-contained,
+.btn-text {
+  border-radius: var(--radius);
+  font-family: var(--font-interface);
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  cursor: pointer;
+  border: none;
+  padding: 0 16px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
   justify-content: center;
 }
-.btn-contained { background: var(--primary); color: var(--on-primary); }
-.btn-text { background: transparent; color: var(--on-surface); }
+
+.btn-contained {
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.btn-text {
+  background: transparent;
+  color: var(--on-surface);
+}
+
 .btn-outlined {
   background: transparent;
   color: var(--on-surface);
   border: 1px solid var(--border);
 }
+
 .btn-outlined:hover {
-  background: rgba(0,0,0,0.04);
+  background: rgba(0, 0, 0, 0.04);
 }
-body.dark-mode .btn-outlined:hover { background: rgba(255,255,255,0.08); }
+
+body.dark-mode .btn-outlined:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
 
 /* Icons */
 .material-symbols-outlined {
@@ -185,49 +336,100 @@ body.dark-mode .btn-outlined:hover { background: rgba(255,255,255,0.08); }
 
 /* Level Tiles (Global) */
 .lvl-tile {
-    width: 28px; height: 28px;
-    display: flex; align-items: center; justify-content: center;
-    border-radius: 4px; font-size: 0.75rem; font-weight: 700;
-    cursor: pointer; color: white; opacity: 0.3; transition: all 0.2s;
-    border: none; padding: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  color: white;
+  opacity: 0.3;
+  transition: all 0.2s;
+  border: none;
+  padding: 0;
 }
-.lvl-tile:hover { opacity: 0.7; transform: translateY(-1px); }
-.lvl-tile.active { opacity: 1; transform: scale(1.1); box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
-.lvl-a1 { background-color: #8BC34A; }
-.lvl-a2 { background-color: #4CAF50; }
-.lvl-b1 { background-color: #29B6F6; }
-.lvl-b2 { background-color: #1976D2; }
-.lvl-c1 { background-color: #D32F2F; }
-.lvl-c2 { background-color: #311B92; }
+
+.lvl-tile:hover {
+  opacity: 0.7;
+  transform: translateY(-1px);
+}
+
+.lvl-tile.active {
+  opacity: 1;
+  transform: scale(1.1);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.lvl-a1 {
+  background-color: #8BC34A;
+}
+
+.lvl-a2 {
+  background-color: #4CAF50;
+}
+
+.lvl-b1 {
+  background-color: #29B6F6;
+}
+
+.lvl-b2 {
+  background-color: #1976D2;
+}
+
+.lvl-c1 {
+  background-color: #D32F2F;
+}
+
+.lvl-c2 {
+  background-color: #311B92;
+}
 
 /* Level Badge */
 .level-badge {
-    padding: 2px 2px;
-    border-radius: 4px;
-    font-size: 0.75rem;
-    font-weight: 700;
-    color: white;
-    display: inline-block;
-    text-align: center;
-    min-width: 28px;
-    line-height: 1.5;
+  padding: 2px 2px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: white;
+  display: inline-block;
+  text-align: center;
+  min-width: 28px;
+  line-height: 1.5;
 }
 
 /* Form Controls */
-.form-group { margin-bottom: 25px; text-align: left; }
-.form-label { font-size: 0.85rem; font-weight: 500; margin-bottom: 8px; display: block; opacity: 0.8; }
-.form-control {
-    width: 100%; 
-    padding: 0 16px; /* More horizontal padding */
-    border: 1px solid var(--border);
-    border-radius: var(--radius); 
-    background: var(--bg); 
-    color: var(--on-surface);
-    font-size: 1rem; /* Slightly larger font */
-    transition: all 0.2s;
-    box-sizing: border-box;
-    height: 48px; /* Taller */
+.form-group {
+  margin-bottom: 25px;
+  text-align: left;
 }
+
+.form-label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  margin-bottom: 8px;
+  display: block;
+  opacity: 0.8;
+}
+
+.form-control {
+  width: 100%;
+  padding: 0 16px;
+  /* More horizontal padding */
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--on-surface);
+  font-size: 1rem;
+  /* Slightly larger font */
+  transition: all 0.2s;
+  box-sizing: border-box;
+  height: 48px;
+  /* Taller */
+}
+
 /* Specific styles for select to make it look good */
 select.form-control {
   -webkit-appearance: none;
@@ -237,20 +439,36 @@ select.form-control {
   background-repeat: no-repeat;
   background-position: right 16px center;
   background-size: 1em;
-  padding-right: 40px; /* Space for the arrow */
+  padding-right: 40px;
+  /* Space for the arrow */
 }
+
 body.dark-mode select.form-control {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%239CA3AF' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
 }
-.form-control:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.1); }
+
+.form-control:focus {
+  border-color: var(--primary);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.1);
+}
 
 /* Text content uses text font variable */
-.de-text, .vocab-item, .learned {
+.de-text,
+.vocab-item,
+.learned {
   font-family: var(--font-text);
 }
 
 /* Global Animations */
 @keyframes fall {
-  0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; }
-  100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+  0% {
+    transform: translateY(-10vh) rotate(0deg);
+    opacity: 1;
+  }
+
+  100% {
+    transform: translateY(100vh) rotate(720deg);
+    opacity: 0;
+  }
 }

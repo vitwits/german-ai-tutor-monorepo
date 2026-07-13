@@ -2107,86 +2107,99 @@
             </h2>
 
             <div class="toolbar">
-                <span
-                    class="level-badge lvl-{text.level.toLowerCase()}"
-                    style="margin-right: 12px;">{text.level}</span
-                >
-
-                <button
-                    class="badge-btn"
-                    onclick={() => (showTrans = !showTrans)}
-                >
-                    <span class="material-symbols-outlined"
-                        >{showTrans ? "visibility_off" : "translate"}</span
-                    >
-                </button>
-
-                <button
-                    class="badge-btn"
-                    onclick={toggleTextFav}
-                    style="color: {text.is_favorite ? '#d32f2f' : 'inherit'}"
-                >
+                <div class="toolbar-row toolbar-row-primary">
                     <span
-                        class="material-symbols-outlined {text.is_favorite
-                            ? 'filled'
-                            : ''}">favorite</span
+                        class="level-badge lvl-{text.level.toLowerCase()} toolbar-level-badge"
+                        >{text.level}</span
                     >
-                </button>
 
-                <button
-                    class="report-btn"
-                    title={ui.report_sentence}
-                    onclick={reportText}
-                >
-                    <span class="material-symbols-outlined">flag</span>
-                </button>
-
-                <button
-                    class="badge-btn dictation-launch-btn"
-                    onclick={openDictation}
-                    style="margin-left: auto;"
-                    title={ui.dictation}
-                >
-                    <span class="material-symbols-outlined">stylus_note</span>
-                    {#if dictationCompletedOnce}
-                        <span
-                            class="dictation-done-badge"
-                            title={ui.dictation_completed_badge || "Completed"}
+                    <button
+                        class="badge-btn toolbar-icon-btn"
+                        onclick={() => (showTrans = !showTrans)}
+                    >
+                        <span class="material-symbols-outlined"
+                            >{showTrans ? "visibility_off" : "translate"}</span
                         >
-                            <span class="material-symbols-outlined"
-                                >check_circle</span
-                            >
-                        </span>
-                    {/if}
-                </button>
+                    </button>
 
-                <button
-                    class="badge-btn translation-launch-btn"
-                    onclick={openSentenceTranslationTest}
-                    title={ui.sentence_translation_test}
-                >
-                    <span class="material-symbols-outlined"
-                        >record_voice_over</span
+                    <button
+                        class="badge-btn toolbar-icon-btn"
+                        onclick={toggleTextFav}
+                        style="color: {text.is_favorite
+                            ? '#d32f2f'
+                            : 'inherit'}"
                     >
-                    {#if sentenceTranslationCompletedOnce}
                         <span
-                            class="dictation-done-badge"
-                            title={ui.sentence_translation_completed_badge ||
-                                "Completed"}
+                            class="material-symbols-outlined {text.is_favorite
+                                ? 'filled'
+                                : ''}">favorite</span
                         >
-                            <span class="material-symbols-outlined"
-                                >check_circle</span
-                            >
-                        </span>
-                    {/if}
-                </button>
+                    </button>
 
-                <button class="btn-contained" onclick={playAll}>
-                    <span class="material-symbols-outlined"
-                        >{isPlayingAll ? "pause" : "play_arrow"}</span
+                    <button
+                        class="report-btn toolbar-icon-btn"
+                        title={ui.report_sentence}
+                        onclick={reportText}
                     >
-                    {isPlayingAll ? ui.stop : ui.play_all}
-                </button>
+                        <span class="material-symbols-outlined">flag</span>
+                    </button>
+                </div>
+
+                <div class="toolbar-row toolbar-row-secondary">
+                    <button
+                        class="badge-btn dictation-launch-btn toolbar-secondary-btn"
+                        onclick={openDictation}
+                        title={ui.dictation}
+                    >
+                        <span class="material-symbols-outlined"
+                            >stylus_note</span
+                        >
+                        {#if dictationCompletedOnce}
+                            <span
+                                class="dictation-done-badge"
+                                title={ui.dictation_completed_badge ||
+                                    "Completed"}
+                            >
+                                <span class="material-symbols-outlined"
+                                    >check_circle</span
+                                >
+                            </span>
+                        {/if}
+                    </button>
+
+                    <button
+                        class="badge-btn translation-launch-btn toolbar-secondary-btn"
+                        onclick={openSentenceTranslationTest}
+                        title={ui.sentence_translation_test}
+                    >
+                        <span class="material-symbols-outlined"
+                            >record_voice_over</span
+                        >
+                        {#if sentenceTranslationCompletedOnce}
+                            <span
+                                class="dictation-done-badge"
+                                title={ui.sentence_translation_completed_badge ||
+                                    "Completed"}
+                            >
+                                <span class="material-symbols-outlined"
+                                    >check_circle</span
+                                >
+                            </span>
+                        {/if}
+                    </button>
+
+                    <button
+                        class="btn-contained toolbar-secondary-btn toolbar-play-btn"
+                        onclick={playAll}
+                    >
+                        <span class="material-symbols-outlined"
+                            >{isPlayingAll ? "pause" : "play_arrow"}</span
+                        >
+                        <span class="play-btn-label"
+                            >{isPlayingAll ? ui.stop : ui.play_all}</span
+                        >
+                    </button>
+                </div>
             </div>
 
             <div class="text-body">
@@ -2662,11 +2675,45 @@
                                 toggleVocabFav(v.id);
                         }}
                     >
-                        <div
-                            style="display:flex; align-items:center; gap:12px; flex: 1; min-width: 0;"
-                        >
+                        <div class="vocab-item-content">
+                            <div class="vocab-word-row">
+                                <span
+                                    class="vocab-word"
+                                    onclick={(e) => {
+                                        e.stopPropagation();
+                                        scrollToWord(v.id);
+                                    }}
+                                    role="button"
+                                    tabindex="0"
+                                    onkeydown={(e) =>
+                                        e.key === "Enter" && scrollToWord(v.id)}
+                                    >{v.display}</span
+                                >
+                            </div>
+                            <div class="vocab-translation-row">
+                                {#if editingId === v.id && editingFieldType === ($user.interface_language === "ukr" ? "ua" : "en")}
+                                    <input
+                                        type="text"
+                                        class="edit-input"
+                                        bind:value={editValue}
+                                        onclick={(e) => e.stopPropagation()}
+                                        onkeydown={(e) => {
+                                            e.stopPropagation();
+                                            if (e.key === "Enter")
+                                                saveEdit(v.id);
+                                        }}
+                                    />
+                                {:else}
+                                    {$user.interface_language === "ukr"
+                                        ? v.ua
+                                        : v.en}
+                                {/if}
+                            </div>
+                        </div>
+
+                        <div class="vocab-item-controls">
                             <button
-                                class="btn-text"
+                                class="btn-text vocab-control-btn"
                                 onclick={(e) => {
                                     e.stopPropagation();
                                     playVocabPair(
@@ -2678,64 +2725,22 @@
                                     );
                                 }}
                             >
-                                <span
-                                    class="material-symbols-outlined"
-                                    style="font-size:18px;"
+                                <span class="material-symbols-outlined"
                                     >{vocabPlayingId === v.id
                                         ? "pause"
                                         : "volume_up"}</span
                                 >
                             </button>
-                            <div
-                                style="overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0;"
-                            >
-                                <span
-                                    style="font-weight: 500; color: var(--primary); font-size: 1.1rem; cursor: pointer;"
-                                    onclick={(e) => {
-                                        e.stopPropagation();
-                                        scrollToWord(v.id);
-                                    }}
-                                    role="button"
-                                    tabindex="0"
-                                    onkeydown={(e) =>
-                                        e.key === "Enter" && scrollToWord(v.id)}
-                                    >{v.display}</span
-                                >
-                                <div
-                                    style="font-size:0.85rem; opacity:0.7; margin-top:6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
-                                >
-                                    {#if editingId === v.id && editingFieldType === ($user.interface_language === "ukr" ? "ua" : "en")}
-                                        <input
-                                            type="text"
-                                            class="edit-input"
-                                            bind:value={editValue}
-                                            onclick={(e) => e.stopPropagation()}
-                                            onkeydown={(e) => {
-                                                e.stopPropagation();
-                                                if (e.key === "Enter")
-                                                    saveEdit(v.id);
-                                            }}
-                                        />
-                                    {:else}
-                                        {$user.interface_language === "ukr"
-                                            ? v.ua
-                                            : v.en}
-                                    {/if}
-                                </div>
-                            </div>
-                        </div>
-                        <div
-                            style="display: flex; align-items: center; gap: 0;"
-                        >
+
                             <button
-                                class="btn-text"
+                                class="btn-text vocab-control-btn"
                                 onclick={(e) => {
                                     e.stopPropagation();
                                     toggleVocabFav(v.id);
                                 }}
                                 style="color: {v.is_favorite
                                     ? '#FFC107'
-                                    : 'inherit'}; min-width: 32px; padding: 0;"
+                                    : 'inherit'};"
                             >
                                 <span
                                     class="material-symbols-outlined {v.is_favorite
@@ -2743,10 +2748,10 @@
                                         : ''}">star</span
                                 >
                             </button>
+
                             {#if editingId === v.id}
                                 <button
-                                    class="btn-text"
-                                    style="color:var(--primary); padding:0; min-width:32px;"
+                                    class="btn-text vocab-control-btn vocab-control-primary"
                                     onclick={(e) => {
                                         e.stopPropagation();
                                         saveEdit(v.id);
@@ -2757,8 +2762,7 @@
                                     >
                                 </button>
                                 <button
-                                    class="btn-text"
-                                    style="padding:0; min-width:32px;"
+                                    class="btn-text vocab-control-btn"
                                     onclick={(e) => {
                                         e.stopPropagation();
                                         cancelEdit();
@@ -2770,8 +2774,7 @@
                                 </button>
                             {:else}
                                 <button
-                                    class="btn-text"
-                                    style="color:var(--primary); opacity:0.7; padding:0; min-width:32px;"
+                                    class="btn-text vocab-control-btn vocab-control-primary"
                                     onclick={(e) => {
                                         e.stopPropagation();
                                         startEdit(
@@ -2790,12 +2793,11 @@
                                     >
                                 </button>
                                 <button
-                                    class="btn-text"
+                                    class="btn-text vocab-control-btn vocab-control-danger"
                                     onclick={(e) => {
                                         e.stopPropagation();
                                         removeWord(v.id);
                                     }}
-                                    style="color:red; min-width: 32px; padding: 0;"
                                 >
                                     <span class="material-symbols-outlined"
                                         >delete</span
@@ -2897,10 +2899,8 @@
                     </div>
 
                     <!-- FOOTER ACTIONS -->
-                    <div
-                        style="margin-top: 24px; display: flex; justify-content: space-between; align-items: center;"
-                    >
-                        <div style="display: flex; gap: 10px;">
+                    <div class="quiz-footer-actions">
+                        <div class="quiz-footer-left">
                             <button
                                 class="btn-contained btn-danger"
                                 onclick={abortQuiz}
@@ -2919,16 +2919,14 @@
 
                         {#if !isChecked}
                             <button
-                                class="btn-contained"
+                                class="btn-contained quiz-footer-main-btn"
                                 disabled={selectedOptionIndex === null}
-                                onclick={checkAnswer}
-                                style="min-width: 100px;">{ui.check_btn}</button
+                                onclick={checkAnswer}>{ui.check_btn}</button
                             >
                         {:else}
                             <button
-                                class="btn-contained"
+                                class="btn-contained quiz-footer-main-btn"
                                 onclick={nextQuestion}
-                                style="min-width: 100px;"
                                 >{currentQIndex < quizData.length - 1
                                     ? ui.next_btn
                                     : ui.finish_btn}</button
@@ -3102,10 +3100,65 @@
 
     .toolbar {
         display: flex;
+        flex-direction: row;
         align-items: center;
-        gap: 12px;
-        margin-bottom: 24px;
+        gap: 8px;
+        margin-bottom: 20px;
         flex-wrap: wrap;
+    }
+
+    .toolbar-row-secondary {
+        margin-left: auto;
+    }
+
+    .toolbar-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .toolbar-row-primary {
+        justify-content: flex-start;
+    }
+
+    .toolbar-row-secondary {
+        justify-content: flex-end;
+    }
+
+    .toolbar-level-badge {
+        margin: 0;
+        min-width: 36px;
+        height: 36px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+        padding: 0 8px;
+    }
+
+    .toolbar-icon-btn {
+        width: 36px;
+        height: 36px;
+        min-width: 36px;
+        padding: 0;
+        border-radius: 8px;
+    }
+
+    .toolbar-secondary-btn {
+        min-height: 40px;
+    }
+
+    .toolbar-play-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 0 14px;
+    }
+
+    .play-btn-label {
+        white-space: nowrap;
     }
 
     .text-body {
@@ -3228,13 +3281,14 @@
     }
 
     .badge-btn {
-        padding: 4px 12px;
-        border-radius: 4px;
+        padding: 0;
+        border-radius: 8px;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        min-width: 28px;
-        height: 30px;
+        min-width: 36px;
+        width: 36px;
+        height: 36px;
         border: none;
         background: transparent;
         color: var(--on-surface);
@@ -3620,13 +3674,14 @@
     }
 
     .report-btn {
-        padding: 4px 12px;
-        border-radius: 4px;
+        padding: 0;
+        border-radius: 8px;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        min-width: 28px;
-        height: 30px;
+        min-width: 36px;
+        width: 36px;
+        height: 36px;
         border: none;
         background: transparent;
         color: #d32f2f;
@@ -3678,14 +3733,79 @@
     }
     .vocab-item {
         display: flex;
-        justify-content: space-between;
+        flex-direction: row;
         align-items: center;
-        padding: 12px 16px;
+        gap: 0;
+        justify-content: space-between;
+        padding: 12px 14px;
         border: 1px solid var(--border);
         border-radius: var(--radius);
         background: var(--surface);
         box-shadow: var(--shadow);
         font-family: var(--font-text);
+    }
+
+    .vocab-item-content {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .vocab-word-row {
+        min-width: 0;
+    }
+
+    .vocab-word {
+        display: block;
+        font-weight: 600;
+        color: var(--primary);
+        font-size: 1.08rem;
+        line-height: 1.3;
+        cursor: pointer;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .vocab-translation-row {
+        margin-top: 4px;
+        font-size: 0.9rem;
+        opacity: 0.72;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .vocab-item-controls {
+        display: flex;
+        align-items: center;
+        gap: 0;
+        flex-shrink: 0;
+    }
+
+    .vocab-control-btn {
+        min-width: 32px;
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: none;
+        border-radius: 4px;
+        background: transparent;
+        color: var(--on-surface);
+    }
+
+    .vocab-control-btn .material-symbols-outlined {
+        font-size: 21px;
+    }
+
+    .vocab-control-primary {
+        color: var(--primary);
+    }
+
+    .vocab-control-danger {
+        color: #d32f2f;
     }
 
     .edit-input {
@@ -3773,6 +3893,183 @@
     }
     .quiz-option.disabled {
         pointer-events: none;
+    }
+
+    .quiz-footer-actions {
+        margin-top: 24px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .quiz-footer-left {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .quiz-footer-main-btn {
+        min-width: 110px;
+    }
+
+    @media (max-width: 1023px) {
+        .view-container .card {
+            padding: 22px 12px;
+        }
+
+        .text-body {
+            line-height: 2.1;
+            margin-bottom: 10px;
+        }
+
+        .de-text,
+        .trans-row,
+        .sentence-translation-popup {
+            font-size: 1rem;
+        }
+
+        .sent-num-btn {
+            width: 24px;
+            height: 18px;
+            font-size: 0.7rem;
+        }
+
+        .toolbar {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 6px;
+            margin-bottom: 14px;
+        }
+
+        .toolbar-row-secondary {
+            margin-left: 0;
+        }
+
+        .toolbar-row {
+            gap: 6px;
+        }
+
+        .toolbar-row-secondary {
+            width: 100%;
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 6px;
+        }
+
+        .toolbar-row-secondary .toolbar-secondary-btn {
+            width: 100%;
+            min-width: 0;
+            height: 40px;
+            padding: 0;
+        }
+
+        .toolbar-row-secondary
+            .toolbar-secondary-btn
+            .material-symbols-outlined {
+            font-size: 22px;
+        }
+
+        .toolbar-row-secondary .toolbar-play-btn {
+            gap: 0;
+        }
+
+        .toolbar-row-secondary .play-btn-label {
+            display: none;
+        }
+
+        .dictation-launch-btn,
+        .translation-launch-btn {
+            width: 100%;
+            min-width: 0;
+            height: 40px;
+        }
+
+        .tabs-container {
+            margin-top: 18px;
+        }
+
+        .tab-btn {
+            font-size: 0.8rem;
+            padding: 11px 8px;
+        }
+
+        .vocab-view {
+            margin-top: 14px;
+            gap: 8px;
+        }
+
+        .vocab-item {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 10px;
+            padding: 12px;
+        }
+
+        .vocab-item-controls {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 6px;
+            width: 100%;
+        }
+
+        .vocab-control-btn {
+            width: 100%;
+            height: 40px;
+            /* border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--bg); */
+        }
+
+        .vocab-translation-row {
+            font-size: 0.9rem;
+        }
+
+        .vocab-item-controls {
+            gap: 6px;
+            border-top: 1px solid var(--border);
+        }
+
+        .vocab-control-btn {
+            height: 40px;
+        }
+
+        .vocab-control-btn .material-symbols-outlined {
+            font-size: 24px;
+        }
+
+        .quiz-container {
+            padding: 16px 12px;
+            margin-top: 14px;
+        }
+
+        .quiz-question {
+            font-size: 1.05rem;
+            margin-bottom: 14px;
+        }
+
+        .quiz-option {
+            padding: 13px 12px;
+            font-size: 0.95rem;
+        }
+
+        .quiz-footer-actions {
+            margin-top: 16px;
+            gap: 8px;
+        }
+
+        .quiz-footer-left,
+        .quiz-footer-main-btn {
+            width: 100%;
+        }
+
+        .quiz-footer-left .btn-contained,
+        .quiz-footer-main-btn {
+            min-height: 42px;
+            min-width: 0;
+            flex: 1;
+        }
     }
 
     .results-view {
