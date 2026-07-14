@@ -2550,7 +2550,7 @@
     .fc-ctrl-row {
         display: flex;
         align-items: center;
-        gap: 24px;
+        gap: 20px;
         width: 100%;
         justify-content: center;
     }
@@ -2579,7 +2579,7 @@
     }
 
     .fc-play-btn {
-        width: 72px;
+        min-width: 72px;
         height: 72px;
         border-radius: 50%;
         border: none;
@@ -2601,7 +2601,7 @@
     }
 
     .fc-rate-btn {
-        width: 100px;
+        min-width: 100px;
         height: 100px;
         border-radius: 50%;
         border: none;
@@ -2744,7 +2744,7 @@
     .fc-ctrl-row {
         display: flex;
         align-items: center;
-        gap: 24px;
+        gap: 20px;
         width: 100%;
         justify-content: center;
     }
@@ -3192,7 +3192,7 @@
             display: grid;
             grid-template-columns: repeat(3, minmax(0, 1fr));
             border-top: 1px solid var(--border);
-            margin-top: 4px;
+            margin-top: 8px;
         }
         .vocab-ctrl-btn {
             display: flex;
