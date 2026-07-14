@@ -8,32 +8,49 @@ export default defineConfig({
     svelte(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['logo.png', 'apple-touch-icon.png'],
+      includeAssets: ['logos_192.png', 'logos_512.png', 'logos_miskable.png'],
+      devOptions: {
+        enabled: true,
+        navigateFallback: '/',
+        suppressWarnings: true
+      },
       manifest: {
         name: 'Gemini DE Tutor',
         short_name: 'DE Tutor',
-        description: 'German AI Language Tutor',
+        description: 'German AI Language Tutor - Learn German with AI-powered lessons',
         theme_color: '#1976D2',
         background_color: '#ffffff',
         display: 'standalone',
-        orientation: 'portrait',
+        orientation: 'portrait-primary',
+        scope: '/',
         start_url: '/',
+        categories: ['education', 'productivity'],
         icons: [
           {
-            src: 'logo.png',
+            src: 'logos_192.png',
             sizes: '192x192',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any'
           },
           {
-            src: 'logo.png',
-            sizes: '512x512',
-            type: 'image/png'
-          },
-          {
-            src: 'logo.png',
+            src: 'logos_512.png',
             sizes: '512x512',
             type: 'image/png',
-            purpose: 'any maskable'
+            purpose: 'any'
+          },
+          {
+            src: 'logos_miskable.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable'
+          }
+        ],
+        screenshots: [
+          {
+            src: 'logos_512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            form_factor: 'wide'
           }
         ]
       },
@@ -54,6 +71,7 @@ export default defineConfig({
   ],
   server: {
     allowedHosts: ['german.vicolores.com'],
+    middlewareMode: false,
     proxy: {
       '/api': {
         // У Docker мережі звертаємось до сервісу за іменем 'backend'
@@ -71,5 +89,8 @@ export default defineConfig({
       // Використовуємо polling, якщо файлова система не прокидає події (важливо для Docker)
       usePolling: true,
     }
+  },
+  preview: {
+    allowedHosts: ['german.vicolores.com']
   }
 })

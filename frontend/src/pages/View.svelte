@@ -3939,7 +3939,7 @@
         .toolbar {
             flex-direction: column;
             align-items: stretch;
-            gap: 6px;
+            gap: 14px;
             margin-bottom: 14px;
         }
 
@@ -3948,14 +3948,14 @@
         }
 
         .toolbar-row {
-            gap: 6px;
+            gap: 18px;
         }
 
         .toolbar-row-secondary {
             width: 100%;
             display: grid;
             grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 6px;
+            gap: 12px;
         }
 
         .toolbar-row-secondary .toolbar-secondary-btn {
@@ -4023,16 +4023,17 @@
         }
 
         .vocab-translation-row {
-            font-size: 0.9rem;
+            font-size: 1rem;
         }
 
         .vocab-item-controls {
             gap: 6px;
+            padding-top: 8px;
             border-top: 1px solid var(--border);
         }
 
         .vocab-control-btn {
-            height: 40px;
+            height: 30px;
         }
 
         .vocab-control-btn .material-symbols-outlined {
