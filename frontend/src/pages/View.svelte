@@ -128,6 +128,11 @@
     // Grammar Cache
     let grammarCache = {};
 
+    // Touch tracking for mobile word selection
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchStartTime = 0;
+
     // Sentence button modes: tracks hover state and mode for each sentence
     let sentenceButtonMode = {}; // { sentenceIndex: 'normal' | 'play' | 'translate' }
     let sentenceHoverTimers = {}; // { sentenceIndex: timeoutId }
@@ -1213,6 +1218,75 @@
         }
     }
 
+    function handleTouchStart(event) {
+        touchStartX = event.touches[0].clientX;
+        touchStartY = event.touches[0].clientY;
+        touchStartTime = Date.now();
+    }
+
+    function handleTouchEnd(event) {
+        if (isTranslating) {
+            showPopup = false;
+            return;
+        }
+
+        const touch = event.changedTouches[0];
+        const dt = Date.now() - touchStartTime;
+        const dx = Math.abs(touch.clientX - touchStartX);
+        const dy = Math.abs(touch.clientY - touchStartY);
+        const isTap = dt < 300 && dx < 15 && dy < 15;
+
+        if (isTap) {
+            // Quick tap: select word at touch position
+            const x = touch.clientX;
+            const y = touch.clientY;
+
+            let caretRange;
+            if (document.caretRangeFromPoint) {
+                caretRange = document.caretRangeFromPoint(x, y);
+            } else if (document.caretPositionFromPoint) {
+                const pos = document.caretPositionFromPoint(x, y);
+                if (pos) {
+                    caretRange = document.createRange();
+                    caretRange.setStart(pos.offsetNode, pos.offset);
+                    caretRange.collapse(true);
+                }
+            }
+
+            if (
+                !caretRange ||
+                caretRange.startContainer.nodeType !== Node.TEXT_NODE
+            )
+                return;
+
+            const isSeparator = (char) => /[\s.,!?;:()\[\]"'«»]/.test(char);
+            const textNode = caretRange.startContainer;
+            const txt = textNode.textContent;
+            let start = caretRange.startOffset;
+            let end = caretRange.startOffset;
+
+            if (start >= txt.length || isSeparator(txt[start])) return;
+
+            while (start > 0 && !isSeparator(txt[start - 1])) start--;
+            while (end < txt.length && !isSeparator(txt[end])) end++;
+
+            if (start >= end) return;
+
+            caretRange.setStart(textNode, start);
+            caretRange.setEnd(textNode, end);
+
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(caretRange);
+
+            const targetEl = document.elementFromPoint(x, y) || event.target;
+            handleMouseUp({ target: targetEl });
+        } else {
+            // Long press / drag — use whatever the browser has selected
+            handleMouseUp({ target: event.target });
+        }
+    }
+
     function buildSentenceHtml(sentenceIndex) {
         const sentence = sentences[sentenceIndex];
         if (!sentence) return "";
@@ -1762,13 +1836,13 @@
             clearTimeout(sentenceHoverTimers[sentenceIndex]);
         }
 
-        // Set mode to 'play' immediately
-        sentenceButtonMode[sentenceIndex] = "play";
+        // Set mode to 'translate' immediately
+        sentenceButtonMode[sentenceIndex] = "translate";
         sentenceButtonMode = sentenceButtonMode; // Trigger reactivity
 
-        // Start timer to switch to 'translate' mode after 1 second
+        // Start timer to switch to 'play' mode after 1 second
         sentenceHoverTimers[sentenceIndex] = setTimeout(() => {
-            sentenceButtonMode[sentenceIndex] = "translate";
+            sentenceButtonMode[sentenceIndex] = "play";
             sentenceButtonMode = sentenceButtonMode; // Trigger reactivity
         }, 1000);
     }
@@ -2041,6 +2115,8 @@
 <div
     class="view-container"
     onmouseup={handleMouseUp}
+    ontouchstart={handleTouchStart}
+    ontouchend={handleTouchEnd}
     role="button"
     tabindex="0"
 >

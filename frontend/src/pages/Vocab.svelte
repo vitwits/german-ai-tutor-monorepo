@@ -1008,7 +1008,10 @@
                 bind:value={searchQuery}
                 oninput={onSearchChange}
                 onfocus={() => (searchFocused = true)}
-                onblur={() => (searchFocused = false)}
+                onblur={() => {
+                    searchFocused = false;
+                    clearSearch();
+                }}
             />
             {#if searchQuery}
                 <button class="clear-search-btn" onclick={clearSearch}
@@ -1611,84 +1614,6 @@
                                         {/if}
                                     </div>
                                 {/if}
-
-                                {#if viewMode === "list"}
-                                    <div class="vocab-item-controls">
-                                        <button
-                                            class="vocab-ctrl-btn"
-                                            onclick={(e) => {
-                                                e.stopPropagation();
-                                                playVocabPair(
-                                                    w.display,
-                                                    w.display_trans,
-                                                    w.audio_de_url,
-                                                    w.audio_trans_urls,
-                                                );
-                                            }}
-                                        >
-                                            <span
-                                                class="material-symbols-outlined"
-                                                >volume_up</span
-                                            >
-                                        </button>
-                                        {#if editingId === w.id}
-                                            <button
-                                                class="vocab-ctrl-btn"
-                                                style="color:var(--primary);"
-                                                onclick={(e) => {
-                                                    e.stopPropagation();
-                                                    saveEdit(w.id);
-                                                }}
-                                            >
-                                                <span
-                                                    class="material-symbols-outlined"
-                                                    >check</span
-                                                >
-                                            </button>
-                                            <button
-                                                class="vocab-ctrl-btn"
-                                                onclick={(e) => {
-                                                    e.stopPropagation();
-                                                    cancelEdit();
-                                                }}
-                                            >
-                                                <span
-                                                    class="material-symbols-outlined"
-                                                    >close</span
-                                                >
-                                            </button>
-                                        {:else}
-                                            <button
-                                                class="vocab-ctrl-btn"
-                                                style="color:var(--primary);"
-                                                onclick={(e) => {
-                                                    e.stopPropagation();
-                                                    startEdit(
-                                                        w.id,
-                                                        w.display_trans,
-                                                    );
-                                                }}
-                                            >
-                                                <span
-                                                    class="material-symbols-outlined"
-                                                    >edit</span
-                                                >
-                                            </button>
-                                            <button
-                                                class="vocab-ctrl-btn delete-ctrl"
-                                                onclick={(e) => {
-                                                    e.stopPropagation();
-                                                    deleteItem(w.id);
-                                                }}
-                                            >
-                                                <span
-                                                    class="material-symbols-outlined"
-                                                    >delete</span
-                                                >
-                                            </button>
-                                        {/if}
-                                    </div>
-                                {/if}
                             </div>
 
                             {#if viewMode === "list" && expandedContexts[w.id] && w.ctx}
@@ -1719,6 +1644,83 @@
                                                 >open_in_new</span
                                             >
                                             {ui.go_to_text}
+                                        </button>
+                                    {/if}
+                                </div>
+                            {/if}
+
+                            {#if viewMode === "list"}
+                                <div class="vocab-item-controls">
+                                    <button
+                                        class="vocab-ctrl-btn"
+                                        onclick={(e) => {
+                                            e.stopPropagation();
+                                            playVocabPair(
+                                                w.display,
+                                                w.display_trans,
+                                                w.audio_de_url,
+                                                w.audio_trans_urls,
+                                            );
+                                        }}
+                                    >
+                                        <span class="material-symbols-outlined"
+                                            >volume_up</span
+                                        >
+                                    </button>
+                                    {#if editingId === w.id}
+                                        <button
+                                            class="vocab-ctrl-btn"
+                                            style="color:var(--primary);"
+                                            onclick={(e) => {
+                                                e.stopPropagation();
+                                                saveEdit(w.id);
+                                            }}
+                                        >
+                                            <span
+                                                class="material-symbols-outlined"
+                                                >check</span
+                                            >
+                                        </button>
+                                        <button
+                                            class="vocab-ctrl-btn"
+                                            onclick={(e) => {
+                                                e.stopPropagation();
+                                                cancelEdit();
+                                            }}
+                                        >
+                                            <span
+                                                class="material-symbols-outlined"
+                                                >close</span
+                                            >
+                                        </button>
+                                    {:else}
+                                        <button
+                                            class="vocab-ctrl-btn"
+                                            style="color:var(--primary);"
+                                            onclick={(e) => {
+                                                e.stopPropagation();
+                                                startEdit(
+                                                    w.id,
+                                                    w.display_trans,
+                                                );
+                                            }}
+                                        >
+                                            <span
+                                                class="material-symbols-outlined"
+                                                >edit</span
+                                            >
+                                        </button>
+                                        <button
+                                            class="vocab-ctrl-btn delete-ctrl"
+                                            onclick={(e) => {
+                                                e.stopPropagation();
+                                                deleteItem(w.id);
+                                            }}
+                                        >
+                                            <span
+                                                class="material-symbols-outlined"
+                                                >delete</span
+                                            >
                                         </button>
                                     {/if}
                                 </div>
@@ -2397,7 +2399,7 @@
     }
     .fc-progress-track {
         height: 12px;
-        background: rgba(0, 0, 0, 0.1);
+        background: var(--border);
         border-radius: 6px;
         overflow: hidden;
         margin-bottom: 4px;
@@ -2737,7 +2739,7 @@
     }
     .fc-progress-track {
         height: 12px;
-        background: rgba(0, 0, 0, 0.1);
+        background: var(--border);
         border-radius: 6px;
         overflow: hidden;
         margin-bottom: 4px;
@@ -2992,6 +2994,17 @@
         align-items: center;
     }
 
+    @media (max-width: 480px) {
+        .add-word-input-group {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .add-word-input-group .btn-contained {
+            width: 100%;
+        }
+    }
+
     .add-word-input {
         flex: 1;
         padding: 12px;
@@ -3212,7 +3225,9 @@
             display: grid;
             grid-template-columns: repeat(3, minmax(0, 1fr));
             border-top: 1px solid var(--border);
-            margin-top: 8px;
+        }
+        .ctx-block {
+            padding: 8px 12px 10px 12px;
         }
         .vocab-ctrl-btn {
             display: flex;

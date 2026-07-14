@@ -175,7 +175,11 @@
             bind:value={searchQuery}
             oninput={onSearchChange}
             onfocus={() => (searchFocused = true)}
-            onblur={() => (searchFocused = false)}
+            onblur={() => {
+                searchFocused = false;
+                searchQuery = "";
+                loadLibrary();
+            }}
         />
     </div>
     <div class="filters">
