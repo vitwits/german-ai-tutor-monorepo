@@ -419,8 +419,12 @@
     function toggleFcPlay() {
         if (fcMode !== "study") return; // Тільки для Study режиму
         fcIsPlaying = !fcIsPlaying;
-        if (fcIsPlaying) runStudyLoop();
-        else {
+        if (fcIsPlaying) {
+            // Safari iOS: unlock Audio element during user gesture so it can
+            // be reused in setTimeout/async callbacks without being blocked.
+            if (!currentAudio) currentAudio = new Audio();
+            runStudyLoop();
+        } else {
             if (fcLoopTimeout) clearTimeout(fcLoopTimeout);
             if (currentAudio) currentAudio.pause();
         }
@@ -431,6 +435,8 @@
         if (fcMode === "review") {
             fcReviewStarted = true;
             currentCardIdx = 0;
+            // Safari iOS: unlock Audio element during user gesture
+            if (!currentAudio) currentAudio = new Audio();
             const card = sessionCards[currentCardIdx];
             if (fcAudioEnabled && !fcUseContextMode) {
                 if (fcReverseMode) {
@@ -678,8 +684,15 @@
 
     function playAudio(url) {
         if (!url) return;
-        if (currentAudio) currentAudio.pause();
-        currentAudio = new Audio(url);
+        if (currentAudio) {
+            currentAudio.pause();
+            currentAudio.onended = null;
+            currentAudio.onerror = null;
+            currentAudio.src = url;
+            currentAudio.load();
+        } else {
+            currentAudio = new Audio(url);
+        }
         currentAudio.play().catch((e) => console.log(e));
     }
 
@@ -689,8 +702,15 @@
                 resolve();
                 return;
             }
-            if (currentAudio) currentAudio.pause();
-            currentAudio = new Audio(url);
+            if (currentAudio) {
+                currentAudio.pause();
+                currentAudio.onended = null;
+                currentAudio.onerror = null;
+                currentAudio.src = url;
+                currentAudio.load();
+            } else {
+                currentAudio = new Audio(url);
+            }
             currentAudio.onended = resolve;
             currentAudio.onerror = resolve;
             currentAudio.play().catch(resolve);
