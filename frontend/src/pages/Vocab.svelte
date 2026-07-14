@@ -3170,7 +3170,7 @@
             mask-image: linear-gradient(to right, black 85%, transparent 100%);
         }
         .trans-text {
-            font-size: 0.82rem;
+            font-size: 0.92rem;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
