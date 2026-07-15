@@ -1237,6 +1237,17 @@
         const isTap = dt < 300 && dx < 15 && dy < 15;
 
         if (isTap) {
+            // Skip word-selection if the tap landed on an interactive element
+            const tappedEl = document.elementFromPoint(
+                touch.clientX,
+                touch.clientY,
+            );
+            if (
+                tappedEl &&
+                tappedEl.closest('button, a, input, select, [role="button"]')
+            )
+                return;
+
             // Quick tap: select word at touch position
             const x = touch.clientX;
             const y = touch.clientY;
