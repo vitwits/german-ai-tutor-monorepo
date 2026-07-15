@@ -1335,3 +1335,81 @@ async def create_lesson_from_user_text(text: str, prompt_template: str, db: Asyn
     }
     
     return lesson_data, prompt, response.text, model_id
+
+
+async def explain_sentence_service(sentence_text: str, db: AsyncSession = None):
+    """
+    Analyze a German sentence and return a structured linguistic breakdown.
+    Uses the same LLM job settings as translate_vocabulary,
+    with a dedicated explain_sentence_prompt template.
+    """
+    model_id = await get_llm_model_for_job("translate_vocabulary", db)
+
+    from .models import ModelPrompt
+
+    result = await db.execute(
+        select(ModelPrompt.prompt).where(ModelPrompt.name == "explain_sentence_prompt")
+    )
+    prompt_template = result.scalar_one_or_none()
+
+    if not prompt_template:
+        prompt_template = (
+            "You are an expert German language teacher.\n\n"
+            "Analyze the following German sentence for Ukrainian and English learners.\n\n"
+            "Sentence: {sentence}\n\n"
+            "Return ONLY a JSON object with this exact structure:\n"
+            "{\n"
+            '  "summary_uk": "Short general comment about the sentence in Ukrainian",\n'
+            '  "summary_en": "Short general comment about the sentence in English",\n'
+            '  "key_phrases": [\n'
+            "    {\n"
+            '      "phrase": "German phrase",\n'
+            '      "translation_uk": "Translation in Ukrainian",\n'
+            '      "translation_en": "Translation in English",\n'
+            '      "note_uk": "Grammar or usage note in Ukrainian (brief)",\n'
+            '      "note_en": "Grammar or usage note in English (brief)"\n'
+            "    }\n"
+            "  ],\n"
+            '  "fixed_expressions": [\n'
+            "    {\n"
+            '      "expression": "German fixed expression or idiom",\n'
+            '      "translation_uk": "Translation in Ukrainian",\n'
+            '      "translation_en": "Translation in English",\n'
+            '      "note_uk": "Note about usage in Ukrainian",\n'
+            '      "note_en": "Note about usage in English"\n'
+            "    }\n"
+            "  ],\n"
+            '  "grammar_highlights": [\n'
+            "    {\n"
+            '      "item": "The grammatical structure, word form, or case",\n'
+            '      "explanation_uk": "Brief explanation in Ukrainian",\n'
+            '      "explanation_en": "Brief explanation in English"\n'
+            "    }\n"
+            "  ]\n"
+            "}\n\n"
+            "Focus only on what is noteworthy for learners. Return empty arrays for sections with nothing important."
+        )
+
+    prompt = prompt_template.replace("{sentence}", sentence_text)
+
+    print(f"\n{'='*60}")
+    print(f"📤 LLM INPUT TO explain_sentence_service")
+    print(f"   sentence: '{sentence_text}'")
+    print(f"   model: {model_id}")
+
+    response = client.models.generate_content(
+        model=model_id,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            temperature=0.2,
+        ),
+    )
+
+    print(f"📥 LLM OUTPUT:\n{response.text}\n{'='*60}")
+
+    data = json.loads(clean_json_response(response.text))
+    if isinstance(data, list):
+        data = data[0] if data else {}
+
+    return data

@@ -128,9 +128,17 @@
     // Grammar Cache
     let grammarCache = {};
 
-    // Sentence button modes: tracks hover state and mode for each sentence
-    let sentenceButtonMode = {}; // { sentenceIndex: 'normal' | 'play' | 'translate' }
-    let sentenceHoverTimers = {}; // { sentenceIndex: timeoutId }
+    // Touch tracking for mobile word selection
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchStartTime = 0;
+
+    // Sentence action bar: tracks which sentence number was clicked
+    let activeSentenceIndex = -1; // index of sentence whose action bar is open
+    let sentenceActionBarStyle = ""; // fixed-position style on mobile to avoid edge clipping
+    let sentenceHoverTimeout = null;
+    let sentenceExplainCache = {}; // { sentenceIndex: explanationObject }
+    let explainingSentenceIndex = -1; // which sentence is currently being explained via LLM
     let sentenceTranslationDisplay = {}; // { sentenceIndex: true/false }
     let sentenceTranslationTimers = {}; // { sentenceIndex: timeoutId }
 
@@ -1213,6 +1221,107 @@
         }
     }
 
+    function handleTouchStart(event) {
+        touchStartX = event.touches[0].clientX;
+        touchStartY = event.touches[0].clientY;
+        touchStartTime = Date.now();
+    }
+
+    function handleTouchEnd(event) {
+        if (isTranslating) {
+            showPopup = false;
+            return;
+        }
+
+        const touch = event.changedTouches[0];
+        const dt = Date.now() - touchStartTime;
+        const dx = Math.abs(touch.clientX - touchStartX);
+        const dy = Math.abs(touch.clientY - touchStartY);
+        const isTap = dt < 300 && dx < 15 && dy < 15;
+
+        if (isTap) {
+            // Skip word-selection if the tap landed on an interactive element
+            const tappedEl = document.elementFromPoint(
+                touch.clientX,
+                touch.clientY,
+            );
+            if (
+                tappedEl &&
+                tappedEl.closest('button, a, input, select, [role="button"]')
+            )
+                return;
+
+            // Quick tap: select word at touch position
+            const x = touch.clientX;
+            const y = touch.clientY;
+
+            let caretRange;
+            if (document.caretRangeFromPoint) {
+                caretRange = document.caretRangeFromPoint(x, y);
+            } else if (document.caretPositionFromPoint) {
+                const pos = document.caretPositionFromPoint(x, y);
+                if (pos) {
+                    caretRange = document.createRange();
+                    caretRange.setStart(pos.offsetNode, pos.offset);
+                    caretRange.collapse(true);
+                }
+            }
+
+            if (
+                !caretRange ||
+                caretRange.startContainer.nodeType !== Node.TEXT_NODE
+            )
+                return;
+
+            const isSeparator = (char) => /[\s.,!?;:()\[\]"'«»]/.test(char);
+            const textNode = caretRange.startContainer;
+            const txt = textNode.textContent;
+            let start = caretRange.startOffset;
+            let end = caretRange.startOffset;
+
+            if (start >= txt.length || isSeparator(txt[start])) return;
+
+            while (start > 0 && !isSeparator(txt[start - 1])) start--;
+            while (end < txt.length && !isSeparator(txt[end])) end++;
+
+            if (start >= end) return;
+
+            caretRange.setStart(textNode, start);
+            caretRange.setEnd(textNode, end);
+
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(caretRange);
+
+            const targetEl = document.elementFromPoint(x, y) || event.target;
+            handleMouseUp({ target: targetEl });
+        } else {
+            // Long press / drag — use whatever the browser has selected,
+            // but trim out any sentence-number button that crept into the start
+            const sel = window.getSelection();
+            if (sel && sel.rangeCount > 0) {
+                const range = sel.getRangeAt(0);
+                const startEl =
+                    range.startContainer.nodeType === Node.TEXT_NODE
+                        ? range.startContainer.parentElement
+                        : range.startContainer;
+                if (startEl && startEl.closest(".sent-num-btn")) {
+                    const sentenceEl = startEl.closest("[data-index]");
+                    const deText =
+                        sentenceEl && sentenceEl.querySelector(".de-text");
+                    if (deText && deText.firstChild) {
+                        try {
+                            range.setStart(deText.firstChild, 0);
+                            sel.removeAllRanges();
+                            sel.addRange(range);
+                        } catch (e) {}
+                    }
+                }
+            }
+            handleMouseUp({ target: event.target });
+        }
+    }
+
     function buildSentenceHtml(sentenceIndex) {
         const sentence = sentences[sentenceIndex];
         if (!sentence) return "";
@@ -1580,6 +1689,15 @@
     function handleLearnedClick(e) {
         const target = e.target;
 
+        // Close sentence action bar when clicking outside of it
+        if (
+            activeSentenceIndex !== -1 &&
+            !target.closest(".sent-num-wrapper")
+        ) {
+            activeSentenceIndex = -1;
+            sentenceActionBarStyle = "";
+        }
+
         // Ignore clicks inside popup content itself.
         if (target.closest("#learned-pop")) {
             return;
@@ -1755,60 +1873,188 @@
 
     // --- TABS & NAVIGATION GUARD ---
 
-    // Sentence button hover/translation modes
-    function onSentenceButtonHover(sentenceIndex) {
-        // Clear any existing timer for this sentence
-        if (sentenceHoverTimers[sentenceIndex]) {
-            clearTimeout(sentenceHoverTimers[sentenceIndex]);
+    // --- SENTENCE ACTION BAR ---
+
+    function handleSentenceMouseEnter(idx) {
+        if (window.innerWidth <= 768) return;
+        if (sentenceHoverTimeout) {
+            clearTimeout(sentenceHoverTimeout);
+            sentenceHoverTimeout = null;
         }
-
-        // Set mode to 'play' immediately
-        sentenceButtonMode[sentenceIndex] = "play";
-        sentenceButtonMode = sentenceButtonMode; // Trigger reactivity
-
-        // Start timer to switch to 'translate' mode after 1 second
-        sentenceHoverTimers[sentenceIndex] = setTimeout(() => {
-            sentenceButtonMode[sentenceIndex] = "translate";
-            sentenceButtonMode = sentenceButtonMode; // Trigger reactivity
-        }, 1000);
+        activeSentenceIndex = idx;
+        sentenceActionBarStyle = "";
     }
 
-    function onSentenceButtonLeave(sentenceIndex) {
-        // Clear timer
-        if (sentenceHoverTimers[sentenceIndex]) {
-            clearTimeout(sentenceHoverTimers[sentenceIndex]);
-            delete sentenceHoverTimers[sentenceIndex];
-        }
-
-        // Reset mode to normal
-        sentenceButtonMode[sentenceIndex] = "normal";
-        sentenceButtonMode = sentenceButtonMode; // Trigger reactivity
+    function handleSentenceMouseLeave(idx) {
+        if (window.innerWidth <= 768) return;
+        sentenceHoverTimeout = setTimeout(() => {
+            if (activeSentenceIndex === idx) {
+                activeSentenceIndex = -1;
+                sentenceActionBarStyle = "";
+            }
+            sentenceHoverTimeout = null;
+        }, 420);
     }
 
-    function onSentenceButtonClick(sentenceIndex, sentence) {
-        const mode = sentenceButtonMode[sentenceIndex];
+    function toggleSentenceActions(sentenceIndex, event) {
+        if (activeSentenceIndex === sentenceIndex) {
+            activeSentenceIndex = -1;
+            sentenceActionBarStyle = "";
+            return;
+        }
+        activeSentenceIndex = sentenceIndex;
+        sentenceActionBarStyle = "";
 
-        if (mode === "translate" || mode === "normal") {
-            // Show translation for 5 seconds
-            sentenceTranslationDisplay[sentenceIndex] = true;
-            sentenceTranslationDisplay = sentenceTranslationDisplay; // Trigger reactivity
+        // On mobile: compute fixed position so bar never clips off screen
+        if (event && window.innerWidth <= 768) {
+            const rect = event.currentTarget.getBoundingClientRect();
+            const BAR_WIDTH = 110; // ~3 icon-only buttons
+            const BAR_HEIGHT = 40;
+            const MARGIN = 8;
+            let left = rect.left + rect.width / 2 - BAR_WIDTH / 2;
+            left = Math.max(
+                MARGIN,
+                Math.min(window.innerWidth - BAR_WIDTH - MARGIN, left),
+            );
+            const top = rect.top - BAR_HEIGHT - 10;
+            sentenceActionBarStyle = `position:fixed;top:${top}px;left:${left}px;bottom:auto;transform:none;`;
+        }
+    }
 
-            // Clear previous timer if exists
-            if (sentenceTranslationTimers[sentenceIndex]) {
-                clearTimeout(sentenceTranslationTimers[sentenceIndex]);
+    function translateSentenceInline(sentenceIndex) {
+        sentenceTranslationDisplay[sentenceIndex] = true;
+        sentenceTranslationDisplay = sentenceTranslationDisplay;
+        activeSentenceIndex = -1;
+
+        if (sentenceTranslationTimers[sentenceIndex]) {
+            clearTimeout(sentenceTranslationTimers[sentenceIndex]);
+        }
+        sentenceTranslationTimers[sentenceIndex] = setTimeout(() => {
+            sentenceTranslationDisplay[sentenceIndex] = false;
+            sentenceTranslationDisplay = sentenceTranslationDisplay;
+            delete sentenceTranslationTimers[sentenceIndex];
+        }, 5000);
+    }
+
+    async function explainSentence(sentenceIndex, sentence) {
+        activeSentenceIndex = -1;
+
+        // Show cached explanation immediately
+        if (sentenceExplainCache[sentenceIndex]) {
+            learnedPopupContent = formatSentenceExplainPopup(
+                sentenceExplainCache[sentenceIndex],
+            );
+            learnedPopupSticky = true;
+            clearLearnedPopupTimer();
+            learnedPopupStyle = buildExplainPopupStyle();
+            showLearnedPopup = true;
+            return;
+        }
+
+        explainingSentenceIndex = sentenceIndex;
+        try {
+            const res = await api.post(`/texts/${id}/explain_sentence`, {
+                sentence_index: sentenceIndex,
+                sentence_text: sentence.de,
+            });
+
+            if (!res.data?.ok) {
+                addToast(ui.error_generic, "error");
+                return;
             }
 
-            // Hide translation after 5 seconds
-            sentenceTranslationTimers[sentenceIndex] = setTimeout(() => {
-                sentenceTranslationDisplay[sentenceIndex] = false;
-                sentenceTranslationDisplay = sentenceTranslationDisplay; // Trigger reactivity
-                delete sentenceTranslationTimers[sentenceIndex];
-            }, 5000);
-        } else if (mode === "play") {
-            // Play audio (same as before)
-            userInitiatedPlay = true;
-            playAudio(sentence.de, sentenceIndex);
+            const explanation = res.data.explanation;
+            sentenceExplainCache[sentenceIndex] = explanation;
+
+            learnedPopupContent = formatSentenceExplainPopup(explanation);
+            learnedPopupSticky = true;
+            clearLearnedPopupTimer();
+            learnedPopupStyle = buildExplainPopupStyle();
+            showLearnedPopup = true;
+        } catch (e) {
+            console.error(e);
+            addToast(ui.error_generic, "error");
+        } finally {
+            explainingSentenceIndex = -1;
         }
+    }
+
+    function formatSentenceExplainPopup(data) {
+        if (!data || typeof data !== "object") {
+            return `<div style="color:var(--primary);">${escapeHtml(ui.explain_no_data || "No explanation data")}</div>`;
+        }
+
+        const isUkr = ($user?.interface_language || "ukr") === "ukr";
+        const summary = isUkr
+            ? data.summary_uk || data.summary_en || ""
+            : data.summary_en || data.summary_uk || "";
+
+        let html = `<div class="explain-popup">`;
+
+        if (summary) {
+            html += `<div style="font-size:1rem;margin-bottom:10px;line-height:1.5;">${escapeHtml(summary)}</div>`;
+        }
+
+        const keyPhrases = data.key_phrases || [];
+        if (keyPhrases.length > 0) {
+            const title = isUkr ? "Ключові фрази" : "Key Phrases";
+            html += `<section class="explain-section explain-nouns"><div class="explain-section-title">${escapeHtml(title)}</div><ul class="explain-list">`;
+            for (const p of keyPhrases) {
+                const trans = isUkr
+                    ? p.translation_uk || p.translation_en || ""
+                    : p.translation_en || p.translation_uk || "";
+                const note = isUkr
+                    ? p.note_uk || p.note_en || ""
+                    : p.note_en || p.note_uk || "";
+                html += `<li class="explain-item"><span class="explain-lemma">${escapeHtml(p.phrase || "")}</span>`;
+                if (trans)
+                    html += `<span class="explain-sep">—</span><span class="explain-translation">${escapeHtml(trans)}</span>`;
+                if (note)
+                    html += `<div style="font-size:0.85rem;opacity:0.72;margin-top:2px;">${escapeHtml(note)}</div>`;
+                html += `</li>`;
+            }
+            html += `</ul></section>`;
+        }
+
+        const fixedExpressions = data.fixed_expressions || [];
+        if (fixedExpressions.length > 0) {
+            const title = isUkr ? "Сталі вирази" : "Fixed Expressions";
+            html += `<section class="explain-section explain-synonyms"><div class="explain-section-title">${escapeHtml(title)}</div><ul class="explain-list">`;
+            for (const ex of fixedExpressions) {
+                const trans = isUkr
+                    ? ex.translation_uk || ex.translation_en || ""
+                    : ex.translation_en || ex.translation_uk || "";
+                const note = isUkr
+                    ? ex.note_uk || ex.note_en || ""
+                    : ex.note_en || ex.note_uk || "";
+                html += `<li class="explain-item"><span class="explain-lemma">${escapeHtml(ex.expression || "")}</span>`;
+                if (trans)
+                    html += `<span class="explain-sep">—</span><span class="explain-translation">${escapeHtml(trans)}</span>`;
+                if (note)
+                    html += `<div style="font-size:0.85rem;opacity:0.72;margin-top:2px;">${escapeHtml(note)}</div>`;
+                html += `</li>`;
+            }
+            html += `</ul></section>`;
+        }
+
+        const grammarHighlights = data.grammar_highlights || [];
+        if (grammarHighlights.length > 0) {
+            const title = isUkr ? "Граматика" : "Grammar";
+            html += `<section class="explain-section explain-verbs"><div class="explain-section-title">${escapeHtml(title)}</div><ul class="explain-list">`;
+            for (const g of grammarHighlights) {
+                const expl = isUkr
+                    ? g.explanation_uk || g.explanation_en || ""
+                    : g.explanation_en || g.explanation_uk || "";
+                html += `<li class="explain-item"><span class="explain-lemma">${escapeHtml(g.item || "")}</span>`;
+                if (expl)
+                    html += `<span class="explain-sep">—</span><span class="explain-translation">${escapeHtml(expl)}</span>`;
+                html += `</li>`;
+            }
+            html += `</ul></section>`;
+        }
+
+        html += `</div>`;
+        return html;
     }
 
     function switchTab(tab) {
@@ -2029,9 +2275,6 @@
         clearLearnedPopupTimer();
 
         // Clean up all timers
-        Object.values(sentenceHoverTimers).forEach((timer) =>
-            clearTimeout(timer),
-        );
         Object.values(sentenceTranslationTimers).forEach((timer) =>
             clearTimeout(timer),
         );
@@ -2041,6 +2284,8 @@
 <div
     class="view-container"
     onmouseup={handleMouseUp}
+    ontouchstart={handleTouchStart}
+    ontouchend={handleTouchEnd}
     role="button"
     tabindex="0"
 >
@@ -2107,86 +2352,99 @@
             </h2>
 
             <div class="toolbar">
-                <span
-                    class="level-badge lvl-{text.level.toLowerCase()}"
-                    style="margin-right: 12px;">{text.level}</span
-                >
-
-                <button
-                    class="badge-btn"
-                    onclick={() => (showTrans = !showTrans)}
-                >
-                    <span class="material-symbols-outlined"
-                        >{showTrans ? "visibility_off" : "translate"}</span
-                    >
-                </button>
-
-                <button
-                    class="badge-btn"
-                    onclick={toggleTextFav}
-                    style="color: {text.is_favorite ? '#d32f2f' : 'inherit'}"
-                >
+                <div class="toolbar-row toolbar-row-primary">
                     <span
-                        class="material-symbols-outlined {text.is_favorite
-                            ? 'filled'
-                            : ''}">favorite</span
+                        class="level-badge lvl-{text.level.toLowerCase()} toolbar-level-badge"
+                        >{text.level}</span
                     >
-                </button>
 
-                <button
-                    class="report-btn"
-                    title={ui.report_sentence}
-                    onclick={reportText}
-                >
-                    <span class="material-symbols-outlined">flag</span>
-                </button>
-
-                <button
-                    class="badge-btn dictation-launch-btn"
-                    onclick={openDictation}
-                    style="margin-left: auto;"
-                    title={ui.dictation}
-                >
-                    <span class="material-symbols-outlined">stylus_note</span>
-                    {#if dictationCompletedOnce}
-                        <span
-                            class="dictation-done-badge"
-                            title={ui.dictation_completed_badge || "Completed"}
+                    <button
+                        class="badge-btn toolbar-icon-btn"
+                        onclick={() => (showTrans = !showTrans)}
+                    >
+                        <span class="material-symbols-outlined"
+                            >{showTrans ? "visibility_off" : "translate"}</span
                         >
-                            <span class="material-symbols-outlined"
-                                >check_circle</span
-                            >
-                        </span>
-                    {/if}
-                </button>
+                    </button>
 
-                <button
-                    class="badge-btn translation-launch-btn"
-                    onclick={openSentenceTranslationTest}
-                    title={ui.sentence_translation_test}
-                >
-                    <span class="material-symbols-outlined"
-                        >record_voice_over</span
+                    <button
+                        class="badge-btn toolbar-icon-btn"
+                        onclick={toggleTextFav}
+                        style="color: {text.is_favorite
+                            ? '#d32f2f'
+                            : 'inherit'}"
                     >
-                    {#if sentenceTranslationCompletedOnce}
                         <span
-                            class="dictation-done-badge"
-                            title={ui.sentence_translation_completed_badge ||
-                                "Completed"}
+                            class="material-symbols-outlined {text.is_favorite
+                                ? 'filled'
+                                : ''}">favorite</span
                         >
-                            <span class="material-symbols-outlined"
-                                >check_circle</span
-                            >
-                        </span>
-                    {/if}
-                </button>
+                    </button>
 
-                <button class="btn-contained" onclick={playAll}>
-                    <span class="material-symbols-outlined"
-                        >{isPlayingAll ? "pause" : "play_arrow"}</span
+                    <button
+                        class="report-btn toolbar-icon-btn"
+                        title={ui.report_sentence}
+                        onclick={reportText}
                     >
-                    {isPlayingAll ? ui.stop : ui.play_all}
-                </button>
+                        <span class="material-symbols-outlined">flag</span>
+                    </button>
+                </div>
+
+                <div class="toolbar-row toolbar-row-secondary">
+                    <button
+                        class="badge-btn dictation-launch-btn toolbar-secondary-btn"
+                        onclick={openDictation}
+                        title={ui.dictation}
+                    >
+                        <span class="material-symbols-outlined"
+                            >stylus_note</span
+                        >
+                        {#if dictationCompletedOnce}
+                            <span
+                                class="dictation-done-badge"
+                                title={ui.dictation_completed_badge ||
+                                    "Completed"}
+                            >
+                                <span class="material-symbols-outlined"
+                                    >check_circle</span
+                                >
+                            </span>
+                        {/if}
+                    </button>
+
+                    <button
+                        class="badge-btn translation-launch-btn toolbar-secondary-btn"
+                        onclick={openSentenceTranslationTest}
+                        title={ui.sentence_translation_test}
+                    >
+                        <span class="material-symbols-outlined"
+                            >record_voice_over</span
+                        >
+                        {#if sentenceTranslationCompletedOnce}
+                            <span
+                                class="dictation-done-badge"
+                                title={ui.sentence_translation_completed_badge ||
+                                    "Completed"}
+                            >
+                                <span class="material-symbols-outlined"
+                                    >check_circle</span
+                                >
+                            </span>
+                        {/if}
+                    </button>
+
+                    <button
+                        class="btn-contained toolbar-secondary-btn toolbar-play-btn"
+                        onclick={playAll}
+                    >
+                        <span class="material-symbols-outlined"
+                            >{isPlayingAll ? "pause" : "play_arrow"}</span
+                        >
+                        <span class="play-btn-label"
+                            >{isPlayingAll ? ui.stop : ui.play_all}</span
+                        >
+                    </button>
+                </div>
             </div>
 
             <div class="text-body">
@@ -2198,29 +2456,104 @@
                         data-index={i}
                         data-text={s.de}
                         ><span
-                            class="sent-num-btn {playingIndex === i &&
-                            currentAudio &&
-                            !currentAudio.paused
-                                ? 'playing'
-                                : ''}"
-                            role="button"
-                            tabindex="0"
-                            onmouseenter={() => onSentenceButtonHover(i)}
-                            onmouseleave={() => onSentenceButtonLeave(i)}
-                            onclick={() => onSentenceButtonClick(i, s)}
-                            onkeydown={(e) =>
-                                e.key === "Enter" &&
-                                onSentenceButtonClick(i, s)}
-                            ><span class="sent-num-label">{i + 1}</span><span
-                                class="sent-num-icon material-symbols-outlined"
-                                >{sentenceButtonMode[i] === "translate" &&
-                                !showTrans
-                                    ? "translate"
-                                    : playingIndex === i &&
-                                        currentAudio &&
-                                        !currentAudio.paused
-                                      ? "pause"
-                                      : "play_arrow"}</span
+                            class="sent-num-wrapper"
+                            onmouseenter={() => handleSentenceMouseEnter(i)}
+                            onmouseleave={() => handleSentenceMouseLeave(i)}
+                            >{#if activeSentenceIndex === i}
+                                <div
+                                    class="sent-action-bar"
+                                    style={sentenceActionBarStyle}
+                                >
+                                    <button
+                                        class="sent-action-btn"
+                                        title={($user?.interface_language ||
+                                            "ukr") === "ukr"
+                                            ? "Відтворити"
+                                            : "Play"}
+                                        onclick={(e) => {
+                                            e.stopPropagation();
+                                            userInitiatedPlay = true;
+                                            playAudio(s.de, i);
+                                            activeSentenceIndex = -1;
+                                        }}
+                                        ><span class="material-symbols-outlined"
+                                            >play_arrow</span
+                                        ><span class="sent-action-label"
+                                            >{($user?.interface_language ||
+                                                "ukr") === "ukr"
+                                                ? "Грати"
+                                                : "Play"}</span
+                                        ></button
+                                    >
+                                    {#if !showTrans}
+                                        <button
+                                            class="sent-action-btn"
+                                            title={($user?.interface_language ||
+                                                "ukr") === "ukr"
+                                                ? "Переклад"
+                                                : "Translate"}
+                                            onclick={(e) => {
+                                                e.stopPropagation();
+                                                translateSentenceInline(i);
+                                            }}
+                                            ><span
+                                                class="material-symbols-outlined"
+                                                >translate</span
+                                            ><span class="sent-action-label"
+                                                >{($user?.interface_language ||
+                                                    "ukr") === "ukr"
+                                                    ? "Переклад"
+                                                    : "Translate"}</span
+                                            ></button
+                                        >
+                                    {/if}
+                                    <button
+                                        class="sent-action-btn sent-action-btn-explain"
+                                        title={($user?.interface_language ||
+                                            "ukr") === "ukr"
+                                            ? "Пояснити"
+                                            : "Explain"}
+                                        disabled={explainingSentenceIndex === i}
+                                        onclick={(e) => {
+                                            e.stopPropagation();
+                                            explainSentence(i, s);
+                                        }}
+                                        >{#if explainingSentenceIndex === i}<span
+                                                class="loader-spinner"
+                                                style="border-top-color:white; width:14px; height:14px;"
+                                            ></span>{:else}<span
+                                                class="material-symbols-outlined"
+                                                >psychology</span
+                                            >{/if}<span
+                                            class="sent-action-label"
+                                            >Explain</span
+                                        ></button
+                                    >
+                                </div>
+                            {/if}<span
+                                class="sent-num-btn {playingIndex === i &&
+                                currentAudio &&
+                                !currentAudio.paused
+                                    ? 'playing'
+                                    : ''}"
+                                role="button"
+                                tabindex="0"
+                                onclick={(e) => {
+                                    e.stopPropagation();
+                                    toggleSentenceActions(i, e);
+                                }}
+                                onkeydown={(e) =>
+                                    e.key === "Enter" &&
+                                    toggleSentenceActions(i, e)}
+                                ><span class="sent-num-label">{i + 1}</span
+                                ><span
+                                    class="sent-num-icon material-symbols-outlined"
+                                    >{playingIndex === i &&
+                                    currentAudio &&
+                                    !currentAudio.paused
+                                        ? "pause"
+                                        : "more_horiz"}</span
+                                ></span
                             ></span
                         ><span class="de-text">{@html s.de_html}</span
                         >{#if showTrans}
@@ -2662,11 +2995,45 @@
                                 toggleVocabFav(v.id);
                         }}
                     >
-                        <div
-                            style="display:flex; align-items:center; gap:12px; flex: 1; min-width: 0;"
-                        >
+                        <div class="vocab-item-content">
+                            <div class="vocab-word-row">
+                                <span
+                                    class="vocab-word"
+                                    onclick={(e) => {
+                                        e.stopPropagation();
+                                        scrollToWord(v.id);
+                                    }}
+                                    role="button"
+                                    tabindex="0"
+                                    onkeydown={(e) =>
+                                        e.key === "Enter" && scrollToWord(v.id)}
+                                    >{v.display}</span
+                                >
+                            </div>
+                            <div class="vocab-translation-row">
+                                {#if editingId === v.id && editingFieldType === ($user.interface_language === "ukr" ? "ua" : "en")}
+                                    <input
+                                        type="text"
+                                        class="edit-input"
+                                        bind:value={editValue}
+                                        onclick={(e) => e.stopPropagation()}
+                                        onkeydown={(e) => {
+                                            e.stopPropagation();
+                                            if (e.key === "Enter")
+                                                saveEdit(v.id);
+                                        }}
+                                    />
+                                {:else}
+                                    {$user.interface_language === "ukr"
+                                        ? v.ua
+                                        : v.en}
+                                {/if}
+                            </div>
+                        </div>
+
+                        <div class="vocab-item-controls">
                             <button
-                                class="btn-text"
+                                class="btn-text vocab-control-btn"
                                 onclick={(e) => {
                                     e.stopPropagation();
                                     playVocabPair(
@@ -2678,64 +3045,22 @@
                                     );
                                 }}
                             >
-                                <span
-                                    class="material-symbols-outlined"
-                                    style="font-size:18px;"
+                                <span class="material-symbols-outlined"
                                     >{vocabPlayingId === v.id
                                         ? "pause"
                                         : "volume_up"}</span
                                 >
                             </button>
-                            <div
-                                style="overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0;"
-                            >
-                                <span
-                                    style="font-weight: 500; color: var(--primary); font-size: 1.1rem; cursor: pointer;"
-                                    onclick={(e) => {
-                                        e.stopPropagation();
-                                        scrollToWord(v.id);
-                                    }}
-                                    role="button"
-                                    tabindex="0"
-                                    onkeydown={(e) =>
-                                        e.key === "Enter" && scrollToWord(v.id)}
-                                    >{v.display}</span
-                                >
-                                <div
-                                    style="font-size:0.85rem; opacity:0.7; margin-top:6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
-                                >
-                                    {#if editingId === v.id && editingFieldType === ($user.interface_language === "ukr" ? "ua" : "en")}
-                                        <input
-                                            type="text"
-                                            class="edit-input"
-                                            bind:value={editValue}
-                                            onclick={(e) => e.stopPropagation()}
-                                            onkeydown={(e) => {
-                                                e.stopPropagation();
-                                                if (e.key === "Enter")
-                                                    saveEdit(v.id);
-                                            }}
-                                        />
-                                    {:else}
-                                        {$user.interface_language === "ukr"
-                                            ? v.ua
-                                            : v.en}
-                                    {/if}
-                                </div>
-                            </div>
-                        </div>
-                        <div
-                            style="display: flex; align-items: center; gap: 0;"
-                        >
+
                             <button
-                                class="btn-text"
+                                class="btn-text vocab-control-btn"
                                 onclick={(e) => {
                                     e.stopPropagation();
                                     toggleVocabFav(v.id);
                                 }}
                                 style="color: {v.is_favorite
                                     ? '#FFC107'
-                                    : 'inherit'}; min-width: 32px; padding: 0;"
+                                    : 'inherit'};"
                             >
                                 <span
                                     class="material-symbols-outlined {v.is_favorite
@@ -2743,10 +3068,10 @@
                                         : ''}">star</span
                                 >
                             </button>
+
                             {#if editingId === v.id}
                                 <button
-                                    class="btn-text"
-                                    style="color:var(--primary); padding:0; min-width:32px;"
+                                    class="btn-text vocab-control-btn vocab-control-primary"
                                     onclick={(e) => {
                                         e.stopPropagation();
                                         saveEdit(v.id);
@@ -2757,8 +3082,7 @@
                                     >
                                 </button>
                                 <button
-                                    class="btn-text"
-                                    style="padding:0; min-width:32px;"
+                                    class="btn-text vocab-control-btn"
                                     onclick={(e) => {
                                         e.stopPropagation();
                                         cancelEdit();
@@ -2770,8 +3094,7 @@
                                 </button>
                             {:else}
                                 <button
-                                    class="btn-text"
-                                    style="color:var(--primary); opacity:0.7; padding:0; min-width:32px;"
+                                    class="btn-text vocab-control-btn vocab-control-primary"
                                     onclick={(e) => {
                                         e.stopPropagation();
                                         startEdit(
@@ -2790,12 +3113,11 @@
                                     >
                                 </button>
                                 <button
-                                    class="btn-text"
+                                    class="btn-text vocab-control-btn vocab-control-danger"
                                     onclick={(e) => {
                                         e.stopPropagation();
                                         removeWord(v.id);
                                     }}
-                                    style="color:red; min-width: 32px; padding: 0;"
                                 >
                                     <span class="material-symbols-outlined"
                                         >delete</span
@@ -2897,10 +3219,8 @@
                     </div>
 
                     <!-- FOOTER ACTIONS -->
-                    <div
-                        style="margin-top: 24px; display: flex; justify-content: space-between; align-items: center;"
-                    >
-                        <div style="display: flex; gap: 10px;">
+                    <div class="quiz-footer-actions">
+                        <div class="quiz-footer-left">
                             <button
                                 class="btn-contained btn-danger"
                                 onclick={abortQuiz}
@@ -2919,16 +3239,14 @@
 
                         {#if !isChecked}
                             <button
-                                class="btn-contained"
+                                class="btn-contained quiz-footer-main-btn"
                                 disabled={selectedOptionIndex === null}
-                                onclick={checkAnswer}
-                                style="min-width: 100px;">{ui.check_btn}</button
+                                onclick={checkAnswer}>{ui.check_btn}</button
                             >
                         {:else}
                             <button
-                                class="btn-contained"
+                                class="btn-contained quiz-footer-main-btn"
                                 onclick={nextQuestion}
-                                style="min-width: 100px;"
                                 >{currentQIndex < quizData.length - 1
                                     ? ui.next_btn
                                     : ui.finish_btn}</button
@@ -3102,10 +3420,65 @@
 
     .toolbar {
         display: flex;
+        flex-direction: row;
         align-items: center;
-        gap: 12px;
-        margin-bottom: 24px;
+        gap: 8px;
+        margin-bottom: 20px;
         flex-wrap: wrap;
+    }
+
+    .toolbar-row-secondary {
+        margin-left: auto;
+    }
+
+    .toolbar-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .toolbar-row-primary {
+        justify-content: flex-start;
+    }
+
+    .toolbar-row-secondary {
+        justify-content: flex-end;
+    }
+
+    .toolbar-level-badge {
+        margin: 0;
+        min-width: 36px;
+        height: 36px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+        padding: 0 8px;
+    }
+
+    .toolbar-icon-btn {
+        width: 36px;
+        height: 36px;
+        min-width: 36px;
+        padding: 0;
+        border-radius: 8px;
+    }
+
+    .toolbar-secondary-btn {
+        min-height: 40px;
+    }
+
+    .toolbar-play-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 0 14px;
+    }
+
+    .play-btn-label {
+        white-space: nowrap;
     }
 
     .text-body {
@@ -3120,6 +3493,88 @@
     .de-line::after {
         content: " ";
     }
+    .sent-num-wrapper {
+        position: relative;
+        display: inline-block;
+        vertical-align: middle;
+        top: -1px;
+        margin-right: 5px;
+    }
+
+    .sent-action-bar {
+        position: absolute;
+        bottom: calc(100% + 7px);
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 3px;
+        background: #1a1a2e;
+        border-radius: 10px;
+        padding: 5px 5px;
+        z-index: 200;
+        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.28);
+        white-space: nowrap;
+    }
+
+    .sent-action-bar::after {
+        content: "";
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        border: 5px solid transparent;
+        border-top-color: #1a1a2e;
+    }
+
+    .sent-action-btn {
+        background: transparent;
+        border: none;
+        color: #fff;
+        padding: 4px 8px;
+        cursor: pointer;
+        border-radius: 7px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        transition: background 0.15s;
+        font-family: var(--font-interface);
+        font-size: 0.72rem;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+    .sent-action-btn:hover {
+        background: rgba(255, 255, 255, 0.14);
+    }
+
+    .sent-action-btn:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+    }
+
+    .sent-action-btn .material-symbols-outlined {
+        font-size: 15px;
+        line-height: 1;
+        font-variation-settings:
+            "FILL" 0,
+            "wght" 500,
+            "GRAD" 0,
+            "opsz" 20;
+    }
+
+    .sent-action-btn-explain {
+        color: #fbbf24;
+    }
+
+    .sent-action-btn-explain:hover {
+        background: rgba(251, 191, 36, 0.15);
+    }
+
+    .sent-action-label {
+        letter-spacing: 0.01em;
+    }
+
     .sent-num-btn {
         display: inline-flex;
         align-items: center;
@@ -3130,7 +3585,6 @@
         font-size: 0.65rem;
         font-weight: 700;
         border-radius: 4px;
-        margin-right: 5px;
         vertical-align: middle;
         font-family: var(--font-interface);
         line-height: 1;
@@ -3202,7 +3656,7 @@
         color: var(--primary);
         font-size: 1.1rem;
         margin-left: 6px;
-        animation: fadeInOut 5s ease-in-out;
+        animation: fadeInOut 8s ease-in-out;
     }
 
     @keyframes fadeInOut {
@@ -3228,13 +3682,14 @@
     }
 
     .badge-btn {
-        padding: 4px 12px;
-        border-radius: 4px;
+        padding: 0;
+        border-radius: 8px;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        min-width: 28px;
-        height: 30px;
+        min-width: 36px;
+        width: 36px;
+        height: 36px;
         border: none;
         background: transparent;
         color: var(--on-surface);
@@ -3575,6 +4030,25 @@
     }
 
     @media (max-width: 768px) {
+        .sent-action-label {
+            display: none;
+        }
+
+        .sent-action-btn {
+            padding: 6px 7px;
+        }
+
+        .dictation-resume-actions {
+            flex-direction: column;
+            gap: 16px;
+            align-items: center;
+        }
+
+        .dictation-resume-actions .btn-contained {
+            width: 100%;
+            min-width: unset;
+        }
+
         .dictation-container {
             padding: 72px 20px 24px;
             gap: 16px;
@@ -3620,13 +4094,14 @@
     }
 
     .report-btn {
-        padding: 4px 12px;
-        border-radius: 4px;
+        padding: 0;
+        border-radius: 8px;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        min-width: 28px;
-        height: 30px;
+        min-width: 36px;
+        width: 36px;
+        height: 36px;
         border: none;
         background: transparent;
         color: #d32f2f;
@@ -3678,14 +4153,80 @@
     }
     .vocab-item {
         display: flex;
-        justify-content: space-between;
+        flex-direction: row;
         align-items: center;
-        padding: 12px 16px;
+        gap: 0;
+        justify-content: space-between;
+        padding: 12px 14px;
         border: 1px solid var(--border);
         border-radius: var(--radius);
         background: var(--surface);
         box-shadow: var(--shadow);
         font-family: var(--font-text);
+    }
+
+    .vocab-item-content {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .vocab-word-row {
+        min-width: 0;
+    }
+
+    .vocab-word {
+        display: block;
+        font-weight: 600;
+        color: var(--primary);
+        font-size: 1.08rem;
+        line-height: 1.3;
+        cursor: pointer;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: fit-content;
+    }
+
+    .vocab-translation-row {
+        margin-top: 4px;
+        font-size: 0.9rem;
+        opacity: 0.72;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .vocab-item-controls {
+        display: flex;
+        align-items: center;
+        gap: 0;
+        flex-shrink: 0;
+    }
+
+    .vocab-control-btn {
+        min-width: 32px;
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: none;
+        border-radius: 4px;
+        background: transparent;
+        color: var(--on-surface);
+    }
+
+    .vocab-control-btn .material-symbols-outlined {
+        font-size: 21px;
+    }
+
+    .vocab-control-primary {
+        color: var(--primary);
+    }
+
+    .vocab-control-danger {
+        color: #d32f2f;
     }
 
     .edit-input {
@@ -3773,6 +4314,231 @@
     }
     .quiz-option.disabled {
         pointer-events: none;
+    }
+
+    .quiz-footer-actions {
+        margin-top: 24px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .quiz-footer-left {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .quiz-footer-main-btn {
+        min-width: 110px;
+    }
+
+    @media (max-width: 1023px) {
+        .view-container .card {
+            padding: 22px 12px;
+        }
+
+        .text-body {
+            line-height: 2.1;
+            margin-bottom: 10px;
+        }
+
+        .de-text,
+        .trans-row,
+        .sentence-translation-popup {
+            font-size: 1rem;
+        }
+
+        .sent-num-btn {
+            width: 24px;
+            height: 18px;
+            font-size: 0.7rem;
+        }
+
+        .toolbar {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 14px;
+            margin-bottom: 14px;
+        }
+
+        .toolbar-row-secondary {
+            margin-left: 0;
+        }
+
+        .toolbar-row {
+            gap: 18px;
+        }
+
+        .toolbar-row-secondary {
+            width: 100%;
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .toolbar-row-secondary .toolbar-secondary-btn {
+            width: 100%;
+            min-width: 0;
+            height: 40px;
+            padding: 0;
+        }
+
+        .toolbar-row-secondary
+            .toolbar-secondary-btn
+            .material-symbols-outlined {
+            font-size: 22px;
+        }
+
+        .toolbar-row-secondary .toolbar-play-btn {
+            gap: 0;
+        }
+
+        .toolbar-row-secondary .play-btn-label {
+            display: none;
+        }
+
+        .dictation-launch-btn,
+        .translation-launch-btn {
+            width: 100%;
+            min-width: 0;
+            height: 40px;
+        }
+
+        .tabs-container {
+            margin-top: 18px;
+        }
+
+        .tab-btn {
+            font-size: 0.8rem;
+            padding: 11px 8px;
+        }
+
+        .vocab-view {
+            margin-top: 14px;
+            gap: 8px;
+        }
+
+        .vocab-item {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 10px;
+            padding: 12px;
+        }
+
+        .vocab-item-controls {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 6px;
+            width: 100%;
+        }
+
+        .vocab-control-btn {
+            width: 100%;
+            height: 40px;
+            /* border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--bg); */
+        }
+
+        .vocab-translation-row {
+            font-size: 1rem;
+        }
+
+        .vocab-item-controls {
+            gap: 6px;
+            padding-top: 8px;
+            border-top: 1px solid var(--border);
+        }
+
+        .vocab-control-btn {
+            height: 30px;
+        }
+
+        .vocab-control-btn .material-symbols-outlined {
+            font-size: 24px;
+        }
+
+        /* Full-screen popup on mobile for word/sentence explain */
+        #learned-pop.sticky {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            max-height: 100% !important;
+            min-width: 0 !important;
+            border-radius: 0 !important;
+            transform: none !important;
+            padding: 36px 5px 32px 5px !important;
+            overflow-y: auto;
+            z-index: 3000;
+        }
+
+        #learned-pop.sticky .popup-close {
+            position: fixed;
+            top: 14px;
+            right: 16px;
+            width: 36px;
+            height: 36px;
+            min-width: 36px;
+            font-size: 1.5rem;
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.07);
+        }
+
+        #learned-pop.sticky .learned-popup-content {
+            padding-right: 0;
+            margin-top: 0;
+        }
+
+        :global(#learned-pop.sticky .explain-popup > div:first-child) {
+            font-size: 1.05rem;
+        }
+
+        :global(#learned-pop.sticky .explain-section) {
+            padding: 12px 12px;
+        }
+
+        :global(#learned-pop.sticky .explain-list) {
+            gap: 8px;
+        }
+
+        .quiz-container {
+            padding: 16px 12px;
+            margin-top: 14px;
+        }
+
+        .quiz-question {
+            font-size: 1.05rem;
+            margin-bottom: 14px;
+        }
+
+        .quiz-option {
+            padding: 13px 12px;
+            font-size: 0.95rem;
+        }
+
+        .quiz-footer-actions {
+            margin-top: 16px;
+            gap: 8px;
+        }
+
+        .quiz-footer-left,
+        .quiz-footer-main-btn {
+            width: 100%;
+        }
+
+        .quiz-footer-left .btn-contained,
+        .quiz-footer-main-btn {
+            min-height: 42px;
+            min-width: 0;
+            flex: 1;
+        }
     }
 
     .results-view {
@@ -3933,7 +4699,7 @@
         border: 1px solid var(--border);
     }
     #learned-pop.sticky .learned-popup-content {
-        padding-right: 10px;
+        /* padding-right: 10px; */
         margin-top: 10px;
     }
     .popup-close {
@@ -4029,7 +4795,7 @@
         line-height: 1.35;
     }
     :global(.explain-lemma) {
-        color: #212121;
+        color: #787878;
         font-weight: 700;
     }
     :global(.explain-sep) {

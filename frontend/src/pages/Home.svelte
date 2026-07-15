@@ -265,9 +265,7 @@
             <label class="form-label" for="customText"
                 >{ui.your_german_text}</label
             >
-            <p
-                style="font-size: 0.85rem; color: var(--on-surface-dim); margin-bottom: 10px;"
-            >
+            <p class="hint-text">
                 💡 {ui.use_your_german_text}
             </p>
             <textarea
@@ -436,6 +434,12 @@
         font-weight: 500;
     }
 
+    .hint-text {
+        font-size: 0.85rem;
+        color: var(--on-surface-dim);
+        margin-bottom: 10px;
+    }
+
     .rotating {
         animation: rotate 1.5s linear infinite;
         margin-right: 8px;
@@ -445,12 +449,84 @@
             transform: rotate(0deg);
         }
         to {
-            transform: rotate(360deg);
+            transform: rotate(-360deg);
         }
     }
 
     .btn-contained:disabled {
         opacity: 0.7;
         cursor: not-allowed;
+    }
+
+    /*
+     * Mobile (< 1024px, minimum tested size iPhone X 375x812):
+     * shrink the card padding/icon, keep the topic toggle on one line,
+     * and stack the style select + sentence count so the select never
+     * gets squeezed and truncated.
+     */
+    @media (max-width: 1023px) {
+        .form-container {
+            max-width: 100%;
+            margin: 0 auto;
+            padding: 20px 16px;
+        }
+
+        .header-icon {
+            font-size: 40px;
+            margin-bottom: 8px;
+        }
+
+        .header-section {
+            margin-bottom: 20px;
+        }
+
+        .header-section h2 {
+            font-size: 1.35rem !important;
+        }
+
+        .mode-toggle {
+            margin-bottom: 20px;
+            height: 50px;
+        }
+
+        .toggle-btn {
+            font-size: 0.85rem;
+            white-space: nowrap;
+            padding: 0 4px;
+        }
+
+        .controls-row {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 16px;
+        }
+
+        .size-selector {
+            justify-content: space-between;
+        }
+
+        .size-selector button {
+            flex: 1;
+            width: auto;
+            height: 50px;
+            font-size: 1.05rem;
+        }
+
+        .hint-text {
+            font-size: 0.95rem;
+        }
+
+        .char-count {
+            font-size: 0.9rem;
+        }
+
+        .text-input {
+            font-size: 1rem;
+        }
+
+        button[type="submit"] {
+            height: 54px !important;
+            font-size: 1.05rem !important;
+        }
     }
 </style>
