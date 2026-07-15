@@ -114,6 +114,44 @@
     return currentAudioObj;
   }
 
+  // iOS-safe audio: uses unlocked AudioContext (from recording) so playback
+  // works even outside a user-gesture call stack.
+  async function playAudioUnlocked(path) {
+    if (!path) return;
+    const url =
+      path.startsWith("http") || path.startsWith("/")
+        ? path
+        : `/static/audio/sentences/${path}`;
+    if (audioContext && audioContext.state !== "closed") {
+      try {
+        if (audioContext.state === "suspended") await audioContext.resume();
+        const resp = await fetch(url);
+        const buf = await resp.arrayBuffer();
+        const decoded = await audioContext.decodeAudioData(buf);
+        const source = audioContext.createBufferSource();
+        source.buffer = decoded;
+        source.connect(audioContext.destination);
+        if (currentAudioObj) {
+          try {
+            currentAudioObj.pause();
+          } catch (e) {}
+        }
+        source.start(0);
+        currentAudioObj = {
+          pause: () => {
+            try {
+              source.stop();
+            } catch (e) {}
+          },
+        };
+        return;
+      } catch (e) {
+        console.log("AudioContext playback failed, falling back:", e);
+      }
+    }
+    playAudio(path);
+  }
+
   // --- MAIN INTERACTION HANDLER ---
   async function handleMainClick() {
     if (phase === "idle") {
@@ -224,7 +262,7 @@
     let average = sum / bufferLength;
 
     // Scale factor: 1 + (0 to 0.6) based on volume
-    visualizerScale = 1 + (average / 255) * 0.6;
+    visualizerScale = 1 + (average / 255) * 1.2; // Max scale ~2.2
     animationFrameId = requestAnimationFrame(drawVisualizer);
   }
 
@@ -293,7 +331,7 @@
 
       // Play Feedback Audio
       if (result.feedback_audio_url) {
-        playAudio(result.feedback_audio_url);
+        playAudioUnlocked(result.feedback_audio_url);
       }
 
       // Auto close splash after 5s
@@ -346,7 +384,7 @@
     phase = "feedback";
     // Auto play correct German audio
     if (sentence && sentence.audio_de) {
-      playAudio(sentence.audio_de);
+      playAudioUnlocked(sentence.audio_de);
     }
   }
 
@@ -357,6 +395,16 @@
     transcript = "";
     correction = "";
     handleMainClick();
+  }
+
+  async function goToNext() {
+    if (currentAudioObj) {
+      try {
+        currentAudioObj.pause();
+      } catch (e) {}
+      currentAudioObj = null;
+    }
+    await loadNext();
   }
 
   onMount(loadNext);
@@ -454,49 +502,59 @@
   </div>
 
   <div class="controls-container">
-    <!-- Repeat Button -->
-    <button
-      class="side-btn {phase === 'feedback' ? 'visible' : ''}"
-      on:click={repeatRound}
-    >
-      <span class="material-symbols-outlined">replay</span>
-    </button>
+    {#if phase === "feedback"}
+      <!-- Feedback Area -->
+      <div class="feedback-area" transition:fade>
+        <div class="user-transcript">{transcript}</div>
+        <div class="correction-box">{correction}</div>
+      </div>
 
-    <!-- Main Mic -->
-    <div class="mic-wrapper">
-      <div
-        class="mic-ring"
-        style="transform: translate(-50%, -50%) scale({visualizerScale}); display: {phase ===
-        'recording'
-          ? 'block'
-          : 'none'}"
-      ></div>
+      <!-- Two action buttons: try again + continue -->
+      <div class="feedback-actions">
+        <button
+          class="side-btn"
+          on:click={repeatRound}
+          title={ui.speaking_try_again || "Try again"}
+        >
+          <span class="material-symbols-outlined">replay</span>
+        </button>
+        <button
+          class="side-btn"
+          on:click={goToNext}
+          title={ui.speaking_continue || "Continue"}
+        >
+          <span class="material-symbols-outlined">arrow_forward</span>
+        </button>
+      </div>
+    {:else}
+      <!-- Main Mic -->
+      <div class="mic-wrapper">
+        <div
+          class="mic-ring"
+          style="transform: translate(-50%, -50%) scale({visualizerScale}); display: {phase ===
+          'recording'
+            ? 'block'
+            : 'none'}"
+        ></div>
 
-      <button
-        class="mic-btn {phase === 'recording' ? 'recording' : ''} {phase ===
-        'processing'
-          ? 'processing'
-          : ''}"
-        on:click={handleMainClick}
-        disabled={phase === "processing" || loading}
-      >
-        {#if phase === "processing"}
-          <span class="material-symbols-outlined rotating">sync</span>
-        {:else if phase === "recording"}
-          <span class="material-symbols-outlined">stop</span>
-        {:else}
-          <span class="material-symbols-outlined icon-play">mic</span>
-        {/if}
-      </button>
-    </div>
-
-    <!-- Feedback Area -->
-    <div class="feedback-area">
-      {#if phase === "feedback"}
-        <div class="user-transcript" transition:fade>{transcript}</div>
-        <div class="correction-box" transition:fade>{correction}</div>
-      {/if}
-    </div>
+        <button
+          class="mic-btn {phase === 'recording' ? 'recording' : ''} {phase ===
+          'processing'
+            ? 'processing'
+            : ''}"
+          on:click={handleMainClick}
+          disabled={phase === "processing" || loading}
+        >
+          {#if phase === "processing"}
+            <span class="material-symbols-outlined rotating">sync</span>
+          {:else if phase === "recording"}
+            <span class="material-symbols-outlined">stop</span>
+          {:else}
+            <span class="material-symbols-outlined icon-play">mic</span>
+          {/if}
+        </button>
+      </div>
+    {/if}
   </div>
 </div>
 
@@ -528,7 +586,7 @@
     align-items: center;
     justify-content: center;
     width: 100%;
-    padding-top: 50px;
+    /* padding-top: 50px; */
   }
   .controls-container {
     display: flex;
@@ -607,15 +665,15 @@
     cursor: pointer;
     box-shadow: var(--shadow);
     transition: all 0.2s;
-    opacity: 0;
-    pointer-events: none;
-  }
-  .side-btn.visible {
-    opacity: 1;
-    pointer-events: auto;
   }
   .side-btn:active {
     transform: scale(0.95);
+  }
+  .feedback-actions {
+    display: flex;
+    gap: 24px;
+    align-items: center;
+    justify-content: center;
   }
   .filled {
     font-variation-settings: "FILL" 1;

@@ -163,9 +163,18 @@
             addToast("Error renaming", "error");
         }
     }
+
+    function clearSearch() {
+        searchQuery = "";
+        page = 1;
+        loadLibrary();
+    }
 </script>
 
-<div class="library-header" class:search-active={searchFocused}>
+<div
+    class="library-header"
+    class:search-active={searchFocused || !!searchQuery}
+>
     <div class="search-wrap">
         <span class="material-symbols-outlined search-icon">search</span>
         <input
@@ -175,12 +184,13 @@
             bind:value={searchQuery}
             oninput={onSearchChange}
             onfocus={() => (searchFocused = true)}
-            onblur={() => {
-                searchFocused = false;
-                searchQuery = "";
-                loadLibrary();
-            }}
+            onblur={() => (searchFocused = false)}
         />
+        {#if searchQuery}
+            <button class="clear-search-btn" onclick={clearSearch}
+                ><span class="material-symbols-outlined">close</span></button
+            >
+        {/if}
     </div>
     <div class="filters">
         <button
@@ -354,6 +364,21 @@
     .search-icon {
         display: none;
     }
+    .clear-search-btn {
+        position: absolute;
+        right: 6px;
+        background: none;
+        border: none;
+        color: var(--on-surface);
+        opacity: 0.6;
+        cursor: pointer;
+        padding: 4px;
+        display: flex;
+        align-items: center;
+    }
+    .clear-search-btn:hover {
+        opacity: 1;
+    }
 
     /* minmax(320px, 1fr) гарантує 3 колонки на ширині 1200px (3 * 320 + відступи < 1200) */
     .texts-grid {
@@ -379,7 +404,7 @@
     }
     .text-title {
         font-weight: 500;
-        font-size: 1.1rem;
+        font-size: 1.2rem;
         min-width: 0;
         overflow: hidden;
         white-space: nowrap;
@@ -391,6 +416,7 @@
         gap: 4px;
         flex: 1;
         min-width: 0;
+        margin-bottom: 8px;
     }
     .rename-btn {
         opacity: 0;
@@ -582,6 +608,7 @@
             height: var(--row-h);
             min-width: 0;
             box-sizing: border-box;
+            font-size: 16px; /* prevents iOS Safari auto-zoom on focus */
         }
 
         .library-header:not(.search-active) .search-input {

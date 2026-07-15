@@ -998,7 +998,10 @@
         </button>
     </div>
 
-    <div class="filters-row" class:search-active={searchFocused}>
+    <div
+        class="filters-row"
+        class:search-active={searchFocused || !!searchQuery}
+    >
         <div class="search-wrap">
             <span class="material-symbols-outlined search-icon">search</span>
             <input
@@ -1008,10 +1011,7 @@
                 bind:value={searchQuery}
                 oninput={onSearchChange}
                 onfocus={() => (searchFocused = true)}
-                onblur={() => {
-                    searchFocused = false;
-                    clearSearch();
-                }}
+                onblur={() => (searchFocused = false)}
             />
             {#if searchQuery}
                 <button class="clear-search-btn" onclick={clearSearch}
@@ -3121,6 +3121,7 @@
             text-align: center;
             box-sizing: border-box;
             border-radius: 6px;
+            font-size: 16px; /* prevents iOS Safari auto-zoom on focus */
         }
         .filters-row.search-active .search-input {
             padding: 0 32px 0 10px;
