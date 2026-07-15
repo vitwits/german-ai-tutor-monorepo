@@ -4159,6 +4159,7 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        max-width: fit-content;
     }
 
     .vocab-translation-row {
