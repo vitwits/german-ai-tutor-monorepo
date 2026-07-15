@@ -583,10 +583,10 @@ def force_wrap_known_abbreviations(text: str) -> str:
     
     # Sort by length (longest first) to avoid partial replacements
     for abbrev in sorted(CHAR_BY_CHAR_ABBREVIATIONS, key=len, reverse=True):
-        # Use word boundaries to match whole words only
+        # Use word boundaries to match whole words only (case-sensitive: 'mit' ≠ 'MIT')
         pattern = r'\b' + re.escape(abbrev) + r'\b'
         replacement = f'<say-as interpret-as="characters">{abbrev}</say-as>'
-        result = re.sub(pattern, replacement, result, flags=re.IGNORECASE)
+        result = re.sub(pattern, replacement, result)
     
     return result
 

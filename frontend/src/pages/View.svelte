@@ -136,6 +136,7 @@
     // Sentence action bar: tracks which sentence number was clicked
     let activeSentenceIndex = -1; // index of sentence whose action bar is open
     let sentenceActionBarStyle = ""; // fixed-position style on mobile to avoid edge clipping
+    let sentenceHoverTimeout = null;
     let sentenceExplainCache = {}; // { sentenceIndex: explanationObject }
     let explainingSentenceIndex = -1; // which sentence is currently being explained via LLM
     let sentenceTranslationDisplay = {}; // { sentenceIndex: true/false }
@@ -1874,6 +1875,27 @@
 
     // --- SENTENCE ACTION BAR ---
 
+    function handleSentenceMouseEnter(idx) {
+        if (window.innerWidth <= 768) return;
+        if (sentenceHoverTimeout) {
+            clearTimeout(sentenceHoverTimeout);
+            sentenceHoverTimeout = null;
+        }
+        activeSentenceIndex = idx;
+        sentenceActionBarStyle = "";
+    }
+
+    function handleSentenceMouseLeave(idx) {
+        if (window.innerWidth <= 768) return;
+        sentenceHoverTimeout = setTimeout(() => {
+            if (activeSentenceIndex === idx) {
+                activeSentenceIndex = -1;
+                sentenceActionBarStyle = "";
+            }
+            sentenceHoverTimeout = null;
+        }, 120);
+    }
+
     function toggleSentenceActions(sentenceIndex, event) {
         if (activeSentenceIndex === sentenceIndex) {
             activeSentenceIndex = -1;
@@ -2433,7 +2455,10 @@
                         id="sent-{i}"
                         data-index={i}
                         data-text={s.de}
-                        ><span class="sent-num-wrapper"
+                        ><span
+                            class="sent-num-wrapper"
+                            onmouseenter={() => handleSentenceMouseEnter(i)}
+                            onmouseleave={() => handleSentenceMouseLeave(i)}
                             >{#if activeSentenceIndex === i}
                                 <div
                                     class="sent-action-bar"
@@ -4712,7 +4737,7 @@
         line-height: 1.2;
     }
     :global(.explain-section) {
-        /* margin-top: 10px; */
+        margin-top: 10px;
         padding: 9px 10px;
         border-radius: 8px;
         border: 1px solid transparent;
