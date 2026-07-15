@@ -8,8 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
 
 from ..database import get_db
-from ..models import User, Lesson, UserLesson, LessonAudio, Vocabulary, ExplainedWord, QuizResult, DictationProgress, SentenceTranslationTestProgress
-from ..schemas import TextGenerateRequest, TextReadSchema, ToggleFavRequest, QuizResultRequest, VocabWordSchema, CreateOwnTextRequest, DictationCheckRequest, DictationProgressSaveRequest, DictationProgressClearRequest, SentenceTranslationTestCheckRequest, SentenceTranslationTestProgressSaveRequest, SentenceTranslationTestProgressClearRequest
+from ..models import User, Lesson, UserLesson, LessonAudio, Vocabulary, ExplainedWord, ExplainedSentence, QuizResult, DictationProgress, SentenceTranslationTestProgress
+from ..schemas import TextGenerateRequest, TextReadSchema, ToggleFavRequest, QuizResultRequest, VocabWordSchema, CreateOwnTextRequest, DictationCheckRequest, DictationProgressSaveRequest, DictationProgressClearRequest, SentenceTranslationTestCheckRequest, SentenceTranslationTestProgressSaveRequest, SentenceTranslationTestProgressClearRequest, ExplainSentenceRequest
 from ..dependencies import get_current_user
 from .. import services, cost_calculation
 from ..services import deduct_user_energy
@@ -1173,3 +1173,47 @@ async def create_own_text_endpoint(
     await db.commit()
     
     return {"id": lesson_id, "cost_usd": total_cost}
+
+
+@router.post("/texts/{text_id}/explain_sentence", response_model=dict)
+async def explain_sentence_endpoint(
+    text_id: str,
+    req: ExplainSentenceRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Explain a sentence linguistically. Checks DB cache first, then calls LLM.
+    """
+    # Return cached explanation if it exists
+    existing_res = await db.execute(
+        select(ExplainedSentence).where(
+            ExplainedSentence.user_id == current_user.id,
+            ExplainedSentence.text_id == text_id,
+            ExplainedSentence.sentence_index == req.sentence_index,
+        )
+    )
+    existing = existing_res.scalar_one_or_none()
+
+    if existing:
+        try:
+            explanation = json.loads(existing.explanation_json)
+        except Exception:
+            explanation = {}
+        return {"ok": True, "explanation": explanation, "cached": True}
+
+    # Generate new explanation via LLM
+    explanation = await services.explain_sentence_service(req.sentence_text, db=db)
+
+    new_row = ExplainedSentence(
+        id=str(uuid.uuid4()),
+        user_id=current_user.id,
+        text_id=text_id,
+        sentence_index=req.sentence_index,
+        sentence_text=req.sentence_text,
+        explanation_json=json.dumps(explanation, ensure_ascii=False),
+    )
+    db.add(new_row)
+    await db.commit()
+
+    return {"ok": True, "explanation": explanation, "cached": False}

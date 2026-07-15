@@ -123,6 +123,44 @@
     return currentAudioObj;
   }
 
+  // iOS-safe audio: uses unlocked AudioContext (from recording) so playback
+  // works even outside a user-gesture call stack.
+  async function playAudioUnlocked(path) {
+    if (!path) return;
+    const url =
+      path.startsWith("http") || path.startsWith("/")
+        ? path
+        : `/static/audio/sentences/${path}`;
+    if (audioContext && audioContext.state !== "closed") {
+      try {
+        if (audioContext.state === "suspended") await audioContext.resume();
+        const resp = await fetch(url);
+        const buf = await resp.arrayBuffer();
+        const decoded = await audioContext.decodeAudioData(buf);
+        const source = audioContext.createBufferSource();
+        source.buffer = decoded;
+        source.connect(audioContext.destination);
+        if (currentAudioObj) {
+          try {
+            currentAudioObj.pause();
+          } catch (e) {}
+        }
+        source.start(0);
+        currentAudioObj = {
+          pause: () => {
+            try {
+              source.stop();
+            } catch (e) {}
+          },
+        };
+        return;
+      } catch (e) {
+        console.log("AudioContext playback failed, falling back:", e);
+      }
+    }
+    playAudio(path);
+  }
+
   // --- MAIN INTERACTION HANDLER ---
   async function handleMainClick() {
     if (!sentence || loading) {
@@ -250,7 +288,7 @@
     let average = sum / bufferLength;
 
     // Scale factor: 1 + (0 to 0.6) based on volume
-    visualizerScale = 1 + (average / 255) * 0.6;
+    visualizerScale = 1 + (average / 255) * 1.2; // Max scale ~2.2
     animationFrameId = requestAnimationFrame(drawVisualizer);
   }
 
@@ -324,7 +362,7 @@
 
       // Play Feedback Audio
       if (result.feedback_audio_url) {
-        playAudio(result.feedback_audio_url);
+        playAudioUnlocked(result.feedback_audio_url);
       }
 
       // Auto close splash after 5s
@@ -595,9 +633,11 @@
     align-items: center;
     justify-content: center;
     width: 100%;
+    /* padding-top: 50px; */
   }
   .controls-container {
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 20px;

@@ -111,6 +111,19 @@ class ExplainedWord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
 
+
+class ExplainedSentence(Base):
+    __tablename__ = "explained_sentences"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    text_id: Mapped[str] = mapped_column(String, nullable=False)
+    sentence_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    sentence_text: Mapped[str] = mapped_column(DBText, nullable=False)
+    explanation_json: Mapped[str] = mapped_column(DBText, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
+
 class Sentence(Base):
     __tablename__ = "sentences"
     

@@ -131,6 +131,10 @@
         }
     }
 
+    // Mobile: search narrows to make room for the level chips; tapping it
+    // expands the search to full width and temporarily hides the levels.
+    let searchFocused = false;
+
     let editingTitleId = null;
     let editTitleValue = "";
 
@@ -159,16 +163,35 @@
             addToast("Error renaming", "error");
         }
     }
+
+    function clearSearch() {
+        searchQuery = "";
+        page = 1;
+        loadLibrary();
+    }
 </script>
 
-<div class="library-header">
-    <input
-        type="text"
-        class="search-input"
-        placeholder={ui.search || "Search..."}
-        bind:value={searchQuery}
-        oninput={onSearchChange}
-    />
+<div
+    class="library-header"
+    class:search-active={searchFocused || !!searchQuery}
+>
+    <div class="search-wrap">
+        <span class="material-symbols-outlined search-icon">search</span>
+        <input
+            type="text"
+            class="search-input"
+            placeholder={ui.search || "Search..."}
+            bind:value={searchQuery}
+            oninput={onSearchChange}
+            onfocus={() => (searchFocused = true)}
+            onblur={() => (searchFocused = false)}
+        />
+        {#if searchQuery}
+            <button class="clear-search-btn" onclick={clearSearch}
+                ><span class="material-symbols-outlined">close</span></button
+            >
+        {/if}
+    </div>
     <div class="filters">
         <button
             class="icon-btn {showFav ? 'active-fav' : ''}"
@@ -335,6 +358,27 @@
     .search-input::placeholder {
         opacity: 0.5;
     }
+    .search-wrap {
+        position: relative;
+    }
+    .search-icon {
+        display: none;
+    }
+    .clear-search-btn {
+        position: absolute;
+        right: 6px;
+        background: none;
+        border: none;
+        color: var(--on-surface);
+        opacity: 0.6;
+        cursor: pointer;
+        padding: 4px;
+        display: flex;
+        align-items: center;
+    }
+    .clear-search-btn:hover {
+        opacity: 1;
+    }
 
     /* minmax(320px, 1fr) гарантує 3 колонки на ширині 1200px (3 * 320 + відступи < 1200) */
     .texts-grid {
@@ -343,23 +387,36 @@
         gap: 20px;
     }
     .text-card {
-        height: 160px;
+        height: 176px;
+        padding: 24px;
         display: flex;
         flex-direction: column;
         justify-content: space-between;
         margin-bottom: 0;
         border: 1px solid var(--border);
+        min-width: 0;
+    }
+    .card-top {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
     }
     .text-title {
         font-weight: 500;
-        font-size: 1.1rem;
-        margin-top: 10px;
+        font-size: 1.2rem;
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
     }
     .text-title-row {
         display: flex;
         align-items: center;
         gap: 4px;
-        margin-top: 8px;
+        flex: 1;
+        min-width: 0;
+        margin-bottom: 8px;
     }
     .rename-btn {
         opacity: 0;
@@ -517,5 +574,95 @@
     .page-btn:disabled {
         opacity: 0.3;
         cursor: default;
+    }
+
+    /*
+     * Mobile (< 1024px, minimum tested size iPhone X 375x812):
+     * the search box collapses to a square search-icon button so the
+     * (bigger, square) level chips + favorite filter fit on one row;
+     * tapping/focusing the search expands it to full width and hides
+     * the level chips temporarily.
+     */
+    @media (max-width: 1023px) {
+        .library-header {
+            flex-wrap: nowrap;
+            gap: 4px;
+            --row-h: 40px;
+        }
+
+        .search-wrap {
+            position: relative;
+            display: flex;
+            align-items: center;
+            flex: 0 0 var(--row-h);
+            height: var(--row-h);
+            transition: flex-basis 0.15s ease;
+        }
+
+        .library-header.search-active .search-wrap {
+            flex: 1 1 auto;
+        }
+
+        .search-input {
+            width: 100%;
+            height: var(--row-h);
+            min-width: 0;
+            box-sizing: border-box;
+            font-size: 16px; /* prevents iOS Safari auto-zoom on focus */
+        }
+
+        .library-header:not(.search-active) .search-input {
+            padding: 0;
+            text-align: center;
+            cursor: pointer;
+        }
+
+        .library-header:not(.search-active) .search-input::placeholder {
+            color: transparent;
+        }
+
+        .search-icon {
+            display: flex;
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            font-size: 20px;
+            opacity: 0.6;
+        }
+
+        .library-header.search-active .search-icon {
+            display: none;
+        }
+
+        .filters {
+            gap: 4px;
+            flex-shrink: 0;
+        }
+
+        .level-filters {
+            gap: 4px;
+        }
+
+        .lvl-filter {
+            width: var(--row-h);
+            height: var(--row-h);
+            font-size: 0.8rem;
+        }
+
+        .icon-btn {
+            width: var(--row-h);
+            height: var(--row-h);
+            flex-shrink: 0;
+        }
+
+        .library-header.search-active .level-filters {
+            display: none;
+        }
+
+        .texts-grid {
+            grid-template-columns: 1fr;
+        }
     }
 </style>
