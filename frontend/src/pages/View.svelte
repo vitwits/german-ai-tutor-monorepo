@@ -1893,7 +1893,7 @@
                 sentenceActionBarStyle = "";
             }
             sentenceHoverTimeout = null;
-        }, 120);
+        }, 420);
     }
 
     function toggleSentenceActions(sentenceIndex, event) {
@@ -3656,7 +3656,7 @@
         color: var(--primary);
         font-size: 1.1rem;
         margin-left: 6px;
-        animation: fadeInOut 5s ease-in-out;
+        animation: fadeInOut 8s ease-in-out;
     }
 
     @keyframes fadeInOut {
