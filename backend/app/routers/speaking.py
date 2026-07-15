@@ -1,57 +1,175 @@
-from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, update, delete
+import json
 import random
 
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func, update, delete, and_
+
 from ..database import get_db
-from ..models import User, Sentence, UserBlockedSentence, UserFavoriteSentence, Vocabulary, Feedback, UserBilling
+from ..models import User, Sentence, UserBlockedSentence, UserFavoriteSentence, Vocabulary, Feedback, UserBilling, Lesson, UserLesson, LessonAudio
 from ..schemas import ReportSentenceRequest, ToggleSentenceFavRequest, RemoveFavSentenceRequest
 from ..dependencies import get_current_user
 from .. import services
 from ..services import deduct_user_energy, get_user_energy_status
+from ..utils_tts import get_cached_or_generate_tts
 
 router = APIRouter(prefix="/api", tags=["speaking"])
+
+
+def _normalize_audio_path(audio_path: str | None) -> str | None:
+    if not audio_path:
+        return None
+    if audio_path.startswith("http") or audio_path.startswith("/"):
+        return audio_path
+    if audio_path.startswith("static/audio/"):
+        return f"/{audio_path}"
+    if audio_path.startswith("audio/"):
+        return f"/static/{audio_path}"
+    return f"/static/audio/{audio_path}"
+
+
+def _sentence_text(sentence_data: dict | str | None, keys: list[str]) -> str:
+    if not isinstance(sentence_data, dict):
+        return ""
+    for key in keys:
+        value = sentence_data.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+async def _get_lesson_audio_url(
+    lesson_id: str,
+    sentence_index: int,
+    lang: str,
+    sentence_text: str,
+    db: AsyncSession,
+    user_id: str,
+) -> str | None:
+    existing = await db.execute(
+        select(LessonAudio).where(
+            and_(
+                LessonAudio.lesson_id == lesson_id,
+                LessonAudio.sentence_index == sentence_index,
+                LessonAudio.lang == lang,
+                LessonAudio.status == "generated",
+            )
+        )
+    )
+    row = existing.scalar_one_or_none()
+    if row and row.audio_path:
+        return _normalize_audio_path(row.audio_path)
+
+    if not sentence_text:
+        return None
+
+    # Cache-first lookup only (generate=False) to avoid legacy pre-generation flow.
+    return await get_cached_or_generate_tts(
+        sentence_text,
+        lang,
+        user_id,
+        db,
+        source="texts",
+        generate=False,
+    )
+
+
+async def _build_lesson_sentence_for_user(
+    db: AsyncSession,
+    current_user: User,
+):
+    lessons_result = await db.execute(
+        select(Lesson)
+        .join(UserLesson, UserLesson.lesson_id == Lesson.id)
+        .where(
+            UserLesson.user_id == current_user.id,
+            Lesson.level == current_user.level,
+        )
+        .order_by(func.random())
+        .limit(25)
+    )
+    lessons = lessons_result.scalars().all()
+    if not lessons:
+        return None
+
+    source_lang = "uk" if current_user.interface_language == "ukr" else "en"
+
+    for lesson in lessons:
+        try:
+            lesson_sentences = json.loads(lesson.content_json or "[]")
+        except Exception:
+            lesson_sentences = []
+
+        if not isinstance(lesson_sentences, list) or not lesson_sentences:
+            continue
+
+        valid_indices = []
+        for idx, row in enumerate(lesson_sentences):
+            text_de = _sentence_text(row, ["de", "text_de"])
+            text_en = _sentence_text(row, ["en", "text_en"])
+            text_uk = _sentence_text(row, ["uk", "ua", "ukr", "text_uk"])
+            source_text = text_uk if source_lang == "uk" else text_en
+            if text_de and source_text:
+                valid_indices.append((idx, text_de, text_en, text_uk))
+
+        if not valid_indices:
+            continue
+
+        sentence_index, text_de, text_en, text_uk = random.choice(valid_indices)
+
+        audio_de = await _get_lesson_audio_url(
+            lesson.id,
+            sentence_index,
+            "de",
+            text_de,
+            db,
+            current_user.id,
+        )
+        audio_en = await _get_lesson_audio_url(
+            lesson.id,
+            sentence_index,
+            "en",
+            text_en,
+            db,
+            current_user.id,
+        ) if text_en else None
+        audio_uk = await _get_lesson_audio_url(
+            lesson.id,
+            sentence_index,
+            "uk",
+            text_uk,
+            db,
+            current_user.id,
+        ) if text_uk else None
+
+        return {
+            "id": f"{lesson.id}:{sentence_index}",
+            "lesson_id": lesson.id,
+            "sentence_index": sentence_index,
+            "text_de": text_de,
+            "text_en": text_en,
+            "text_uk": text_uk,
+            "audio_de": audio_de,
+            "audio_en": audio_en,
+            "audio_uk": audio_uk,
+        }
+
+    return None
 
 @router.get("/speaking/next")
 async def speaking_next(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # Subquery to exclude blocked sentences
-    blocked_sub = select(UserBlockedSentence.sentence_id).where(UserBlockedSentence.user_id == current_user.id)
-    
-    query = select(Sentence).where(
-        Sentence.level == current_user.level,
-        Sentence.reported == 0,  # Исключаем reported sentences для всех пользователей
-        Sentence.id.not_in(blocked_sub)
-    ).order_by(func.random()).limit(1)
-    
-    result = await db.execute(query)
-    sentence = result.scalar_one_or_none()
-    
+    sentence = await _build_lesson_sentence_for_user(db, current_user)
     if not sentence:
-        # Fallback: берем любую речение (но не reported и не blocked)
-        result = await db.execute(
-            select(Sentence).where(
-                Sentence.reported == 0,
-                Sentence.id.not_in(blocked_sub)
-            ).order_by(func.random()).limit(1)
-        )
-        sentence = result.scalar_one_or_none()
-        
-    if not sentence:
-        return {"error": "No sentences found"}
-
-    # Check if favorite
-    fav_res = await db.execute(select(UserFavoriteSentence).where(
-        UserFavoriteSentence.user_id == current_user.id,
-        UserFavoriteSentence.sentence_id == sentence.id
-    ))
-    is_fav = fav_res.scalar_one_or_none() is not None
+        return {
+            "error": "no_sentences_for_level",
+        }
 
     return {
         "sentence": sentence,
-        "is_fav": is_fav
+        "is_fav": False,
     }
 
 @router.post("/evaluate_audio")

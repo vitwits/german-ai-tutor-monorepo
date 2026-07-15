@@ -13,7 +13,7 @@ from datetime import timedelta
 from pydantic import BaseModel
 
 from ..database import get_db
-from ..models import User, Sentence, SentenceBatch, TempSentence, TTSLog, LLMModel, TTSModel, LLMPrice, TTSVoice, AIPreference, ModelPrompt, Lesson, ReportedLesson, LessonAudio, Vocabulary, BillingPlan
+from ..models import User, Sentence, TTSLog, LLMModel, TTSModel, LLMPrice, TTSVoice, AIPreference, ModelPrompt, Lesson, ReportedLesson, LessonAudio, Vocabulary, BillingPlan
 from ..dependencies import get_current_user
 from ..security import verify_password, create_access_token
 from sqlalchemy import delete
@@ -399,7 +399,6 @@ async def caching_stats(
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-models">TTS Models</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-voices">TTS Voices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/billing">Billing</a></li>
                     <li class="nav-item"><a class="nav-link active" href="/admin/caching-stats">Stats</a></li>
                 </ul>
@@ -497,7 +496,6 @@ async def admin_index(
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-models">TTS Models</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-voices">TTS Voices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/billing">Billing</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
                 </ul>
@@ -711,7 +709,6 @@ async def sentence_list(
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-models">TTS Models</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-voices">TTS Voices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/billing">Billing</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
                 </ul>
@@ -1011,7 +1008,6 @@ async def reported_sentences(
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-models">TTS Models</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-voices">TTS Voices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/billing">Billing</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
                 </ul>
@@ -1276,7 +1272,6 @@ async def admin_users(
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-models">TTS Models</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-voices">TTS Voices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/billing">Billing</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
                 </ul>
@@ -1377,7 +1372,6 @@ async def edit_user(
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-models">TTS Models</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-voices">TTS Voices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/billing">Billing</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
                 </ul>
@@ -1607,135 +1601,7 @@ async def batch_preview(
     current_user: User = Depends(check_admin_access),
     db: AsyncSession = Depends(get_db)
 ):
-    """Preview temporary sentences in a batch before audio generation"""
-    # Отримуємо батч
-    result = await db.execute(select(SentenceBatch).where(SentenceBatch.id == batch_id))
-    batch = result.scalar_one_or_none()
-    
-    if not batch:
-        return "<h1>Batch not found</h1>"
-    
-    # Отримуємо тимчасові речення
-    result = await db.execute(
-        select(TempSentence).where(TempSentence.batch_id == batch_id).order_by(TempSentence.id)
-    )
-    temp_sentences = result.scalars().all()
-    
-    # Генеруємо HTML таблицю
-    rows_html = ""
-    for i, s in enumerate(temp_sentences, 1):
-        rows_html += f"""
-        <tr>
-            <td>{i}</td>
-            <td>{s.de}</td>
-            <td>{s.en}</td>
-            <td>{s.uk}</td>
-            <td>{s.topic or ''}</td>
-            <td>
-                <button class="btn btn-sm btn-warning" onclick="editTempSentence({s.id}, {batch_id})">✏️ Edit</button>
-                <button class="btn btn-sm btn-danger" onclick="deleteTempSentence({s.id}, {batch_id})">🗑️ Delete</button>
-            </td>
-        </tr>
-        """
-    
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Batch {batch_id} Preview</title>
-        <meta charset="utf-8">
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/css/bootstrap.min.css" rel="stylesheet">
-        <style>
-            body {{ padding: 20px; }}
-            .navbar {{ background-color: #2c3e50; margin-bottom: 20px; }}
-            table {{ font-size: 14px; }}
-        </style>
-    </head>
-    <body>
-        <nav class="navbar navbar-dark bg-dark">
-            
-        </nav>
-        <div class="container-fluid">
-            <div class="row mb-3">
-                <div class="col-md-8">
-                    <h2>Batch {batch.name}</h2>
-                    <p><strong>Level:</strong> {batch.level}</p>
-                    <p><strong>Status:</strong> <span class="badge badge-info">{batch.status}</span></p>
-                    <p><strong>Sentences:</strong> {len(temp_sentences)} of {batch.target_count}</p>
-                </div>
-                <div class="col-md-4 text-right">
-                    <a href="/admin/generate" class="btn btn-secondary">← Back</a>
-                    <button id="audio-btn" class="btn {('btn-success' if batch.status == 'text_ready' else 'btn-secondary disabled')}" onclick="generateAudio({batch_id})" {'' if batch.status == 'text_ready' else 'disabled'}>
-                        Generate Audio
-                    </button>
-                </div>
-            </div>
-            
-            <table class="table table-striped table-hover">
-                <thead class="thead-dark">
-                    <tr>
-                        <th>#</th>
-                        <th>German</th>
-                        <th>English</th>
-                        <th>Ukrainian</th>
-                        <th>Topic</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {rows_html}
-                </tbody>
-            </table>
-        </div>
-        
-        <script>
-        function generateAudio(batchId) {{
-            if (confirm('Generate audio for this batch? This may take a while...')) {{
-                fetch(`/admin/generate-audio/${{batchId}}`, {{
-                    method: 'POST',
-                    headers: {{'Content-Type': 'application/json'}}
-                }})
-                .then(r => r.json())
-                .then(data => {{
-                    if (data.ok) {{
-                        alert(`Audio generation started for batch ${{batchId}}`);
-                        setTimeout(() => location.reload(), 1000);
-                    }} else {{
-                        alert(`Error: ${{data.error}}`);
-                    }}
-                }})
-                .catch(err => alert(`Error: ${{err}}`));
-            }}
-        }}
-
-        function deleteTempSentence(sentenceId, batchId) {{
-            if (confirm('Delete this sentence?')) {{
-                fetch(`/admin/temp-sentence/${{sentenceId}}`, {{
-                    method: 'DELETE',
-                    headers: {{'Content-Type': 'application/json'}}
-                }})
-                .then(r => r.json())
-                .then(data => {{
-                    if (data.ok) {{
-                        alert('Sentence deleted');
-                        location.reload();
-                    }} else {{
-                        alert(`Error: ${{data.error}}`);
-                    }}
-                }})
-                .catch(err => alert(`Error: ${{err}}`));
-            }}
-        }}
-
-        function editTempSentence(sentenceId, batchId) {{
-            alert('Edit feature coming soon');
-            // TODO: Implement edit modal
-        }}
-        </script>
-    </body>
-    </html>
-    """
-    return html
+    return RedirectResponse(url="/admin", status_code=303)
 
 
 @router.get("/generate", response_class=HTMLResponse)
@@ -1743,264 +1609,7 @@ async def generate_view(
     current_user: User = Depends(check_admin_access),
     db: AsyncSession = Depends(get_db)
 ):
-    """Sentence generation interface"""
-    result = await db.execute(
-        select(SentenceBatch).order_by(SentenceBatch.created_at.desc()).limit(10)
-    )
-    batches = result.scalars().all()
-    
-    batches_html = ""
-    for batch in batches:
-        audio_btn = ""
-        if batch.status in ["text_ready", "generating_audio", "audio_ready"]:
-            if batch.status == "text_ready":
-                audio_btn = f'<button class="btn btn-sm btn-success" onclick="generateAudio({batch.id})">🔊 Generate Audio</button>'
-            elif batch.status == "generating_audio":
-                audio_btn = f'<button class="btn btn-sm btn-secondary" disabled style="cursor: not-allowed; opacity: 0.6;">⏳ Generating...</button>'
-            else:  # audio_ready
-                audio_btn = f'<button class="btn btn-sm btn-secondary" disabled style="cursor: not-allowed; opacity: 0.6;">✓ Audio Ready</button>'
-        
-        status_color = {
-            "pending": "secondary",
-            "generating": "info",
-            "text_ready": "success",
-            "generating_audio": "warning",
-            "audio_ready": "success"
-        }.get(batch.status, "secondary")
-        
-        batches_html += f"""
-        <tr>
-            <td><strong>{batch.name}</strong></td>
-            <td><span class="badge badge-info">{batch.level}</span></td>
-            <td>{batch.target_count}</td>
-            <td><span class="badge badge-{status_color}">{batch.status}</span></td>
-            <td>
-                <a href="/admin/batch/{batch.id}/preview" class="btn btn-sm btn-info">View</a>
-                {audio_btn}
-                <button class="btn btn-sm btn-danger" onclick="deleteBatch({batch.id}, '{batch.name}')">🗑️ Delete</button>
-            </td>
-        </tr>
-        """
-    
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Generate Sentences</title>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/css/bootstrap.min.css" rel="stylesheet">
-        <style>
-            * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-            body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto; background-color: #f5f7fa; }}
-            .navbar {{display: block!important; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 30px; }}
-            .navbar-container {{ display: flex; align-items: center; justify-content: flex-start; padding: 0 30px; height: 50px; gap: 40px; }}
-            .navbar-brand {{ font-size: 1.5em; font-weight: 700; color: white; text-decoration: none; display: flex; align-items: center; gap: 10px; white-space: nowrap; }}
-            .navbar-brand:hover {{ color: #f0f0f0; }}
-            .nav-menu {{ display: flex; gap: 0; list-style: none; margin: 0; padding: 0; }}
-            .nav-item {{ position: relative; }}
-            .nav-link {{ color: rgba(255,255,255,0.9); text-decoration: none; padding: 15px 12px; font-size: 0.9em; font-weight: 500; transition: all 0.3s; border-bottom: 3px solid transparent; height: 50px; display: flex; align-items: center; white-space: nowrap; }}
-            .nav-link:hover {{ color: white; background-color: rgba(255,255,255,0.1); border-bottom-color: rgba(255,255,255,0.3); }}
-            .nav-link.active {{ color: white; background-color: rgba(255,255,255,0.15); border-bottom-color: white; }}
-            .nav-right {{ display: flex; gap: 8px; align-items: center; margin-left: auto; color: white; font-size: 0.85em; white-space: nowrap; }}
-            .nav-right a.nav-link {{ padding: 8px 12px; height: auto; border-bottom: none; }}
-            .container-main {{ max-width: 1400px; margin: 0 auto; padding: 0 30px; }}
-            h1 {{ font-size: 2em; color: #2c3e50; margin-bottom: 30px; font-weight: 700; }}
-            .card {{ box-shadow: 0 1px 3px rgba(0,0,0,0.05); }}
-            .table-responsive {{ background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: hidden; }}
-            table {{ margin: 0; width: 100%; }}
-            table thead {{ background-color: #f8f9fa; border-bottom: 2px solid #e9ecef; }}
-            table th {{ padding: 15px; font-weight: 600; color: #2c3e50; text-align: left; }}
-            table td {{ padding: 15px; border-bottom: 1px solid #e9ecef; }}
-            table tbody tr:hover {{ background-color: #f8f9fa; }}
-            .btn-primary {{ background: #667eea; border: none; color: white; }}
-            .btn-primary:hover {{ background: #5568d3; }}
-        </style>
-    </head>
-    <body>
-        <nav class="navbar">
-            <div class="navbar-container">
-                
-                <ul class="nav-menu">
-                    <li class="nav-item"><a class="nav-link" href="/admin">Dashboard</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/admin/sentence/list">Sentences</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/admin/reported">Reported</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/admin/users">Users</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/admin/llm-prices">LLM Prices</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/admin/llm-models">LLM Models</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/admin/tts-models">TTS Models</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/admin/tts-voices">TTS Voices</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
-                    <li class="nav-item"><a class="nav-link active" href="/admin/generate">Generate</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/admin/billing">Billing</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
-                </ul>
-                <div class="nav-right">
-                    <span title="{current_user.email}">{current_user.email.split("@")[0]}</span>
-                    <a class="nav-link" href="/admin/logout">Logout</a>
-                </div>
-            </div>
-        </nav>
-        
-        <div class="container-main">
-            <h1>Generate Sentences & Audio</h1>
-            
-            <!-- Stage 1: Text Generation -->
-            <div class="card" style="margin-top: 20px;">
-                <div class="card-header bg-primary text-white">
-                    <h5>Stage 1: Generate Sentences</h5>
-                </div>
-                <div class="card-body">
-                    <p>Generate German sentences with translations (DE, EN, UK)</p>
-                    <form id="textGenForm" onsubmit="startGeneration(event)">
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="form-group">
-                                    <label>Level</label>
-                                    <select name="level" class="form-control" required>
-                                        <option>A1</option>
-                                        <option>A2</option>
-                                        <option>B1</option>
-                                        <option>B2</option>
-                                        <option>C1</option>
-                                        <option>C2</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="form-group">
-                                    <label>Count</label>
-                                    <input type="number" name="count" class="form-control" value="10" min="1" max="500" required>
-                                </div>
-                            </div>
-                        </div>
-                        <button type="submit" class="btn btn-primary" id="submitBtn">Generate Text</button>
-                        <small class="form-text text-muted">This will generate sentences and save them to a batch</small>
-                        <div id="genStatus" style="margin-top: 10px; display: none;">
-                            <div class="alert alert-info">
-                                <strong>Status:</strong> <span id="statusText"></span>
-                            </div>
-                        </div>
-                    </form>
-                </div>
-            </div>
-            
-            <!-- Batches List -->
-            <h2 style="margin-top: 30px;">Batches</h2>
-            <table class="table table-striped table-hover">
-                <thead class="thead-dark">
-                    <tr>
-                        <th>Name</th>
-                        <th>Level</th>
-                        <th>Count</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>{batches_html}</tbody>
-            </table>
-            
-            <!-- Stage 2: Audio Generation -->
-            <div class="card" style="margin-top: 30px;">
-                <div class="card-header bg-success text-white">
-                    <h5>Stage 2: Generate Audio</h5>
-                </div>
-                <div class="card-body">
-                    <p>Generate audio files (OGG Opus format) for sentences with text_ready status</p>
-                    <div class="alert alert-info">
-                        <strong>Instructions:</strong>
-                        <ol>
-                            <li>Generate sentences in Stage 1</li>
-                            <li>Review and edit sentences in the batch</li>
-                            <li>Once satisfied, click "Generate Audio" button in the batch actions</li>
-                        </ol>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <script>
-        function generateAudio(batchId) {{
-            if (confirm('Generate audio for this batch? This may take a while...')) {{
-                fetch(`/admin/generate-audio/${{batchId}}`, {{
-                    method: 'POST',
-                    headers: {{'Content-Type': 'application/json'}}
-                }})
-                .then(r => r.json())
-                .then(data => {{
-                    if (data.ok) {{
-                        alert(`Audio generation started for batch ${{batchId}}`);
-                        setTimeout(() => location.reload(), 1000);
-                    }} else {{
-                        alert(`Error: ${{data.error}}`);
-                    }}
-                }})
-                .catch(err => alert(`Error: ${{err}}`));
-            }}
-        }}
-
-        function deleteBatch(batchId, batchName) {{
-            if (confirm(`Видалити батч "${{batchName}}" і всі тимчасові речення?`)) {{
-                fetch(`/admin/batch/${{batchId}}`, {{
-                    method: 'DELETE',
-                    headers: {{'Content-Type': 'application/json'}}
-                }})
-                .then(r => r.json())
-                .then(data => {{
-                    if (data.ok) {{
-                        alert(`Батч видалено`);
-                        location.reload();
-                    }} else {{
-                        alert(`Помилка: ${{data.error}}`);
-                    }}
-                }})
-                .catch(err => alert(`Помилка: ${{err}}`));
-            }}
-        }}
-
-        function startGeneration(event) {{
-            event.preventDefault();
-            
-            const form = document.getElementById('textGenForm');
-            const formData = new FormData(form);
-            const level = formData.get('level');
-            const count = formData.get('count');
-            
-            const statusDiv = document.getElementById('genStatus');
-            const statusText = document.getElementById('statusText');
-            const submitBtn = document.getElementById('submitBtn');
-            
-            // Показуємо статус
-            statusDiv.style.display = 'block';
-            statusText.innerHTML = 'Запускаємо генерацію...';
-            submitBtn.disabled = true;
-            
-            fetch('/admin/generate/start', {{
-                method: 'POST',
-                headers: {{'Content-Type': 'application/x-www-form-urlencoded'}},
-                body: `level=${{level}}&count=${{count}}`
-            }})
-            .then(r => r.json())
-            .then(data => {{
-                if (data.ok) {{
-                    statusText.innerHTML = `✓ Генерація батча #${{data.batch_id}} розпочата! Список поновлюється через 3 сек...`;
-                    // Перезавантажуємо сторінку щоб побачити новий батч
-                    setTimeout(() => location.reload(), 3000);
-                }} else {{
-                    statusText.innerHTML = `✗ Помилка: ${{data.error}}`;
-                    submitBtn.disabled = false;
-                }}
-            }})
-            .catch(err => {{
-                statusText.innerHTML = `✗ Помилка: ${{err}}`;
-                submitBtn.disabled = false;
-            }});
-        }}
-        </script>
-    </body>
-    </html>
-    """
-    return html
+    return RedirectResponse(url="/admin/ai-preferences?tab=texts", status_code=303)
 
 
 @router.delete("/temp-sentence/{sentence_id}")
@@ -2009,36 +1618,11 @@ async def delete_temp_sentence(
     current_user: User = Depends(check_admin_access),
     db: AsyncSession = Depends(get_db)
 ):
-    """Delete a temporary sentence from a batch"""
-    try:
-        result = await db.execute(select(TempSentence).where(TempSentence.id == sentence_id))
-        temp_sentence = result.scalar_one_or_none()
-        
-        if not temp_sentence:
-            return {"ok": False, "error": "Sentence not found"}
-        
-        batch_id = temp_sentence.batch_id
-        
-        # Видаляємо речення
-        await db.delete(temp_sentence)
-        
-        # Оновлюємо processed_count батча
-        result = await db.execute(select(SentenceBatch).where(SentenceBatch.id == batch_id))
-        batch = result.scalar_one_or_none()
-        if batch:
-            batch.processed_count = max(0, batch.processed_count - 1)
-        
-        await db.commit()
-        
-        return {
-            "ok": True,
-            "message": f"Sentence {sentence_id} deleted"
-        }
-    except Exception as e:
-        return {
-            "ok": False,
-            "error": str(e)
-        }
+    """Legacy endpoint disabled."""
+    return {
+        "ok": False,
+        "error": "Legacy sentence generation is disabled",
+    }
 
 
 @router.post("/generate/start")
@@ -2047,58 +1631,11 @@ async def start_generation(
     current_user: User = Depends(check_admin_access),
     db: AsyncSession = Depends(get_db)
 ):
-    """Start a generation batch using subprocess"""
-    import subprocess
-    import sys
-    from pathlib import Path
-    import datetime
-    import os
-    
-    try:
-        form = await request.form()
-        level = form.get("level", "A1").upper()
-        count = int(form.get("count", 10))
-        
-        # Визначаємо правильний Python interpreter (з venv або системний)
-        python_executable = sys.executable
-        venv_path = Path(sys.prefix) / "bin" / "python"
-        if venv_path.exists():
-            python_executable = str(venv_path)
-        
-        # Create initial batch record
-        batch = SentenceBatch(
-            name=f"{level}_{count}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}",
-            level=level,
-            target_count=count,
-            status="generating"
-        )
-        db.add(batch)
-        await db.commit()
-        batch_id = batch.id
-        
-        # Run generation script in background
-        script_path = Path(__file__).parent.parent.parent / "scripts" / "generate_and_save.py"
-        
-        # Start subprocess (non-blocking)
-        subprocess.Popen([
-            python_executable,
-            str(script_path),
-            str(batch_id),
-            level,
-            str(count)
-        ])
-        
-        return {
-            "ok": True,
-            "batch_id": batch_id,
-            "message": f"Generation started for {count} {level} sentences",
-            "status": "generating"
-        }
-    except Exception as e:
-        return {
-            "ok": False,
-            "error": str(e)
-        }
+    """Legacy endpoint disabled."""
+    return {
+        "ok": False,
+        "error": "Legacy sentence generation is disabled",
+    }
 
 
 @router.post("/generate-audio/{batch_id}")
@@ -2107,64 +1644,11 @@ async def start_audio_generation(
     current_user: User = Depends(check_admin_access),
     db: AsyncSession = Depends(get_db)
 ):
-    """Start audio generation for a batch"""
-    import subprocess
-    import sys
-    from pathlib import Path
-    
-    try:
-        # Перевіряємо, що батч існує
-        result = await db.execute(select(SentenceBatch).where(SentenceBatch.id == batch_id))
-        batch = result.scalar_one_or_none()
-        
-        if not batch:
-            raise HTTPException(status_code=404, detail="Batch not found")
-        
-        # Перевіряємо, що генерація вже не йде
-        if batch.status == "generating_audio":
-            return {
-                "ok": False,
-                "error": f"Audio generation is already in progress for batch {batch_id}"
-            }
-        
-        # Перевіряємо, що текст вже було згенеровано
-        if batch.status != "text_ready":
-            return {
-                "ok": False,
-                "error": f"Batch must be in 'text_ready' status before audio generation. Current status: {batch.status}"
-            }
-        
-        # Визначаємо правильний Python interpreter (з venv або системний)
-        python_executable = sys.executable
-        venv_path = Path(sys.prefix) / "bin" / "python"
-        if venv_path.exists():
-            python_executable = str(venv_path)
-        
-        # Оновлюємо статус батча
-        batch.status = "generating_audio"
-        await db.commit()
-        
-        # Run audio generation script in background
-        script_path = Path(__file__).parent.parent.parent / "scripts" / "generate_audio_batch.py"
-        
-        # Start subprocess (non-blocking)
-        subprocess.Popen([
-            python_executable,
-            str(script_path),
-            str(batch_id)
-        ])
-        
-        return {
-            "ok": True,
-            "batch_id": batch_id,
-            "message": f"Audio generation started for batch {batch_id}",
-            "status": "generating_audio"
-        }
-    except Exception as e:
-        return {
-            "ok": False,
-            "error": str(e)
-        }
+    """Legacy endpoint disabled."""
+    return {
+        "ok": False,
+        "error": "Legacy sentence audio generation is disabled",
+    }
 
 
 @router.delete("/batch/{batch_id}")
@@ -2173,35 +1657,11 @@ async def delete_batch(
     current_user: User = Depends(check_admin_access),
     db: AsyncSession = Depends(get_db)
 ):
-    """Delete a batch and all associated temp sentences"""
-    from sqlalchemy import delete
-    
-    try:
-        # Отримуємо батч
-        result = await db.execute(select(SentenceBatch).where(SentenceBatch.id == batch_id))
-        batch = result.scalar_one_or_none()
-        
-        if not batch:
-            return {"ok": False, "error": "Batch not found"}
-        
-        # Видаляємо всі тимчасові речення батча
-        await db.execute(
-            delete(TempSentence).where(TempSentence.batch_id == batch_id)
-        )
-        
-        # Видаляємо сам батч
-        await db.delete(batch)
-        await db.commit()
-        
-        return {
-            "ok": True,
-            "message": f"Batch {batch_id} and all temp sentences deleted"
-        }
-    except Exception as e:
-        return {
-            "ok": False,
-            "error": str(e)
-        }
+    """Legacy endpoint disabled."""
+    return {
+        "ok": False,
+        "error": "Legacy sentence generation is disabled",
+    }
 
 
 # ============= AI RESOURCES MANAGEMENT =============
@@ -2307,7 +1767,6 @@ async def llm_prices_list(
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-models">TTS Models</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-voices">TTS Voices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/billing">Billing</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
                 </ul>
@@ -2582,7 +2041,6 @@ async def llm_models_page(
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-models">TTS Models</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-voices">TTS Voices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/billing">Billing</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
                 </ul>
@@ -2838,7 +2296,6 @@ async def tts_models_page(
                     <li class="nav-item"><a class="nav-link active" href="/admin/tts-models">TTS Models</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-voices">TTS Voices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/billing">Billing</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
                 </ul>
@@ -3330,7 +2787,6 @@ async def tts_voices_list(
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-models">TTS Models</a></li>
                     <li class="nav-item"><a class="nav-link active" href="/admin/tts-voices">TTS Voices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/billing">Billing</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
                 </ul>
@@ -3706,7 +3162,7 @@ async def create_ai_preference(
         model_type = data.get("model_type")
         page = data.get("page")
         
-        if not page or page not in ["texts", "words", "sentences", "speaking"]:
+        if not page or page not in ["texts", "words", "speaking"]:
             return {"ok": False, "error": "Invalid page"}
         
         if model_type == "tts":
@@ -3757,7 +3213,7 @@ async def update_ai_preference(
         model_type = data.get("model_type")
         page = data.get("page")
         
-        if not page or page not in ["texts", "words", "sentences", "speaking"]:
+        if not page or page not in ["texts", "words", "speaking"]:
             return {"ok": False, "error": "Invalid page"}
         
         if model_type == "tts":
@@ -3817,10 +3273,6 @@ TABS = {
     "words": {
         "name": "Words",
         "description": "Model settings for words translation and generating audio for words, model prompts"
-    },
-    "sentences": {
-        "name": "Sentences",
-        "description": "Model settings for sentences generation, audio generation and model prompts"
     },
     "speaking": {
         "name": "Speaking",
@@ -3923,7 +3375,6 @@ async def ai_preferences_page(
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-models">TTS Models</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-voices">TTS Voices</a></li>
                     <li class="nav-item"><a class="nav-link active" href="/admin/ai-preferences">AI Preferences</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/billing">Billing</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
                 </ul>
@@ -3963,21 +3414,6 @@ async def ai_preferences_page(
                 <h2 style="margin-top: 50px; margin-bottom: 20px;">Prompts</h2>
                 <button class="btn btn-primary btn-add" onclick="openAddPromptModal('words')">+ Add Prompt</button>
                 <div id="words-prompts-table" style="margin-top: 20px;"></div>
-            </div>
-            
-            <!-- SENTENCES TAB -->
-            <div class="tab-content {('active' if tab == 'sentences' else '')}">
-                <p>{TABS['sentences']['description']}</p>
-                <h2 style="margin-top: 30px; margin-bottom: 20px;">Models</h2>
-                <div style="display: flex; gap: 10px; align-items: center;">
-                    <button class="btn btn-primary btn-add" onclick="openAddModal('sentences')">+ Add Model</button>
-                    <button class="btn btn-outline-secondary" style="width: 32px; height: 32px; padding: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: help;" onclick="showHelpModal('sentences')" title="How to add models?">?</button>
-                </div>
-                <div id="sentences-models-table" style="margin-top: 20px;"></div>
-                
-                <h2 style="margin-top: 50px; margin-bottom: 20px;">Prompts</h2>
-                <button class="btn btn-primary btn-add" onclick="openAddPromptModal('sentences')">+ Add Prompt</button>
-                <div id="sentences-prompts-table" style="margin-top: 20px;"></div>
             </div>
             
             <!-- SPEAKING TAB -->
@@ -4245,44 +3681,6 @@ async def ai_preferences_page(
                             <li>Each language gets ONE voice (not multiple like sentences)</li>
                         </ul>
                     `,
-                    'sentences': `
-                        <h4>🔧 How Models Are Used for Sentence Generation</h4>
-                        <p><strong>Job Names:</strong> <code>generate_sentences</code>, <code>sentences_tts_de_male</code>, <code>sentences_tts_de_female</code>, etc.</p>
-                        
-                        <p><strong>For Text Generation:</strong></p>
-                        <ol>
-                            <li>System looks for <code>generate_sentences</code> job</li>
-                            <li>Gets the LLM Model configured</li>
-                            <li>Uses it to generate sentence text</li>
-                        </ol>
-                        
-                        <p><strong>For Audio Generation:</strong></p>
-                        <ol>
-                            <li>System looks for ALL <code>sentences_tts_*</code> jobs for a language</li>
-                            <li>Finds both MALE and FEMALE voices (if configured)</li>
-                            <li>For each sentence, randomly picks one voice (50/50 male/female)</li>
-                            <li>Generates audio with that voice</li>
-                        </ol>
-                        <p>↳ This gives <strong>natural variation</strong> — no two sentences sound identical</p>
-                        
-                        <p><strong>Configuration Rules:</strong></p>
-                        <ul>
-                            <li><strong>Text generation:</strong> Model Type=LLM, Language=empty, Gender=empty</li>
-                            <li><strong>Audio (German):</strong> Model Type=TTS, Language=DE, Gender=male OR female (separate entries)</li>
-                            <li><strong>Audio (English):</strong> Model Type=TTS, Language=EN, Gender=male OR female (separate entries)</li>
-                            <li><strong>Audio (Ukrainian):</strong> Model Type=TTS, Language=UA, Gender=male OR female (separate entries)</li>
-                        </ul>
-                        
-                        <p><strong>Naming Rules:</strong></p>
-                        <ul>
-                            <li>Text generation job: must be <code>generate_sentences</code></li>
-                            <li>Audio jobs: format is <code>sentences_tts_{{lang}}_{{gender}}</code></li>
-                            <li>Examples: <code>sentences_tts_de_male</code>, <code>sentences_tts_en_female</code>, <code>sentences_tts_ua_male</code></li>
-                            <li><strong>Add BOTH male and female for each language</strong> to enable voice variation</li>
-                        </ul>
-                        
-                        <p><strong>Pro Tip:</strong> You can add more than 2 voices per language (e.g., male, female, another_male) and the system will randomly rotate through all of them.</p>
-                    `,
                     'speaking': `
                         <h4>🔧 How Models Are Used for Speaking Practice</h4>
                         <p><strong>Job Names:</strong> <code>speaking_tts_de_male</code>, <code>speaking_tts_de_female</code>, etc.</p>
@@ -4338,7 +3736,7 @@ async def ai_preferences_page(
             }}
             
             async function loadAllPreferences() {{
-                const tabs = ['texts', 'words', 'sentences', 'speaking'];
+                const tabs = ['texts', 'words', 'speaking'];
                 for (const tab of tabs) {{
                     await loadPreferencesForTab(tab);
                 }}
@@ -4680,7 +4078,7 @@ async def ai_preferences_page(
             
             // Load prompts for all tabs on init
             async function loadAllPrompts() {{
-                const pages = ['texts', 'words', 'sentences', 'speaking'];
+                const pages = ['texts', 'words', 'speaking'];
                 for (const page of pages) {{
                     const tableDiv = document.getElementById(`${{page}}-prompts-table`);
                     if (tableDiv) {{
@@ -4998,7 +4396,6 @@ async def billing_page(request: Request, db: AsyncSession = Depends(get_db)):
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-models">TTS Models</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/tts-voices">TTS Voices</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/ai-preferences">AI Preferences</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/admin/generate">Generate</a></li>
                     <li class="nav-item"><a class="nav-link active" href="/admin/billing">Billing</a></li>
                     <li class="nav-item"><a class="nav-link" href="/admin/caching-stats">Stats</a></li>
                 </ul>

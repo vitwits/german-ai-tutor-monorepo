@@ -90,7 +90,16 @@
     try {
       const res = await api.get("/speaking/next");
       if (res.data.error) {
-        addToast(res.data.error, "error");
+        if (res.data.error === "no_sentences_for_level") {
+          sentence = null;
+          addToast(
+            ui.speaking_no_sentences_for_level ||
+              "No sentences available for this level yet.",
+            "info",
+          );
+        } else {
+          addToast(res.data.error, "error");
+        }
         return;
       }
       sentence = res.data.sentence;
@@ -107,7 +116,7 @@
     const url =
       path.startsWith("http") || path.startsWith("/")
         ? path
-        : `/static/audio/sentences/${path}`;
+        : `/static/audio/texts/${path}`;
     if (currentAudioObj) currentAudioObj.pause();
     currentAudioObj = new Audio(url);
     currentAudioObj.play().catch((e) => console.log("Audio play error", e));
@@ -154,11 +163,28 @@
 
   // --- MAIN INTERACTION HANDLER ---
   async function handleMainClick() {
+    if (!sentence || loading) {
+      return;
+    }
+
     if (phase === "idle") {
-      // Start recording immediately without playing audio
+      // 1. Play Prompt (Native Language)
+      phase = "playing";
+      const audio = playAudio(sourceAudio);
+      if (audio) {
+        audio.onended = () => {
+          startRecording();
+        };
+      } else {
+        // Fallback if no audio
+        startRecording();
+      }
+    } else if (phase === "playing") {
+      // Skip audio
+      if (currentAudioObj) currentAudioObj.pause();
       startRecording();
     } else if (phase === "recording") {
-      // Stop Recording (Manual - user pressed button)
+      // 3. Stop Recording (Manual - user pressed button)
       lastStopType = "manual";
       stopRecording();
       hasSpoken = true;
@@ -295,6 +321,11 @@
   }
 
   async function processAudio(blob, stopType = "unknown") {
+    if (!sentence?.text_de) {
+      phase = "idle";
+      return;
+    }
+
     phase = "processing";
     const formData = new FormData();
     formData.append("audio", blob);
@@ -353,9 +384,17 @@
 
   async function reportSentence() {
     if (!sentence) return;
+    if (!Number.isInteger(sentence.id)) {
+      addToast(
+        ui.speaking_report_unavailable ||
+          "Reporting is unavailable for this sentence source.",
+        "info",
+      );
+      return;
+    }
     if (!confirm(ui.report_sentence + "?")) return;
     try {
-      await api.post("/api/report_sentence", { id: sentence.id });
+      await api.post("/report_sentence", { id: sentence.id });
       addToast(ui.sentence_reported || "Reported", "success");
       loadNext();
     } catch (e) {
@@ -384,7 +423,7 @@
     phase = "feedback";
     // Auto play correct German audio
     if (sentence && sentence.audio_de) {
-      playAudioUnlocked(sentence.audio_de);
+      playAudio(sentence.audio_de);
     }
   }
 
@@ -397,18 +436,25 @@
     handleMainClick();
   }
 
-  async function goToNext() {
+  function onLevelUpdated() {
+    // When level changes, stop any active recording/playback and reload sentence
+    stopRecording();
+    stopStream();
     if (currentAudioObj) {
-      try {
-        currentAudioObj.pause();
-      } catch (e) {}
+      currentAudioObj.pause();
       currentAudioObj = null;
     }
-    await loadNext();
+    if (splashTimer) clearTimeout(splashTimer);
+    showSplash = false;
+    loadNext();
   }
 
-  onMount(loadNext);
+  onMount(() => {
+    loadNext();
+    window.addEventListener('level-updated', onLevelUpdated);
+  });
   onDestroy(() => {
+    window.removeEventListener('level-updated', onLevelUpdated);
     stopRecording();
     stopStream();
     if (splashTimer) clearTimeout(splashTimer);
@@ -498,35 +544,23 @@
       <div class="task-text">
         {sourceText}
       </div>
+    {:else}
+      <div class="task-text no-sentence-message">
+        {ui.speaking_no_sentences_for_level}
+      </div>
     {/if}
   </div>
 
-  <div class="controls-container">
-    {#if phase === "feedback"}
-      <!-- Feedback Area -->
-      <div class="feedback-area" transition:fade>
-        <div class="user-transcript">{transcript}</div>
-        <div class="correction-box">{correction}</div>
-      </div>
+  {#if sentence}
+    <div class="controls-container">
+      <!-- Repeat Button -->
+      <button
+        class="side-btn {phase === 'feedback' ? 'visible' : ''}"
+        on:click={repeatRound}
+      >
+        <span class="material-symbols-outlined">replay</span>
+      </button>
 
-      <!-- Two action buttons: try again + continue -->
-      <div class="feedback-actions">
-        <button
-          class="side-btn"
-          on:click={repeatRound}
-          title={ui.speaking_try_again || "Try again"}
-        >
-          <span class="material-symbols-outlined">replay</span>
-        </button>
-        <button
-          class="side-btn"
-          on:click={goToNext}
-          title={ui.speaking_continue || "Continue"}
-        >
-          <span class="material-symbols-outlined">arrow_forward</span>
-        </button>
-      </div>
-    {:else}
       <!-- Main Mic -->
       <div class="mic-wrapper">
         <div
@@ -549,13 +583,23 @@
             <span class="material-symbols-outlined rotating">sync</span>
           {:else if phase === "recording"}
             <span class="material-symbols-outlined">stop</span>
-          {:else}
+          {:else if phase === "playing"}
             <span class="material-symbols-outlined icon-play">mic</span>
+          {:else}
+            <span class="material-symbols-outlined icon-play">play_arrow</span>
           {/if}
         </button>
       </div>
-    {/if}
-  </div>
+
+      <!-- Feedback Area -->
+      <div class="feedback-area">
+        {#if phase === "feedback"}
+          <div class="user-transcript" transition:fade>{transcript}</div>
+          <div class="correction-box" transition:fade>{correction}</div>
+        {/if}
+      </div>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -579,6 +623,9 @@
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+  .task-text.no-sentence-message {
+    margin-bottom: 0;
   }
   #speaking-card-container {
     min-height: 160px; /* Reserve space to keep button centered */
@@ -665,15 +712,15 @@
     cursor: pointer;
     box-shadow: var(--shadow);
     transition: all 0.2s;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .side-btn.visible {
+    opacity: 1;
+    pointer-events: auto;
   }
   .side-btn:active {
     transform: scale(0.95);
-  }
-  .feedback-actions {
-    display: flex;
-    gap: 24px;
-    align-items: center;
-    justify-content: center;
   }
   .filled {
     font-variation-settings: "FILL" 1;
