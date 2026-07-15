@@ -201,6 +201,11 @@ class SentenceTranslationTestProgressSaveRequest(BaseModel):
 class SentenceTranslationTestProgressClearRequest(BaseModel):
     keep_completed: bool = True
 
+
+class ExplainSentenceRequest(BaseModel):
+    sentence_index: int
+    sentence_text: str
+
 class UserSettingsUpdate(BaseModel):
     interface_language: Optional[str] = None
     vocab_session_size: Optional[int] = None
