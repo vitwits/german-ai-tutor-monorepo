@@ -367,6 +367,8 @@
     .clear-search-btn {
         position: absolute;
         right: 6px;
+        top: 50%;
+        transform: translateY(-50%);
         background: none;
         border: none;
         color: var(--on-surface);

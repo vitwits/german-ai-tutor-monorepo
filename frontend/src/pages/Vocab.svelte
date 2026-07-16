@@ -60,7 +60,9 @@
 
     // Editing State
     let editingId = $state(null);
-    let editValue = $state("");
+    let editValue = $state(""); // translation
+    let editDeValue = $state(""); // German original
+    let playingItemId = $state(null); // ID of vocab item currently playing audio
 
     // Обчислення "розумного" діапазону сторінок для пагінації
     let paginationRange = $derived.by(() => {
@@ -722,8 +724,17 @@
         trans = "",
         audioDeUrl = null,
         audioTransUrls = [],
+        itemId = null,
     ) {
+        // Toggle off if same item clicked while playing
+        if (itemId !== null && itemId === playingItemId) {
+            if (currentAudio) currentAudio.pause();
+            playingItemId = null;
+            return;
+        }
+
         if (currentAudio) currentAudio.pause();
+        playingItemId = itemId;
 
         try {
             // Determine translation language based on user's interface language
@@ -791,6 +802,8 @@
             }
         } catch (e) {
             console.error("Playback error:", e);
+        } finally {
+            if (playingItemId === itemId) playingItemId = null;
         }
     }
 
@@ -848,25 +861,27 @@
     function startEdit(id, currentVal) {
         editingId = id;
         editValue = currentVal;
+        const item = items.find((i) => i.id === id);
+        editDeValue = item ? item.display || "" : "";
     }
 
     function cancelEdit() {
         editingId = null;
         editValue = "";
+        editDeValue = "";
     }
 
     async function saveEdit(id) {
         try {
-            const res = await api.post("/update_word", {
-                id,
-                translation: editValue,
-            });
-            // Update both translation and audio URLs from response
+            const payload = { id, translation: editValue };
+            if (editDeValue.trim()) payload.word = editDeValue.trim();
+            const res = await api.post("/update_word", payload);
             items = items.map((i) =>
                 i.id === id
                     ? {
                           ...i,
                           display_trans: editValue,
+                          display: res.data.word || i.display,
                           audio_trans_urls: res.data.audio_trans_urls || [],
                       }
                     : i,
@@ -1510,30 +1525,47 @@
                                         class="vocab-text-area"
                                         class:editing={editingId === w.id}
                                     >
-                                        <div
-                                            class="word-text"
-                                            role="button"
-                                            tabindex="0"
-                                            onkeydown={(e) => {
-                                                e.stopPropagation();
-                                                if (
-                                                    e.key === "Enter" ||
-                                                    e.key === " "
-                                                )
+                                        {#if editingId === w.id}
+                                            <input
+                                                type="text"
+                                                class="edit-input"
+                                                bind:value={editDeValue}
+                                                placeholder="German"
+                                                onclick={(e) =>
+                                                    e.stopPropagation()}
+                                                onkeydown={(e) => {
+                                                    e.stopPropagation();
+                                                    if (e.key === "Enter")
+                                                        saveEdit(w.id);
+                                                }}
+                                            />
+                                        {:else}
+                                            <div
+                                                class="word-text"
+                                                role="button"
+                                                tabindex="0"
+                                                onkeydown={(e) => {
+                                                    e.stopPropagation();
+                                                    if (
+                                                        e.key === "Enter" ||
+                                                        e.key === " "
+                                                    )
+                                                        toggleContext(w.id);
+                                                }}
+                                                onclick={(e) => {
+                                                    e.stopPropagation();
                                                     toggleContext(w.id);
-                                            }}
-                                            onclick={(e) => {
-                                                e.stopPropagation();
-                                                toggleContext(w.id);
-                                            }}
-                                        >
-                                            {w.display}
-                                        </div>
+                                                }}
+                                            >
+                                                {w.display}
+                                            </div>
+                                        {/if}
                                         {#if editingId === w.id}
                                             <input
                                                 type="text"
                                                 class="edit-input"
                                                 bind:value={editValue}
+                                                placeholder="Translation"
                                                 onclick={(e) =>
                                                     e.stopPropagation()}
                                                 onkeydown={(e) => {
@@ -1660,11 +1692,14 @@
                                                 w.display_trans,
                                                 w.audio_de_url,
                                                 w.audio_trans_urls,
+                                                w.id,
                                             );
                                         }}
                                     >
                                         <span class="material-symbols-outlined"
-                                            >volume_up</span
+                                            >{playingItemId === w.id
+                                                ? "pause"
+                                                : "volume_up"}</span
                                         >
                                     </button>
                                     {#if editingId === w.id}
@@ -1738,11 +1773,14 @@
                                             w.display_trans,
                                             w.audio_de_url,
                                             w.audio_trans_urls,
+                                            w.id,
                                         );
                                     }}
                                 >
                                     <span class="material-symbols-outlined"
-                                        >volume_up</span
+                                        >{playingItemId === w.id
+                                            ? "pause"
+                                            : "volume_up"}</span
                                     >
                                 </button>
                                 {#if editingId === w.id}

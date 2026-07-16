@@ -168,30 +168,22 @@
     }
 
     if (phase === "idle") {
-      // 1. Play Prompt (Native Language)
-      phase = "playing";
-      const audio = playAudio(sourceAudio);
-      if (audio) {
-        audio.onended = () => {
-          startRecording();
-        };
-      } else {
-        // Fallback if no audio
-        startRecording();
-      }
-    } else if (phase === "playing") {
-      // Skip audio
-      if (currentAudioObj) currentAudioObj.pause();
+      // Start recording immediately (no audio playback first)
       startRecording();
     } else if (phase === "recording") {
-      // 3. Stop Recording (Manual - user pressed button)
+      // Stop Recording (Manual - user pressed button)
       lastStopType = "manual";
       stopRecording();
       hasSpoken = true;
-    } else if (phase === "feedback") {
-      await loadNext();
-      if (sentence) handleMainClick();
     }
+  }
+
+  async function goToNext() {
+    if (currentAudioObj) {
+      currentAudioObj.pause();
+      currentAudioObj = null;
+    }
+    await loadNext();
   }
 
   async function startRecording() {
@@ -421,9 +413,9 @@
   function closeSplash() {
     showSplash = false;
     phase = "feedback";
-    // Auto play correct German audio
+    // Auto play correct German audio (use AudioContext for iOS after recording)
     if (sentence && sentence.audio_de) {
-      playAudio(sentence.audio_de);
+      playAudioUnlocked(sentence.audio_de);
     }
   }
 
@@ -451,10 +443,10 @@
 
   onMount(() => {
     loadNext();
-    window.addEventListener('level-updated', onLevelUpdated);
+    window.addEventListener("level-updated", onLevelUpdated);
   });
   onDestroy(() => {
-    window.removeEventListener('level-updated', onLevelUpdated);
+    window.removeEventListener("level-updated", onLevelUpdated);
     stopRecording();
     stopStream();
     if (splashTimer) clearTimeout(splashTimer);
@@ -553,43 +545,47 @@
 
   {#if sentence}
     <div class="controls-container">
-      <!-- Repeat Button -->
-      <button
-        class="side-btn {phase === 'feedback' ? 'visible' : ''}"
-        on:click={repeatRound}
-      >
-        <span class="material-symbols-outlined">replay</span>
-      </button>
+      <!-- Main Mic (hidden in feedback phase) -->
+      {#if phase !== "feedback"}
+        <div class="mic-wrapper">
+          <div
+            class="mic-ring"
+            style="transform: translate(-50%, -50%) scale({visualizerScale}); display: {phase ===
+            'recording'
+              ? 'block'
+              : 'none'}"
+          ></div>
 
-      <!-- Main Mic -->
-      <div class="mic-wrapper">
-        <div
-          class="mic-ring"
-          style="transform: translate(-50%, -50%) scale({visualizerScale}); display: {phase ===
-          'recording'
-            ? 'block'
-            : 'none'}"
-        ></div>
+          <button
+            class="mic-btn {phase === 'recording' ? 'recording' : ''} {phase ===
+            'processing'
+              ? 'processing'
+              : ''}"
+            on:click={handleMainClick}
+            disabled={phase === "processing" || loading}
+          >
+            {#if phase === "processing"}
+              <span class="material-symbols-outlined rotating">sync</span>
+            {:else if phase === "recording"}
+              <span class="material-symbols-outlined">stop</span>
+            {:else}
+              <span class="material-symbols-outlined icon-play">mic</span>
+            {/if}
+          </button>
+        </div>
+      {/if}
 
-        <button
-          class="mic-btn {phase === 'recording' ? 'recording' : ''} {phase ===
-          'processing'
-            ? 'processing'
-            : ''}"
-          on:click={handleMainClick}
-          disabled={phase === "processing" || loading}
-        >
-          {#if phase === "processing"}
-            <span class="material-symbols-outlined rotating">sync</span>
-          {:else if phase === "recording"}
-            <span class="material-symbols-outlined">stop</span>
-          {:else if phase === "playing"}
-            <span class="material-symbols-outlined icon-play">mic</span>
-          {:else}
-            <span class="material-symbols-outlined icon-play">play_arrow</span>
-          {/if}
-        </button>
-      </div>
+      <!-- Feedback Actions: retry + next in a row -->
+      {#if phase === "feedback"}
+        <div class="feedback-actions" transition:fade>
+          <button class="side-btn visible" on:click={repeatRound}>
+            <span class="material-symbols-outlined">replay</span>
+          </button>
+          <button class="side-btn visible" on:click={goToNext}>
+            <span class="material-symbols-outlined">arrow_forward</span>
+          </button>
+        </div>
+      {/if}
 
       <!-- Feedback Area -->
       <div class="feedback-area">
@@ -616,6 +612,7 @@
     font-size: 1.5rem;
     font-weight: 500;
     margin-bottom: 40px;
+    margin-top: 60px;
     min-height: 4rem;
     color: var(--on-surface);
     transition: opacity 0.3s;
@@ -642,6 +639,7 @@
     justify-content: center;
     gap: 20px;
     margin-bottom: 40px;
+    margin-top: 90px;
     position: relative;
   }
   .mic-wrapper {
@@ -699,9 +697,17 @@
       height 0.1s;
   }
 
+  .feedback-actions {
+    display: flex;
+    flex-direction: row;
+    gap: 16px;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 8px;
+  }
   .side-btn {
-    width: 50px;
-    height: 50px;
+    width: 64px;
+    height: 64px;
     border-radius: 50%;
     border: 1px solid var(--border);
     background: var(--surface);

@@ -86,7 +86,8 @@
 
     // Edit State
     let editingId = null;
-    let editValue = "";
+    let editValue = ""; // translation
+    let editDeValue = ""; // German original
     let editingFieldType = ""; // 'ua' or 'en'
 
     // Quiz State
@@ -106,11 +107,100 @@
         easing: cubicOut,
     });
 
+    // Add Custom Translation dialog state
+    let showAddCustomDialog = false;
+    let customTransInput = "";
+    let addingCustom = false;
+    let customTransInputRef = null;
+
+    function openAddCustomDialog() {
+        showAddCustomDialog = true;
+        customTransInput = "";
+    }
+
+    function closeAddCustomDialog() {
+        showAddCustomDialog = false;
+        customTransInput = "";
+    }
+
+    async function addCustomTranslation() {
+        if (!customTransInput.trim()) return;
+        const words = customTransInput.trim().split(/\s+/);
+        if (words.length > 4) {
+            addToast(ui.add_custom_word_max_words || "Max 4 words", "error");
+            return;
+        }
+        addingCustom = true;
+        try {
+            const response = await api.post("/vocab/add_custom", {
+                text: customTransInput.trim(),
+                text_id: id,
+            });
+            if (response.data && response.data.success === false) {
+                addToast(
+                    response.data.error ||
+                        ui.add_custom_word_invalid ||
+                        "Invalid word",
+                    "error",
+                );
+                return;
+            }
+            addToast(ui.add_custom_word_success || "Word added", "success");
+            closeAddCustomDialog();
+            await loadText(); // Reload to show new word in vocab list
+        } catch (e) {
+            addToast(
+                e.response?.data?.error ||
+                    ui.add_custom_word_error ||
+                    "Error adding word",
+                "error",
+            );
+        } finally {
+            addingCustom = false;
+        }
+    }
+
+    async function addCustomLemmaWord(lemmaText) {
+        const words = lemmaText.split(/\s+/);
+        if (words.length > 4) {
+            addToast(ui.add_custom_word_max_words || "Max 4 words", "error");
+            return;
+        }
+        addingCustom = true;
+        try {
+            const response = await api.post("/vocab/add_custom", {
+                text: lemmaText,
+                text_id: id, // link to current text
+            });
+            if (response.data && response.data.success === false) {
+                addToast(
+                    response.data.error ||
+                        ui.add_custom_word_invalid ||
+                        "Invalid word",
+                    "error",
+                );
+                return;
+            }
+            addToast(ui.add_custom_word_success || "Word added", "success");
+            await loadText(); // Reload so new word appears in vocab list
+        } catch (e) {
+            addToast(
+                e.response?.data?.error ||
+                    ui.add_custom_word_error ||
+                    "Error adding word",
+                "error",
+            );
+        } finally {
+            addingCustom = false;
+        }
+    }
+
     // Popups
     let showPopup = false;
     let popupStyle = "";
     let selectedText = "";
     let selectionContext = "";
+    let isLemmaTranslation = false; // true when popup triggered from explain-lemma
     let selectionSentenceIndex = -1;
     let selectionStartIndex = -1;
     let isTranslating = false; // Показать loader во время перевода
@@ -120,6 +210,8 @@
     let learnedPopupContent = "";
     let learnedPopupStyle = "";
     let learnedPopupSticky = false;
+    let learnedPopupWordId = null; // wid of the currently shown learned word popup
+    let highlightedVocabId = null; // ID of vocab item to briefly highlight
     let hideTimeout;
 
     let isSingleWordSelected = false;
@@ -1493,6 +1585,20 @@
         clearLearnedPopupTimer();
         showLearnedPopup = false;
         learnedPopupSticky = false;
+        learnedPopupWordId = null;
+    }
+
+    function scrollToVocabItem(wid) {
+        const el = document.getElementById(`vocab-item-${wid}`);
+        if (!el) {
+            console.warn(`Vocab item not found: vocab-item-${wid}`);
+            return;
+        }
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        highlightedVocabId = parseInt(wid); // Match v.id which is a number
+        setTimeout(() => {
+            highlightedVocabId = null;
+        }, 1500);
     }
 
     function scheduleLearnedPopupHide(delayMs = 2000) {
@@ -1513,10 +1619,19 @@
 
     function buildLearnedPopupStyle(rect, preferAbove = true) {
         const margin = 12;
+        const isMobile = window.innerWidth <= 768;
+
+        if (isMobile) {
+            // On mobile: show above word with wider width to minimize wrapping
+            return `top: ${rect.top - 8}px; left: 50%; transform: translate(-50%, -100%); display: block; position: fixed; max-width: calc(100vw - 24px); min-width: auto; width: 90vw;`;
+        }
+
         const centerX = rect.left + rect.width / 2;
+        // Estimate half popup width to keep it on screen
+        const halfPopup = 130;
         const clampedLeft = Math.max(
-            margin,
-            Math.min(window.innerWidth - margin, centerX),
+            margin + halfPopup,
+            Math.min(window.innerWidth - margin - halfPopup, centerX),
         );
 
         const canPlaceAbove = rect.top > 240;
@@ -1698,8 +1813,40 @@
             sentenceActionBarStyle = "";
         }
 
+        // Handle click on explain-lemma inside explain popup → show Translate popup
+        if (
+            target.closest(".explain-lemma") &&
+            target.closest("#learned-pop") &&
+            !target.closest(".explain-grammar") // exclude Grammar section
+        ) {
+            const lemmaEl = target.closest(".explain-lemma");
+            const lemmaText = lemmaEl.textContent.trim();
+            if (lemmaText) {
+                selectedText = lemmaText;
+                selectionSentenceIndex = -1;
+                selectionContext = "";
+                selectionStartIndex = -1;
+                isLemmaTranslation = true;
+                const rect = lemmaEl.getBoundingClientRect();
+                if (window.innerWidth > 768) {
+                    popupStyle = `position: fixed; top: ${rect.top - 45}px; left: ${rect.left + rect.width / 2}px; transform: translateX(-50%); z-index: 3000;`;
+                } else {
+                    popupStyle = `position: fixed; top: ${rect.top - 8}px; left: 50%; transform: translate(-50%, -100%); width: 90vw; max-width: calc(100vw - 24px); text-align: center; z-index: 3000;`;
+                }
+                showPopup = true;
+                if (popupHideTimeout) clearTimeout(popupHideTimeout);
+            }
+            return;
+        }
+
         // Ignore clicks inside popup content itself.
         if (target.closest("#learned-pop")) {
+            // Click on learned popup → scroll to vocab item and highlight it
+            if (learnedPopupWordId && !learnedPopupSticky) {
+                const savedWid = learnedPopupWordId; // save before closeLearnedPopup nulls it
+                closeLearnedPopup();
+                scrollToVocabItem(savedWid);
+            }
             return;
         }
 
@@ -1711,6 +1858,7 @@
 
                 const trans =
                     $user.interface_language === "ukr" ? word.ua : word.en;
+                learnedPopupWordId = wid;
                 learnedPopupContent = `<div style="font-weight:500; color:var(--bg);">${trans}</div>`;
 
                 learnedPopupSticky = false;
@@ -2216,24 +2364,36 @@
         editingId = wid;
         editValue = currentVal;
         editingFieldType = fieldType;
+        // Also capture current German original
+        const vocabItem = vocab.find((v) => v.id === wid);
+        editDeValue = vocabItem ? vocabItem.display || "" : "";
     }
 
     function cancelEdit() {
         editingId = null;
         editValue = "";
+        editDeValue = "";
         editingFieldType = "";
     }
 
     async function saveEdit(wid) {
         try {
-            await api.post("/update_word", { id: wid, translation: editValue });
+            const payload = { id: wid, translation: editValue };
+            if (editDeValue.trim()) payload.word = editDeValue.trim();
+            const res = await api.post("/update_word", payload);
             vocab = vocab.map((v) => {
                 if (v.id === wid) {
                     const fieldName = editingFieldType === "ua" ? "ua" : "en";
-                    return { ...v, [fieldName]: editValue };
+                    const updated = { ...v, [fieldName]: editValue };
+                    if (res.data.word) updated.display = res.data.word;
+                    if (res.data.audio_trans_urls)
+                        updated.audio_trans_urls = res.data.audio_trans_urls;
+                    return updated;
                 }
                 return v;
             });
+            // Rebuild vocabMap
+            vocab.forEach((v) => (vocabMap[v.id] = v));
             editingId = null;
         } catch (e) {
             addToast(ui.error_saving || "Error saving", "error");
@@ -2431,6 +2591,15 @@
                                 >
                             </span>
                         {/if}
+                    </button>
+
+                    <button
+                        class="badge-btn toolbar-secondary-btn toolbar-play-btn addword-launch-btn"
+                        onclick={openAddCustomDialog}
+                        title="Add custom translation"
+                    >
+                        <span class="material-symbols-outlined">add_circle</span
+                        >
                     </button>
 
                     <button
@@ -2984,7 +3153,10 @@
                 {/if}
                 {#each vocab as v}
                     <div
-                        class="vocab-item"
+                        id="vocab-item-{v.id}"
+                        class="vocab-item {highlightedVocabId === v.id
+                            ? 'vocab-highlighted'
+                            : ''}"
                         role="button"
                         tabindex="0"
                         onclick={() => {
@@ -2997,18 +3169,34 @@
                     >
                         <div class="vocab-item-content">
                             <div class="vocab-word-row">
-                                <span
-                                    class="vocab-word"
-                                    onclick={(e) => {
-                                        e.stopPropagation();
-                                        scrollToWord(v.id);
-                                    }}
-                                    role="button"
-                                    tabindex="0"
-                                    onkeydown={(e) =>
-                                        e.key === "Enter" && scrollToWord(v.id)}
-                                    >{v.display}</span
-                                >
+                                {#if editingId === v.id}
+                                    <input
+                                        type="text"
+                                        class="edit-input"
+                                        bind:value={editDeValue}
+                                        placeholder="German"
+                                        onclick={(e) => e.stopPropagation()}
+                                        onkeydown={(e) => {
+                                            e.stopPropagation();
+                                            if (e.key === "Enter")
+                                                saveEdit(v.id);
+                                        }}
+                                    />
+                                {:else}
+                                    <span
+                                        class="vocab-word"
+                                        onclick={(e) => {
+                                            e.stopPropagation();
+                                            scrollToWord(v.id);
+                                        }}
+                                        role="button"
+                                        tabindex="0"
+                                        onkeydown={(e) =>
+                                            e.key === "Enter" &&
+                                            scrollToWord(v.id)}
+                                        >{v.display}</span
+                                    >
+                                {/if}
                             </div>
                             <div class="vocab-translation-row">
                                 {#if editingId === v.id && editingFieldType === ($user.interface_language === "ukr" ? "ua" : "en")}
@@ -3016,6 +3204,7 @@
                                         type="text"
                                         class="edit-input"
                                         bind:value={editValue}
+                                        placeholder="Translation"
                                         onclick={(e) => e.stopPropagation()}
                                         onkeydown={(e) => {
                                             e.stopPropagation();
@@ -3271,7 +3460,13 @@
                 class="pop-option"
                 onclick={(e) => {
                     e.stopPropagation();
-                    quickTranslate();
+                    if (isLemmaTranslation) {
+                        isLemmaTranslation = false;
+                        showPopup = false;
+                        addCustomLemmaWord(selectedText);
+                    } else {
+                        quickTranslate();
+                    }
                 }}
                 disabled={isTranslating}
             >
@@ -3281,7 +3476,7 @@
                     {ui.add_translation}
                 {/if}
             </button>
-            {#if isSingleWordSelected}
+            {#if isSingleWordSelected && !isLemmaTranslation}
                 <span class="pop-separator">|</span>
                 <button
                     type="button"
@@ -3320,6 +3515,54 @@
             {/if}
             <div class="learned-popup-content">
                 {@html learnedPopupContent}
+            </div>
+        </div>
+    {/if}
+
+    <!-- ADD CUSTOM TRANSLATION DIALOG -->
+    {#if showAddCustomDialog}
+        <div
+            class="add-word-overlay"
+            role="dialog"
+            aria-modal="true"
+            onclick={(e) =>
+                e.target === e.currentTarget && closeAddCustomDialog()}
+        >
+            <div class="add-word-container">
+                <button
+                    class="add-word-close-btn"
+                    onclick={closeAddCustomDialog}
+                    aria-label="Close"
+                >
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+                <h2>{ui.add_custom_word_title || "Add Word"}</h2>
+                <p style="opacity: 0.7; margin-bottom: 20px;">
+                    {ui.add_custom_word_hint ||
+                        "Enter a word or phrase (max 4 words)"}
+                </p>
+                <div class="add-word-input-group">
+                    <input
+                        type="text"
+                        class="add-word-input"
+                        placeholder={ui.add_custom_word_placeholder ||
+                            "German word or phrase"}
+                        bind:value={customTransInput}
+                        bind:this={customTransInputRef}
+                        onkeydown={(e) =>
+                            e.key === "Enter" && addCustomTranslation()}
+                        disabled={addingCustom}
+                    />
+                    <button
+                        class="btn-contained"
+                        onclick={addCustomTranslation}
+                        disabled={addingCustom || !customTransInput.trim()}
+                    >
+                        {addingCustom
+                            ? ui.add_custom_word_adding || "Adding..."
+                            : ui.add_custom_word_btn || "Add"}
+                    </button>
+                </div>
             </div>
         </div>
     {/if}
@@ -3499,6 +3742,8 @@
         vertical-align: middle;
         top: -1px;
         margin-right: 5px;
+        user-select: none;
+        -webkit-user-select: none;
     }
 
     .sent-action-bar {
@@ -3594,6 +3839,7 @@
         transition: background-color 0.15s;
         flex-shrink: 0;
         user-select: none;
+        -webkit-user-select: none;
         top: -2px;
     }
     .sent-num-btn:hover {
@@ -3720,6 +3966,17 @@
         position: relative;
         background: #f0fdf4;
         color: #166534;
+    }
+
+    .addword-launch-btn {
+        width: 36px;
+        height: 36px;
+        min-width: 36px;
+        border: 1px solid #f593f0;
+        border-radius: 8px;
+        position: relative;
+        background: rgb(250, 229, 253);
+        color: #a92a5b;
     }
 
     .dictation-launch-btn:hover {
@@ -4163,6 +4420,87 @@
         background: var(--surface);
         box-shadow: var(--shadow);
         font-family: var(--font-text);
+        transition: background-color 0.4s ease;
+    }
+    .vocab-item.vocab-highlighted {
+        background-color: #fffde7;
+    }
+
+    /* Add Custom Translation Dialog */
+    .add-word-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.7);
+        backdrop-filter: blur(4px);
+        z-index: 5000;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    }
+    .add-word-container {
+        background: var(--surface);
+        border-radius: 16px;
+        padding: 32px;
+        max-width: 500px;
+        width: 90%;
+        position: relative;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    }
+    .add-word-close-btn {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: var(--on-surface);
+        padding: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .add-word-container h2 {
+        margin: 0 0 16px 0;
+        color: var(--on-surface);
+        text-align: center;
+    }
+    .add-word-input-group {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+    }
+
+    @media (max-width: 480px) {
+        .add-word-input-group {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .add-word-input-group .btn-contained {
+            width: 100%;
+        }
+    }
+
+    .add-word-input {
+        flex: 1;
+        padding: 12px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--bg);
+        color: var(--on-surface);
+        font-size: 1rem;
+        outline: none;
+    }
+    .add-word-input:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+    .add-word-input::placeholder {
+        opacity: 0.5;
     }
 
     .vocab-item-content {
@@ -4375,8 +4713,8 @@
         .toolbar-row-secondary {
             width: 100%;
             display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 12px;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 8px;
         }
 
         .toolbar-row-secondary .toolbar-secondary-btn {
@@ -4684,6 +5022,10 @@
         line-height: 1.45;
         position: relative;
         word-break: break-word;
+        cursor: pointer;
+    }
+    #learned-pop.sticky {
+        cursor: default;
     }
     .learned-popup-content {
         padding-right: 0;
@@ -4797,6 +5139,12 @@
     :global(.explain-lemma) {
         color: #787878;
         font-weight: 700;
+        cursor: pointer;
+        text-decoration: underline dotted;
+        text-underline-offset: 2px;
+    }
+    :global(.explain-lemma:hover) {
+        color: var(--primary);
     }
     :global(.explain-sep) {
         margin: 0 6px;
